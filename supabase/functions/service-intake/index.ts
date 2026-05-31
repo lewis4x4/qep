@@ -6,7 +6,10 @@
  *
  * Auth: user JWT
  */
-import { requireServiceUser } from "../_shared/service-auth.ts";
+import {
+  requireServiceUser,
+  SERVICE_OPERATIONS_ROLES,
+} from "../_shared/service-auth.ts";
 import {
   optionsResponse,
   safeJsonError,
@@ -45,7 +48,11 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return optionsResponse(origin);
 
   try {
-    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    const auth = await requireServiceUser(
+      req.headers.get("Authorization"),
+      origin,
+      SERVICE_OPERATIONS_ROLES,
+    );
     if (!auth.ok) return auth.response;
 
     const supabase = auth.supabase;
@@ -77,7 +84,9 @@ Deno.serve(async (req) => {
     if (machine?.id) {
       const { data } = await supabase
         .from("service_jobs")
-        .select("id, request_type, current_stage, customer_problem_summary, created_at, closed_at")
+        .select(
+          "id, request_type, current_stage, customer_problem_summary, created_at, closed_at",
+        )
         .eq("machine_id", machine.id as string)
         .order("created_at", { ascending: false })
         .limit(10);
@@ -89,7 +98,9 @@ Deno.serve(async (req) => {
     if (machine?.make) {
       const { data } = await supabase
         .from("job_codes")
-        .select("id, job_name, make, model_family, manufacturer_estimated_hours, shop_average_hours, parts_template, confidence_score")
+        .select(
+          "id, job_name, make, model_family, manufacturer_estimated_hours, shop_average_hours, parts_template, confidence_score",
+        )
         .eq("make", machine.make as string)
         .order("confidence_score", { ascending: false })
         .limit(10);
@@ -116,7 +127,9 @@ Deno.serve(async (req) => {
       ? suggestedJobCodes[0].confidence_score ?? 0.3
       : 0.1;
 
-    let knowledge_notes: Array<{ id: string; content: string; note_type: string }> = [];
+    let knowledge_notes: Array<
+      { id: string; content: string; note_type: string }
+    > = [];
     if (machine?.id) {
       const { data: kn } = await supabase
         .from("machine_knowledge_notes")
@@ -129,7 +142,10 @@ Deno.serve(async (req) => {
 
     let llm_diagnosis: Record<string, unknown> | null = null;
     const apiKey = Deno.env.get("OPENAI_API_KEY");
-    if (apiKey && suggestedJobCodes.length > 0 && body.symptom && String(body.symptom).trim().length > 0) {
+    if (
+      apiKey && suggestedJobCodes.length > 0 && body.symptom &&
+      String(body.symptom).trim().length > 0
+    ) {
       try {
         const res = await fetch("https://api.openai.com/v1/chat/completions", {
           method: "POST",
@@ -153,10 +169,12 @@ Deno.serve(async (req) => {
                   job_codes: suggestedJobCodes.map((j) => ({
                     id: j.id,
                     job_name: j.job_name,
-                    hours: j.shop_average_hours ?? j.manufacturer_estimated_hours,
+                    hours: j.shop_average_hours ??
+                      j.manufacturer_estimated_hours,
                   })),
                   prior_service_history: serviceHistory,
-                  institutional_notes: knowledge_notes.map((k) => k.content).slice(0, 6),
+                  institutional_notes: knowledge_notes.map((k) => k.content)
+                    .slice(0, 6),
                 }),
               },
             ],
@@ -184,7 +202,9 @@ Deno.serve(async (req) => {
     if (body.seed_parts_for_job) {
       const sj = body.seed_parts_for_job;
       const jid = typeof sj.job_id === "string" ? sj.job_id.trim() : "";
-      const jcid = typeof sj.job_code_id === "string" ? sj.job_code_id.trim() : "";
+      const jcid = typeof sj.job_code_id === "string"
+        ? sj.job_code_id.trim()
+        : "";
       if (!UUID_RE.test(jid) || !UUID_RE.test(jcid)) {
         return safeJsonError(
           "seed_parts_for_job: job_id and job_code_id must be UUIDs",
@@ -235,6 +255,10 @@ Deno.serve(async (req) => {
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);
     }
-    return safeJsonError("Internal server error", 500, req.headers.get("Origin"));
+    return safeJsonError(
+      "Internal server error",
+      500,
+      req.headers.get("Origin"),
+    );
   }
 });

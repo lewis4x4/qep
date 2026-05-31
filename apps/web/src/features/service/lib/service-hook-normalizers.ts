@@ -13,6 +13,17 @@ export interface EquipmentResult {
   serial_number: string;
   year: number | null;
   customer_id: string | null;
+  name?: string | null;
+  category?: string | null;
+  metadata?: Record<string, unknown> | null;
+  engine_hours?: number | null;
+  mileage?: number | null;
+  warranty_registered?: boolean | null;
+  warranty_registration_number?: string | null;
+  warranty_provider?: string | null;
+  warranty_start_date?: string | null;
+  warranty_end_date?: string | null;
+  warranty_coverage_terms?: string | null;
 }
 
 export interface PartsQueueItem {
@@ -64,6 +75,14 @@ function requiredString(value: unknown): string | null {
   return normalized ? normalized : null;
 }
 
+function recordOrNull(value: unknown): Record<string, unknown> | null {
+  return isRecord(value) ? value : null;
+}
+
+function booleanOrNull(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
 function numberOrNull(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim() !== "") {
@@ -103,14 +122,33 @@ export function normalizeEquipmentResults(rows: unknown): EquipmentResult[] {
     const model = requiredString(value.model);
     const serialNumber = requiredString(value.serial_number);
     if (!id || !make || !model || !serialNumber) return [];
-    return [{
+    const equipment: EquipmentResult = {
       id,
       make,
       model,
       serial_number: serialNumber,
       year: numberOrNull(value.year),
       customer_id: stringOrNull(value.customer_id) ?? stringOrNull(value.company_id),
-    }];
+    };
+    const optionalFields: Array<[keyof EquipmentResult, unknown]> = [
+      ["name", stringOrNull(value.name)],
+      ["category", stringOrNull(value.category)],
+      ["metadata", recordOrNull(value.metadata)],
+      ["engine_hours", numberOrNull(value.engine_hours)],
+      ["mileage", numberOrNull(value.mileage)],
+      ["warranty_registered", booleanOrNull(value.warranty_registered)],
+      ["warranty_registration_number", stringOrNull(value.warranty_registration_number)],
+      ["warranty_provider", stringOrNull(value.warranty_provider)],
+      ["warranty_start_date", stringOrNull(value.warranty_start_date)],
+      ["warranty_end_date", stringOrNull(value.warranty_end_date)],
+      ["warranty_coverage_terms", stringOrNull(value.warranty_coverage_terms)],
+    ];
+    for (const [field, fieldValue] of optionalFields) {
+      if (fieldValue != null) {
+        Object.assign(equipment, { [field]: fieldValue });
+      }
+    }
+    return [equipment];
   });
 }
 

@@ -2,7 +2,10 @@
  * Post draft internal billing staging lines (consumed parts) to customer_invoices.
  * Auth: user JWT only (same as service-parts-manager).
  */
-import { requireServiceUser } from "../_shared/service-auth.ts";
+import {
+  requireServiceUser,
+  SERVICE_BILLING_ROLES,
+} from "../_shared/service-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import {
   optionsResponse,
@@ -19,17 +22,24 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return optionsResponse(origin);
 
   try {
-    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    const auth = await requireServiceUser(
+      req.headers.get("Authorization"),
+      origin,
+      SERVICE_BILLING_ROLES,
+    );
     if (!auth.ok) return auth.response;
 
     const body = (await req.json()) as Body;
     const jobId = body.service_job_id?.trim();
     if (!jobId) return safeJsonError("service_job_id required", 400, origin);
 
-    const { data, error } = await auth.supabase.rpc("service_post_internal_billing_to_invoice", {
-      p_service_job_id: jobId,
-      p_actor_id: auth.userId,
-    });
+    const { data, error } = await auth.supabase.rpc(
+      "service_post_internal_billing_to_invoice",
+      {
+        p_service_job_id: jobId,
+        p_actor_id: auth.userId,
+      },
+    );
 
     if (error) {
       const msg = error.message ?? "billing_post_failed";
@@ -50,6 +60,10 @@ Deno.serve(async (req) => {
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);
     }
-    return safeJsonError("Internal server error", 500, req.headers.get("Origin"));
+    return safeJsonError(
+      "Internal server error",
+      500,
+      req.headers.get("Origin"),
+    );
   }
 });

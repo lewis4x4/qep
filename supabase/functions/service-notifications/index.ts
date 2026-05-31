@@ -3,7 +3,10 @@
  *
  * Auth: user JWT only
  */
-import { requireServiceUser } from "../_shared/service-auth.ts";
+import {
+  requireServiceUser,
+  SERVICE_OPERATIONS_ROLES,
+} from "../_shared/service-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import {
   optionsResponse,
@@ -24,11 +27,15 @@ interface NotifyRequest {
 
 const NOTIFICATION_TITLES: Record<string, string> = {
   quote_ready: "Service Quote Ready",
+  awaiting_approval: "Estimate Awaiting Approval",
   quote_approved: "Quote Approved",
   parts_delayed: "Parts Delayed",
+  on_hold_parts: "Service On Hold For Parts",
   job_started: "Service Work Started",
+  ready_for_pickup: "Ready For Pickup",
   job_completed: "Service Work Completed",
   invoice_ready: "Invoice Ready",
+  promised_date_changed: "Promised Date Changed",
   machine_down_update: "Machine Down Update",
   parts_ready: "All Parts Staged",
   schedule_confirmed: "Service Scheduled",
@@ -39,14 +46,22 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return optionsResponse(origin);
 
   try {
-    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    const auth = await requireServiceUser(
+      req.headers.get("Authorization"),
+      origin,
+      SERVICE_OPERATIONS_ROLES,
+    );
     if (!auth.ok) return auth.response;
 
     const supabase = auth.supabase;
 
     const body: NotifyRequest = await req.json();
     if (!body.job_id || !body.notification_type) {
-      return safeJsonError("job_id and notification_type required", 400, origin);
+      return safeJsonError(
+        "job_id and notification_type required",
+        400,
+        origin,
+      );
     }
 
     const { data: job } = await supabase
@@ -57,8 +72,10 @@ Deno.serve(async (req) => {
 
     if (!job) return safeJsonError("Job not found", 404, origin);
 
-    const title = body.title ?? NOTIFICATION_TITLES[body.notification_type] ?? "Service Update";
-    const notifBody = body.body ?? `Service job notification: ${body.notification_type}`;
+    const title = body.title ?? NOTIFICATION_TITLES[body.notification_type] ??
+      "Service Update";
+    const notifBody = body.body ??
+      `Service job notification: ${body.notification_type}`;
     const channel = body.channel ?? "in_app";
 
     // In-app notification to specified user or advisor
@@ -84,13 +101,20 @@ Deno.serve(async (req) => {
       metadata: body.metadata ?? {},
     });
 
-    return safeJsonOk({ sent: true, notification_type: body.notification_type }, origin);
+    return safeJsonOk(
+      { sent: true, notification_type: body.notification_type },
+      origin,
+    );
   } catch (err) {
     captureEdgeException(err, { fn: "service-notifications", req });
     console.error("service-notifications error:", err);
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);
     }
-    return safeJsonError("Internal server error", 500, req.headers.get("Origin"));
+    return safeJsonError(
+      "Internal server error",
+      500,
+      req.headers.get("Origin"),
+    );
   }
 });

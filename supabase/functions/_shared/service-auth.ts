@@ -64,7 +64,65 @@
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError } from "./safe-cors.ts";
 
-export const SERVICE_ALLOWED_ROLES = ["rep", "admin", "manager", "owner"] as const;
+export const SERVICE_ALLOWED_ROLES = [
+  "rep",
+  "admin",
+  "manager",
+  "owner",
+] as const;
+
+export const SERVICE_DEPARTMENT_ROLES = [
+  "service_writer",
+  "technician",
+  "parts_counter",
+  "dispatch",
+  "finance_admin",
+] as const;
+
+export const SERVICE_JOB_ACCESS_ROLES = [
+  ...SERVICE_ALLOWED_ROLES,
+  "service_writer",
+  "technician",
+  "parts_counter",
+  "dispatch",
+  "finance_admin",
+] as const;
+
+export const SERVICE_OPERATIONS_ROLES = [
+  ...SERVICE_ALLOWED_ROLES,
+  "service_writer",
+  "dispatch",
+] as const;
+
+export const SERVICE_TECHNICIAN_ROLES = [
+  ...SERVICE_OPERATIONS_ROLES,
+  "technician",
+] as const;
+
+export const SERVICE_PARTS_ROLES = [
+  ...SERVICE_OPERATIONS_ROLES,
+  "parts_counter",
+] as const;
+
+export const SERVICE_FINANCE_ROLES = [
+  ...SERVICE_ALLOWED_ROLES,
+  "finance_admin",
+] as const;
+
+export const SERVICE_QUOTE_ROLES = [
+  ...SERVICE_ALLOWED_ROLES,
+  "service_writer",
+  "finance_admin",
+] as const;
+
+export const SERVICE_BILLING_ROLES = SERVICE_FINANCE_ROLES;
+
+export function serviceRoleAllowed(
+  role: string,
+  allowedRoles: readonly string[],
+): boolean {
+  return allowedRoles.includes(role);
+}
 
 export type ServiceAuthResult =
   | {
@@ -107,7 +165,10 @@ async function validateUserJwt(
     };
   }
   if (!authHeader?.startsWith("Bearer ")) {
-    return { ok: false, response: safeJsonError("Missing authorization", 401, origin) };
+    return {
+      ok: false,
+      response: safeJsonError("Missing authorization", 401, origin),
+    };
   }
   if (serviceKey && authHeader === `Bearer ${serviceKey}`) {
     return {
@@ -122,7 +183,10 @@ async function validateUserJwt(
 
   const token = authHeader.slice("Bearer ".length).trim();
   if (!token) {
-    return { ok: false, response: safeJsonError("Missing bearer token", 401, origin) };
+    return {
+      ok: false,
+      response: safeJsonError("Missing bearer token", 401, origin),
+    };
   }
 
   const supabase = createClient(supabaseUrl, anonKey, {
@@ -138,10 +202,9 @@ async function validateUserJwt(
     });
     if (!userResp.ok) {
       const body = await userResp.json().catch(() => ({}));
-      const message =
-        (body as { msg?: string; message?: string }).msg
-        ?? (body as { message?: string }).message
-        ?? `HTTP ${userResp.status}`;
+      const message = (body as { msg?: string; message?: string }).msg ??
+        (body as { message?: string }).message ??
+        `HTTP ${userResp.status}`;
       return {
         ok: false,
         response: safeJsonError(`Unauthorized: ${message}`, 401, origin),
@@ -149,14 +212,19 @@ async function validateUserJwt(
     }
     const userBody = await userResp.json();
     if (!userBody || typeof userBody.id !== "string") {
-      return { ok: false, response: safeJsonError("Unauthorized: malformed user", 401, origin) };
+      return {
+        ok: false,
+        response: safeJsonError("Unauthorized: malformed user", 401, origin),
+      };
     }
     return { ok: true, supabase, userId: userBody.id };
   } catch (e) {
     return {
       ok: false,
       response: safeJsonError(
-        `Unauthorized: ${e instanceof Error ? e.message : "token verification failed"}`,
+        `Unauthorized: ${
+          e instanceof Error ? e.message : "token verification failed"
+        }`,
         401,
         origin,
       ),
@@ -177,6 +245,7 @@ export async function requireAuthenticatedUser(
 export async function requireServiceUser(
   authHeader: string | null,
   origin: string | null,
+  allowedRoles: readonly string[] = SERVICE_ALLOWED_ROLES,
 ): Promise<ServiceAuthResult> {
   const auth = await validateUserJwt(authHeader, origin);
   if (!auth.ok) return auth;
@@ -189,14 +258,18 @@ export async function requireServiceUser(
     .single();
 
   if (profErr || !profile) {
-    return { ok: false, response: safeJsonError("Profile not found", 403, origin) };
+    return {
+      ok: false,
+      response: safeJsonError("Profile not found", 403, origin),
+    };
   }
 
   const role = profile.role as string;
-  if (!(SERVICE_ALLOWED_ROLES as readonly string[]).includes(role)) {
+  if (!serviceRoleAllowed(role, allowedRoles)) {
     return { ok: false, response: safeJsonError("Forbidden", 403, origin) };
   }
 
-  const workspaceId = (profile.active_workspace_id as string | null) ?? "default";
+  const workspaceId = (profile.active_workspace_id as string | null) ??
+    "default";
   return { ok: true, supabase, userId, role, workspaceId };
 }

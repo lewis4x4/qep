@@ -1,5 +1,10 @@
 import { supabase } from "@/lib/supabase";
 import type {
+  H8LinePayerRow,
+  H8PayerType,
+  H8WarrantyClaim,
+  H8WarrantyClaimLine,
+  H8WarrantyClaimStatus,
   ServiceJobWithRelations,
   ServiceListFilters,
   ServiceListResponse,
@@ -298,4 +303,219 @@ export async function suggestCalendarSlots(body: {
   });
   if (error) throw new Error(error.message ?? "Calendar slots failed");
   return normalizeCalendarSlotsResult(data);
+}
+
+export async function submitSegmentDiagnosis(payload: {
+  segment_id: string;
+  complaint?: string;
+  cause?: string;
+  correction?: string;
+  labor_story_complaint_verification?: string;
+  labor_story_diagnostic_steps?: string;
+  labor_story_root_cause?: string;
+}): Promise<unknown> {
+  return invokeServiceRouter({ action: "submit_segment_diagnosis", ...payload });
+}
+
+export async function reviewSegmentDiagnosis(payload: {
+  segment_id: string;
+  decision: "approve" | "return";
+  notes?: string;
+}): Promise<unknown> {
+  return invokeServiceRouter({ action: "review_segment_diagnosis", ...payload });
+}
+
+export async function signOffSegmentRepair(payload: {
+  segment_id: string;
+  labor_story: string;
+  labor_story_complaint_verification: string;
+  labor_story_diagnostic_steps: string;
+  labor_story_root_cause: string;
+  labor_story_parts_used: string;
+  labor_story_work_performed: string;
+  hours_actual?: number;
+  quoted_labor_hours?: number;
+  lockout_tagout_required?: boolean;
+  lockout_tagout_completed?: boolean;
+  lockout_tagout_notes?: string;
+  warranty_parts_turn_in_required?: boolean;
+  warranty_parts_turn_in_completed?: boolean;
+  warranty_parts_label?: string;
+  warranty_parts_turn_in_notes?: string;
+}): Promise<unknown> {
+  return invokeServiceRouter({ action: "sign_off_segment_repair", ...payload });
+}
+
+export async function acknowledgeSegmentOverrun(payload: {
+  segment_id: string;
+  overrun_reason: string;
+}): Promise<unknown> {
+  return invokeServiceRouter({ action: "acknowledge_segment_overrun", ...payload });
+}
+
+export async function uploadAndRecordSegmentPhoto(payload: {
+  workspace_id: string;
+  service_job_id: string;
+  segment_id: string;
+  phase: "before" | "during" | "after";
+  category: string;
+  caption?: string;
+  file: File;
+}): Promise<unknown> {
+  const safeName = payload.file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+  const storagePath = `${payload.workspace_id}/service-jobs/${payload.service_job_id}/segments/${payload.segment_id}/${payload.phase}-${Date.now()}-${safeName}`;
+  const { error: uploadError } = await supabase.storage
+    .from("portal-service-photos")
+    .upload(storagePath, payload.file, { contentType: payload.file.type || undefined });
+  if (uploadError) throw new Error(uploadError.message ?? "Photo upload failed");
+  return invokeServiceRouter({
+    action: "record_segment_photo",
+    segment_id: payload.segment_id,
+    phase: payload.phase,
+    category: payload.category,
+    caption: payload.caption,
+    content_type: payload.file.type || null,
+    storage_path: storagePath,
+  });
+}
+
+export async function reviewServiceDocumentation(payload: {
+  job_id: string;
+  decision: "approve" | "return";
+  notes?: string;
+  return_reason?: string;
+}): Promise<unknown> {
+  return invokeServiceRouter({ action: "review_documentation", ...payload });
+}
+
+export async function linkServiceComeback(payload: {
+  job_id: string;
+  original_job_id: string;
+  fault_attribution: string;
+  responsible_technician_id?: string | null;
+  responsible_segment_id?: string | null;
+  notes?: string;
+}): Promise<ServiceJobWithRelations> {
+  const result = await invokeServiceRouter({ action: "link_comeback", ...payload });
+  return normalizeServiceJobResponse(result);
+}
+
+export async function setServiceLinePayer(payload: {
+  line_type: "quote_line" | "labor_ledger" | "billing_row";
+  line_id: string;
+  payer_type: H8PayerType;
+  warranty_claim_id?: string | null;
+  payer_notes?: string | null;
+}): Promise<unknown> {
+  return invokeServiceRouter({ action: "set_line_payer", ...payload });
+}
+
+export async function assembleWarrantyClaim(payload: {
+  job_id: string;
+  warranty_claim_id?: string;
+  claim_number?: string;
+  oem_name?: string;
+  oem_reference?: string;
+}): Promise<{ claim: H8WarrantyClaim | null; lines: H8WarrantyClaimLine[] }> {
+  const result = await invokeServiceRouter({ action: "assemble_warranty_claim", ...payload });
+  if (!isRecord(result)) return { claim: null, lines: [] };
+  return {
+    claim: isRecord(result.claim) ? result.claim as unknown as H8WarrantyClaim : null,
+    lines: Array.isArray(result.lines) ? result.lines as unknown as H8WarrantyClaimLine[] : [],
+  };
+}
+
+export async function updateWarrantyClaimStatus(payload: {
+  warranty_claim_id: string;
+  status: H8WarrantyClaimStatus;
+  oem_reference?: string;
+  approved_amount?: number;
+  paid_amount?: number;
+  denied_reason?: string;
+  notes?: string;
+}): Promise<H8WarrantyClaim | null> {
+  const result = await invokeServiceRouter({ action: "update_warranty_claim_status", ...payload });
+  return isRecord(result) && isRecord(result.claim) ? result.claim as unknown as H8WarrantyClaim : null;
+}
+
+export async function listWarrantyClaimsForJob(jobId: string): Promise<H8WarrantyClaim[]> {
+  const { data, error } = await supabase
+    .from("service_warranty_claims")
+    .select("id, service_job_id, status, claim_number, oem_name, oem_reference, requested_amount_cents, approved_amount_cents, paid_amount_cents, denied_reason, submitted_at, oem_evaluation_started_at, approved_at, denied_at, paid_at, closed_at, updated_at")
+    .eq("service_job_id", jobId)
+    .is("deleted_at", null)
+    .order("updated_at", { ascending: false });
+  if (error) throw new Error(error.message ?? "Warranty claims failed");
+  return Array.isArray(data) ? data as H8WarrantyClaim[] : [];
+}
+
+export async function listServiceLinePayers(jobId: string): Promise<H8LinePayerRow[]> {
+  const rows: H8LinePayerRow[] = [];
+  const { data: quotes, error: quoteError } = await supabase
+    .from("service_quotes")
+    .select("id")
+    .eq("job_id", jobId);
+  if (quoteError) throw new Error(quoteError.message ?? "Quote lookup failed");
+  const quoteIds = (quotes ?? []).map((quote) => quote.id as string).filter(Boolean);
+  if (quoteIds.length > 0) {
+    const { data: quoteLines, error } = await supabase
+      .from("service_quote_lines")
+      .select("id, line_type, description, extended_price, payer_type, warranty_claim_id, payer_notes")
+      .in("quote_id", quoteIds)
+      .order("sort_order", { ascending: true });
+    if (error) throw new Error(error.message ?? "Quote lines failed");
+    for (const line of quoteLines ?? []) {
+      rows.push({
+        id: line.id as string,
+        line_type: "quote_line",
+        label: `${line.line_type ?? "quote"}: ${line.description ?? "Quote line"}`,
+        amount_cents: Math.round(Number(line.extended_price ?? 0) * 100),
+        payer_type: line.payer_type as H8PayerType | null,
+        warranty_claim_id: line.warranty_claim_id as string | null,
+        payer_notes: line.payer_notes as string | null,
+      });
+    }
+  }
+
+  const { data: laborRows, error: laborError } = await supabase
+    .from("service_labor_ledger")
+    .select("id, notes, labor_sale_cents, payer_type, warranty_claim_id, payer_notes")
+    .eq("service_job_id", jobId)
+    .is("deleted_at", null);
+  if (laborError) throw new Error(laborError.message ?? "Labor ledger failed");
+  for (const row of laborRows ?? []) {
+    rows.push({
+      id: row.id as string,
+      line_type: "labor_ledger",
+      label: `Labor: ${row.notes ?? "ledger row"}`,
+      amount_cents: Number(row.labor_sale_cents ?? 0),
+      payer_type: row.payer_type as H8PayerType | null,
+      warranty_claim_id: row.warranty_claim_id as string | null,
+      payer_notes: row.payer_notes as string | null,
+    });
+  }
+
+  const { data: billingRows, error: billingError } = await supabase
+    .from("service_billing_rows")
+    .select("id, row_type, description, extended_price_cents, payer_type, warranty_claim_id, payer_notes")
+    .eq("service_job_id", jobId)
+    .is("deleted_at", null);
+  if (billingError) throw new Error(billingError.message ?? "Billing rows failed");
+  for (const row of billingRows ?? []) {
+    rows.push({
+      id: row.id as string,
+      line_type: "billing_row",
+      label: `${row.row_type ?? "billing"}: ${row.description ?? "Billing row"}`,
+      amount_cents: Number(row.extended_price_cents ?? 0),
+      payer_type: row.payer_type as H8PayerType | null,
+      warranty_claim_id: row.warranty_claim_id as string | null,
+      payer_notes: row.payer_notes as string | null,
+    });
+  }
+
+  return rows;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }

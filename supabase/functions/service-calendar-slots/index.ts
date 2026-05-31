@@ -3,8 +3,15 @@
  * Auth: user JWT (internal staff).
  */
 import { parseJsonBody } from "../_shared/parse-json-body.ts";
-import { requireServiceUser } from "../_shared/service-auth.ts";
-import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import {
+  requireServiceUser,
+  SERVICE_OPERATIONS_ROLES,
+} from "../_shared/service-auth.ts";
+import {
+  optionsResponse,
+  safeJsonError,
+  safeJsonOk,
+} from "../_shared/safe-cors.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 interface WeekdayRule {
@@ -79,7 +86,11 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return optionsResponse(origin);
 
   try {
-    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    const auth = await requireServiceUser(
+      req.headers.get("Authorization"),
+      origin,
+      SERVICE_OPERATIONS_ROLES,
+    );
     if (!auth.ok) return auth.response;
     const supabase = auth.supabase;
 
@@ -114,7 +125,9 @@ Deno.serve(async (req) => {
       Math.min(480, Number(cfg.appointment_slot_minutes) || 60),
     );
     const bh = cfg.business_hours as { weekdays?: WeekdayRule[] } | null;
-    const rules = Array.isArray(bh?.weekdays) ? bh!.weekdays as WeekdayRule[] : [];
+    const rules = Array.isArray(bh?.weekdays)
+      ? bh!.weekdays as WeekdayRule[]
+      : [];
 
     const from = body.from ? new Date(body.from) : new Date();
     const count = Math.min(48, Math.max(1, Number(body.count) || 16));
@@ -132,6 +145,10 @@ Deno.serve(async (req) => {
   } catch (err) {
     captureEdgeException(err, { fn: "service-calendar-slots", req });
     console.error("service-calendar-slots:", err);
-    return safeJsonError("Internal server error", 500, req.headers.get("Origin"));
+    return safeJsonError(
+      "Internal server error",
+      500,
+      req.headers.get("Origin"),
+    );
   }
 });

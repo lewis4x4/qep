@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
@@ -12,21 +12,22 @@ import {
   type EquipmentResult,
 } from "../hooks/useCustomerSearch";
 import {
-  SOURCE_TYPE_LABELS,
-  REQUEST_TYPE_LABELS,
-  PRIORITY_LABELS,
+  H2_SOURCE_TYPE_LABELS,
+  H2_REQUEST_TYPE_LABELS,
+  H2_PRIORITY_LABELS,
 } from "../lib/constants";
 import { normalizeIntakeResult, type IntakeResult } from "../lib/service-page-normalizers";
 import type { ServiceSourceType, ServiceRequestType, ServicePriority } from "../lib/types";
+import { isH2GrappleTruck, validateH2IntakeDraft } from "../lib/service-wo-gates";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const SOURCE_ICONS: Record<string, string> = {
   call: "📞",
   walk_in: "🚶",
-  field_tech: "🔧",
-  sales_handoff: "🤝",
-  portal: "💻",
+  drop_off: "🏗️",
+  field_request: "🌾",
+  internal_request: "🏭",
 };
 
 const QUICK_SYMPTOMS = [
@@ -169,6 +170,15 @@ export function ServiceIntakePage() {
 
   // ── Job details ──
   const [symptom, setSymptom] = useState("");
+  const [cause, setCause] = useState("");
+  const [correction, setCorrection] = useState("");
+  const [hourMeter, setHourMeter] = useState("");
+  const [odometerMiles, setOdometerMiles] = useState("");
+  const [promisedAtLocal, setPromisedAtLocal] = useState("");
+  const [fieldSiteLocation, setFieldSiteLocation] = useState("");
+  const [fieldSiteContactName, setFieldSiteContactName] = useState("");
+  const [fieldSiteContactPhone, setFieldSiteContactPhone] = useState("");
+  const [fieldSiteConditionsAccessNotes, setFieldSiteConditionsAccessNotes] = useState("");
   const [sourceType, setSourceType] = useState<ServiceSourceType>("call");
   const [requestType, setRequestType] = useState<ServiceRequestType>("repair");
   const [priority, setPriority] = useState<ServicePriority>("normal");
@@ -257,6 +267,8 @@ export function ServiceIntakePage() {
     setMachineQuery("");
     setShowMachineDrop(false);
     setIntakeResult(null);
+    setHourMeter(eq.engine_hours != null ? String(eq.engine_hours) : "");
+    setOdometerMiles(eq.mileage != null ? String(eq.mileage) : "");
   };
 
   const clearMachine = () => {
@@ -270,8 +282,45 @@ export function ServiceIntakePage() {
     symptomRef.current?.focus();
   };
 
+  const h2Validation = useMemo(() => validateH2IntakeDraft({
+    machine: selectedMachine,
+    machineId: selectedMachine?.id ?? null,
+    sourceType,
+    requestType,
+    priority: machineDown ? "emergency" : priority,
+    hourMeter,
+    odometerMiles,
+    promisedAt: promisedAtLocal,
+    complaint: symptom,
+    cause,
+    correction,
+    shopOrField,
+    fieldSiteLocation,
+    fieldSiteContactName,
+    fieldSiteContactPhone,
+    fieldSiteConditionsAccessNotes,
+  }), [
+    selectedMachine,
+    sourceType,
+    requestType,
+    priority,
+    machineDown,
+    hourMeter,
+    odometerMiles,
+    promisedAtLocal,
+    symptom,
+    cause,
+    correction,
+    shopOrField,
+    fieldSiteLocation,
+    fieldSiteContactName,
+    fieldSiteContactPhone,
+    fieldSiteConditionsAccessNotes,
+  ]);
+  const isGrappleTruck = isH2GrappleTruck(selectedMachine);
+
   const handleCreateJob = useCallback(() => {
-    const effectivePriority = machineDown ? "critical" : priority;
+    const effectivePriority = machineDown ? "emergency" : priority;
     const statusFlags: string[] = [];
     if (machineDown) statusFlags.push("machine_down");
     statusFlags.push(shopOrField === "shop" ? "shop_job" : "field_job");
@@ -284,10 +333,20 @@ export function ServiceIntakePage() {
         request_type: requestType,
         priority: effectivePriority,
         status_flags: statusFlags,
+        hour_meter_reading: Number(hourMeter),
+        odometer_miles: odometerMiles.trim() ? Number(odometerMiles) : null,
+        promised_at: new Date(promisedAtLocal).toISOString(),
+        complaint: symptom,
+        cause,
+        correction,
         customer_problem_summary: symptom,
         haul_required: haulRequired,
         shop_or_field: shopOrField,
         selected_job_code_id: selectedJobCodeId,
+        field_site_location: shopOrField === "field" ? fieldSiteLocation : null,
+        field_site_contact_name: shopOrField === "field" ? fieldSiteContactName : null,
+        field_site_contact_phone: shopOrField === "field" ? fieldSiteContactPhone : null,
+        field_site_conditions_access_notes: shopOrField === "field" ? fieldSiteConditionsAccessNotes : null,
         ai_diagnosis_summary: intakeResult
           ? `${intakeResult.suggested_next_step} (confidence: ${(intakeResult.confidence * 100).toFixed(0)}%)`
           : null,
@@ -315,13 +374,22 @@ export function ServiceIntakePage() {
     shopOrField,
     haulRequired,
     symptom,
+    cause,
+    correction,
+    hourMeter,
+    odometerMiles,
+    promisedAtLocal,
+    fieldSiteLocation,
+    fieldSiteContactName,
+    fieldSiteContactPhone,
+    fieldSiteConditionsAccessNotes,
     selectedJobCodeId,
     intakeResult,
     createJob,
     navigate,
   ]);
 
-  const canSubmit = symptom.trim().length > 0 && !createJob.isPending;
+  const canSubmit = h2Validation.ok && !createJob.isPending;
   const diagnosisRunning = diagnose.isPending;
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -508,6 +576,32 @@ export function ServiceIntakePage() {
             className="w-full rounded-lg border px-4 py-3 text-sm bg-background resize-none focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition"
           />
 
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-xs text-muted-foreground">
+              Known / suspected cause
+              <textarea
+                value={cause}
+                onChange={(e) => setCause(e.target.value)}
+                rows={2}
+                placeholder="What failed, what changed, or unknown if not diagnosed yet."
+                className="mt-1 w-full rounded-lg border px-3 py-2 text-sm bg-background resize-none focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition"
+              />
+            </label>
+            <label className="text-xs text-muted-foreground">
+              Requested / planned correction
+              <textarea
+                value={correction}
+                onChange={(e) => setCorrection(e.target.value)}
+                rows={2}
+                placeholder="What the operator expects us to inspect, repair, replace, or verify."
+                className="mt-1 w-full rounded-lg border px-3 py-2 text-sm bg-background resize-none focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition"
+              />
+            </label>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            H2 requires the Three C’s as separate fields: complaint, cause, and correction.
+          </p>
+
           {/* Quick symptom chips */}
           <div className="flex flex-wrap gap-1.5">
             {QUICK_SYMPTOMS.map((s) => (
@@ -531,7 +625,7 @@ export function ServiceIntakePage() {
             }`}
           >
             {machineDown
-              ? "🔴  MACHINE DOWN — Auto-set to Critical Priority"
+              ? "🔴  MACHINE DOWN — Auto-set to Emergency Priority"
               : "Tap here if the machine is completely down"}
           </button>
         </section>
@@ -546,10 +640,13 @@ export function ServiceIntakePage() {
           <div>
             <label className="block text-xs text-muted-foreground mb-2">How did this come in?</label>
             <div className="flex flex-wrap gap-2">
-              {(Object.entries(SOURCE_TYPE_LABELS) as [ServiceSourceType, string][]).map(([k, v]) => (
+              {(Object.entries(H2_SOURCE_TYPE_LABELS) as [ServiceSourceType, string][]).map(([k, v]) => (
                 <button
                   key={k}
-                  onClick={() => setSourceType(k)}
+                  onClick={() => {
+                    setSourceType(k);
+                    if (k === "field_request") setShopOrField("field");
+                  }}
                   className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition ${
                     sourceType === k
                       ? "border-primary bg-primary/10 text-primary"
@@ -569,10 +666,14 @@ export function ServiceIntakePage() {
               <label className="block text-xs text-muted-foreground mb-2">Request type</label>
               <select
                 value={requestType}
-                onChange={(e) => setRequestType(e.target.value as ServiceRequestType)}
+                onChange={(e) => {
+                  const next = e.target.value as ServiceRequestType;
+                  setRequestType(next);
+                  if (next === "field_service") setShopOrField("field");
+                }}
                 className="w-full rounded-lg border px-3 py-2.5 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
               >
-                {Object.entries(REQUEST_TYPE_LABELS).map(([k, v]) => (
+                {Object.entries(H2_REQUEST_TYPE_LABELS).map(([k, v]) => (
                   <option key={k} value={k}>{v}</option>
                 ))}
               </select>
@@ -581,7 +682,11 @@ export function ServiceIntakePage() {
               <label className="block text-xs text-muted-foreground mb-2">Work location</label>
               <div className="flex rounded-lg border overflow-hidden h-[42px]">
                 <button
-                  onClick={() => setShopOrField("shop")}
+                  onClick={() => {
+                    setShopOrField("shop");
+                    if (requestType === "field_service") setRequestType("repair");
+                    if (sourceType === "field_request") setSourceType("call");
+                  }}
                   className={`flex-1 text-sm font-medium transition ${
                     shopOrField === "shop"
                       ? "bg-primary text-primary-foreground"
@@ -604,6 +709,54 @@ export function ServiceIntakePage() {
             </div>
           </div>
 
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="block text-xs text-muted-foreground">
+              Hour meter <span className="text-destructive">*</span>
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                value={hourMeter}
+                onChange={(e) => setHourMeter(e.target.value)}
+                className="mt-1 w-full rounded-lg border px-3 py-2.5 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
+                placeholder="e.g. 1420.5"
+              />
+            </label>
+            <label className="block text-xs text-muted-foreground">
+              Miles {isGrappleTruck ? <span className="text-destructive">*</span> : <span className="text-muted-foreground">(if applicable)</span>}
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                value={odometerMiles}
+                onChange={(e) => setOdometerMiles(e.target.value)}
+                className="mt-1 w-full rounded-lg border px-3 py-2.5 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
+                placeholder="Required for grapple trucks"
+              />
+            </label>
+            <label className="block text-xs text-muted-foreground">
+              Promised date <span className="text-destructive">*</span>
+              <input
+                type="datetime-local"
+                value={promisedAtLocal}
+                onChange={(e) => setPromisedAtLocal(e.target.value)}
+                className="mt-1 w-full rounded-lg border px-3 py-2.5 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
+              />
+            </label>
+          </div>
+
+          {shopOrField === "field" && (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-3">
+              <p className="text-xs font-medium">Field service site gate</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <input value={fieldSiteLocation} onChange={(e) => setFieldSiteLocation(e.target.value)} placeholder="Site location / address" className="rounded-lg border bg-background px-3 py-2 text-sm" />
+                <input value={fieldSiteContactName} onChange={(e) => setFieldSiteContactName(e.target.value)} placeholder="Site contact name" className="rounded-lg border bg-background px-3 py-2 text-sm" />
+                <input value={fieldSiteContactPhone} onChange={(e) => setFieldSiteContactPhone(e.target.value)} placeholder="Site contact phone" className="rounded-lg border bg-background px-3 py-2 text-sm" />
+                <input value={fieldSiteConditionsAccessNotes} onChange={(e) => setFieldSiteConditionsAccessNotes(e.target.value)} placeholder="Site conditions / access notes" className="rounded-lg border bg-background px-3 py-2 text-sm" />
+              </div>
+            </div>
+          )}
+
           {/* Priority + Haul */}
           <div className="flex items-end gap-4 flex-wrap">
             {!machineDown && (
@@ -614,7 +767,7 @@ export function ServiceIntakePage() {
                   onChange={(e) => setPriority(e.target.value as ServicePriority)}
                   className="w-full rounded-lg border px-3 py-2.5 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
                 >
-                  {Object.entries(PRIORITY_LABELS).map(([k, v]) => (
+                  {Object.entries(H2_PRIORITY_LABELS).map(([k, v]) => (
                     <option key={k} value={k}>{v}</option>
                   ))}
                 </select>
@@ -624,7 +777,7 @@ export function ServiceIntakePage() {
               <div className="flex-1 min-w-28">
                 <label className="block text-xs text-muted-foreground mb-2">Priority</label>
                 <div className="w-full rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2.5 text-sm font-semibold text-red-400">
-                  Critical (auto)
+                  Emergency (auto)
                 </div>
               </div>
             )}
@@ -822,10 +975,12 @@ export function ServiceIntakePage() {
             )}
           </button>
 
-          {!symptom.trim() && (
-            <p className="text-center text-xs text-muted-foreground mt-2">
-              Describe the issue above to continue
-            </p>
+          {!h2Validation.ok && (
+            <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-800 dark:text-amber-100">
+              <p className="font-semibold">Complete H2 intake before creating the work order.</p>
+              {h2Validation.missing.length > 0 && <p className="mt-1">Missing: {h2Validation.missing.join(", ")}</p>}
+              {h2Validation.invalid.length > 0 && <p className="mt-1">Invalid: {h2Validation.invalid.join(", ")}</p>}
+            </div>
           )}
 
           {createJob.isError && (

@@ -1,6 +1,7 @@
 import { useServiceJob } from "../hooks/useServiceJobs";
 import { useTransitionServiceJob } from "../hooks/useServiceJobMutation";
 import { ServiceQuoteBuilder } from "./ServiceQuoteBuilder";
+import { ServiceWorkOrderGatePanels } from "./ServiceWorkOrderGatePanels";
 import { CompletionFeedbackForm } from "./CompletionFeedbackForm";
 import { VoiceFieldNotes } from "./VoiceFieldNotes";
 import { PartsRequirementEditor } from "./PartsRequirementEditor";
@@ -33,6 +34,8 @@ import {
 import type { ServiceStage } from "../lib/constants";
 import { Link } from "react-router-dom";
 import { getPublicServiceStatus } from "../lib/publicServiceStatus";
+import { shouldBlockStageTransition } from "../lib/service-wo-gates";
+import { useAuth } from "@/hooks/useAuth";
 import { Check, Copy, X } from "lucide-react";
 
 interface Props {
@@ -50,6 +53,7 @@ function normalizeServiceStage(value: unknown): ServiceStage {
 
 export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
   const qc = useQueryClient();
+  const { profile } = useAuth();
   const { data: job, isLoading } = useServiceJob(jobId ?? undefined);
   const transition = useTransitionServiceJob();
   const [portalRequestId, setPortalRequestId] = useState("");
@@ -213,6 +217,10 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
     ],
     [stage],
   );
+  const transitionBlocks = useMemo(() => {
+    if (!job) return new Map<string, ReturnType<typeof shouldBlockStageTransition>>();
+    return new Map(nextStages.map((next) => [next, shouldBlockStageTransition(job, next)]));
+  }, [job, nextStages]);
 
   if (!jobId) return null;
 
@@ -653,6 +661,8 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
               </div>
             </section>
 
+            <ServiceWorkOrderGatePanels job={job} role={profile?.role ?? ""} />
+
             {/* Problem */}
             {job.customer_problem_summary && (
               <section>
@@ -842,11 +852,18 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
               <section>
                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">Advance Stage</h3>
                 <div className="flex flex-wrap gap-2">
-                  {nextStages.map((s) => (
+                  {nextStages.map((s) => {
+                    const block = transitionBlocks.get(s);
+                    return (
                     <button
                       key={s}
-                      disabled={transition.isPending}
-                      onClick={() => transition.mutate({ id: job.id, toStage: s })}
+                      disabled={transition.isPending || Boolean(block)}
+                      title={block?.reason}
+                      onClick={() => {
+                        const currentBlock = transitionBlocks.get(s);
+                        if (currentBlock) return;
+                        transition.mutate({ id: job.id, toStage: s });
+                      }}
                       className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
                         s === "blocked_waiting"
                           ? "bg-red-100 text-red-700 hover:bg-red-200"
@@ -855,8 +872,14 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                     >
                       → {STAGE_LABELS[s as ServiceStage] ?? s}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
+                {[...transitionBlocks.entries()].filter(([, block]) => Boolean(block)).map(([next, block]) => (
+                  <p key={next} className="mt-1 text-xs text-amber-700 dark:text-amber-200">
+                    {STAGE_LABELS[next as ServiceStage] ?? next} blocked: {block?.reason}
+                  </p>
+                ))}
                 {transition.isError && (
                   <p className="text-xs text-destructive mt-1">
                     {(transition.error as Error)?.message ?? "Transition failed"}

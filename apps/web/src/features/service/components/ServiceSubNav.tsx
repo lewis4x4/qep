@@ -8,6 +8,7 @@ import {
   ChartColumnIncreasing,
   Banknote,
   BarChart3,
+  LineChart,
   GitBranch,
   Boxes,
   Lightbulb,
@@ -16,8 +17,10 @@ import {
   Settings2,
   Activity,
   Smartphone,
+  Factory,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { canAccessGrappleProductionRole } from "@/lib/nav-config";
 import { cn } from "@/lib/utils";
 
 const SUB_NAV_LINKS = [
@@ -29,6 +32,8 @@ const SUB_NAV_LINKS = [
   { to: "/parts/orders", label: "Parts Orders", icon: ShoppingCart },
   { to: "/parts/vendors", label: "Vendors", icon: Truck },
   { to: "/service/efficiency", label: "Efficiency", icon: BarChart3 },
+  { to: "/service/grapple", label: "Grapple", icon: Factory },
+  { to: "/service/metrics", label: "Metrics", icon: LineChart },
 ] as const;
 
 const ADMIN_LINKS = [
@@ -92,7 +97,11 @@ function Divider() {
 export function ServiceSubNav() {
   const { profile } = useAuth();
   const location = useLocation();
+  const serviceSurfaceRoles = ["rep", "admin", "manager", "owner"];
   const isAdmin = ["admin", "manager", "owner"].includes(profile?.role ?? "");
+  const canViewCoreServiceLinks = serviceSurfaceRoles.includes(profile?.role ?? "");
+  const canViewMetrics = ["admin", "manager", "owner", "service_writer", "finance_admin"].includes(profile?.role ?? "");
+  const canViewGrappleProduction = canAccessGrappleProductionRole(profile?.role);
   const isCommandCenter = location.pathname === "/service";
 
   const isActive = (to: string) => {
@@ -120,7 +129,7 @@ export function ServiceSubNav() {
       )}
     >
       {/* Back to Command Center — only on sub-pages */}
-      {!isCommandCenter && (
+      {!isCommandCenter && canViewCoreServiceLinks && (
         <>
           <Link to="/service" className={cn(backPill, "shrink-0")} aria-label="Back to Command Center">
             <ChevronLeft className="h-3 w-3" />
@@ -131,7 +140,11 @@ export function ServiceSubNav() {
       )}
 
       {/* Core service links */}
-      {SUB_NAV_LINKS.map((navItem) => {
+      {SUB_NAV_LINKS.filter((navItem) => {
+        if (navItem.to === "/service/metrics") return canViewMetrics;
+        if (navItem.to === "/service/grapple") return canViewGrappleProduction;
+        return canViewCoreServiceLinks;
+      }).map((navItem) => {
         const NavIcon = navItem.icon;
         return (
           <Link
