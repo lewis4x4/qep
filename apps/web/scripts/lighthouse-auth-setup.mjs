@@ -2,23 +2,25 @@
 /**
  * WAVE Quality Tail — Slice 1: Lighthouse storage-state generator.
  *
- * Drives a Playwright sign-in against LHCI_BASE_URL with rep test
- * credentials, verifies the authenticated sales canary route
- * (/sales/today), and only then writes auth state to disk. The
+ * Drives a Playwright sign-in against LHCI_BASE_URL with test
+ * credentials, waits for the Supabase password grant + stored auth
+ * token, verifies the authenticated sales canary route (/sales/today),
+ * and only then writes auth state to disk. The
  * companion puppeteerScript (./lighthouse-puppeteer-auth.cjs) loads
  * that state before each Lighthouse audit so /sales/* routes audit
  * as a real rep instead of redirecting to the login page.
  *
  * Required env:
  *   LHCI_BASE_URL                  e.g. https://qep.blackrockai.co
- *   PLAYWRIGHT_TEST_EMAIL          rep account email
- *   PLAYWRIGHT_TEST_PASSWORD       rep account password
+ *   PLAYWRIGHT_TEST_EMAIL          test account email
+ *   PLAYWRIGHT_TEST_PASSWORD       test account password
  *
  * Selectors match apps/web/src/components/LoginPage.tsx (the password
  * tab form, IDs #email-pw / #password / #login-button) and the
  * existing Playwright helper at apps/web/tests/e2e/helpers/auth.ts.
- * If LoginPage gets a redesign, update both this script and the
- * helper in lockstep.
+ * Keep the password-grant + localStorage auth-token wait in lockstep
+ * with that helper so this setup does not depend on role-specific
+ * post-login home redirects.
  *
  * Output: apps/web/.lighthouse-storage-state.json (git-ignored).
  */
@@ -45,6 +47,28 @@ const AUTH_CANARY_PATH = "/sales/today";
 
 function resolveAppUrl(origin, path) {
   return new URL(path, origin).toString();
+}
+
+async function waitForSupabasePasswordGrant(page) {
+  return page.waitForResponse(
+    (response) =>
+      response.url().includes("/auth/v1/token") &&
+      response.url().includes("grant_type=password") &&
+      response.status() >= 200 &&
+      response.status() < 300,
+    { timeout: 30_000 },
+  );
+}
+
+async function waitForStoredSupabaseAuthToken(page) {
+  await page.waitForFunction(
+    () =>
+      Object.keys(window.localStorage).some(
+        (key) => key.startsWith("sb-") && key.endsWith("-auth-token"),
+      ),
+    undefined,
+    { timeout: 30_000 },
+  );
 }
 
 async function assertAuthenticatedSalesCanary(page, canaryUrl) {
@@ -79,20 +103,17 @@ try {
   // Land on the app root; unauthenticated visits redirect to the
   // login form which lives at the same route in this build.
   await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
-  // Match the IDs used by apps/web/tests/e2e/helpers/auth.ts so any
-  // future selector change only has to be made in one place.
+  // Match the selectors and auth-success signal used by
+  // apps/web/tests/e2e/helpers/auth.ts. Do not wait on a role-specific
+  // post-login route here: the shared CI fixture may be admin/manager and
+  // therefore lands on /qrm before the Lighthouse canary navigates to
+  // /sales/today.
   await page.locator("#email-pw").fill(email);
   await page.locator("#password").fill(password);
+  const passwordGrant = waitForSupabasePasswordGrant(page);
   await page.locator("#login-button").click();
-  // Wait for a concrete post-login destination before running the sales canary.
-  // Reps land in /sales/*; other roles often land on /floor or /dashboard.
-  await page.waitForURL(
-    (url) =>
-      url.pathname.startsWith("/sales/") ||
-      url.pathname.startsWith("/floor") ||
-      url.pathname.startsWith("/dashboard"),
-    { timeout: 30_000 },
-  );
+  await passwordGrant;
+  await waitForStoredSupabaseAuthToken(page);
   const canaryUrl = resolveAppUrl(baseUrl, AUTH_CANARY_PATH);
   await assertAuthenticatedSalesCanary(page, canaryUrl);
   await context.storageState({ path: outputPath });

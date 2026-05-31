@@ -67,9 +67,18 @@ jobs:
         working-directory: .
         run: bun install --frozen-lockfile
 
-      - name: Install Playwright Chromium (authenticated path only)
-        if: env.HAS_CREDS == 'true'
+      - name: Install Playwright Chromium for Lighthouse
         run: bunx playwright install chromium --with-deps
+
+      - name: Expose Playwright Chromium to LHCI
+        run: |
+          CHROME_PATH="$(node -e "const { chromium } = require('@playwright/test'); console.log(chromium.executablePath())")"
+          if [ ! -x "$CHROME_PATH" ]; then
+            echo "::error::Playwright Chromium executable not found at $CHROME_PATH"
+            exit 1
+          fi
+          echo "CHROME_PATH=$CHROME_PATH" >> "$GITHUB_ENV"
+          echo "Using CHROME_PATH=$CHROME_PATH"
 
       - name: Wait for deploy preview
         if: github.event_name == 'pull_request'

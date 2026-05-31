@@ -49,6 +49,11 @@ const SALES_REP_ROUTES = [
 const baseUrl = process.env.LHCI_BASE_URL || "https://qep.blackrockai.co";
 const authenticated = process.env.LHCI_AUTHENTICATED === "true";
 const guestFallback = process.env.LHCI_GUEST_FALLBACK === "true";
+const CHROME_FLAGS = [
+  "--no-sandbox",
+  "--disable-setuid-sandbox",
+  "--disable-dev-shm-usage",
+];
 
 module.exports = {
   ci: {
@@ -57,6 +62,15 @@ module.exports = {
       numberOfRuns: 1,
       puppeteerScript: authenticated
         ? "./scripts/lighthouse-puppeteer-auth.cjs"
+        : undefined,
+      // LHCI ignores collect.settings.chromeFlags when puppeteerScript is active
+      // because it reuses the Puppeteer-launched browser. Keep the same CI-safe
+      // launch flags in puppeteerLaunchOptions for authenticated runs and in
+      // settings.chromeFlags for guest/non-auth Lighthouse-owned launches.
+      puppeteerLaunchOptions: authenticated
+        ? {
+            args: CHROME_FLAGS,
+          }
         : undefined,
       settings: {
         formFactor: "mobile",
@@ -73,7 +87,7 @@ module.exports = {
           "uses-http2",
           "redirects-http",
         ],
-        chromeFlags: "--no-sandbox --disable-dev-shm-usage",
+        chromeFlags: CHROME_FLAGS.join(" "),
       },
     },
     assert: {
