@@ -1,90 +1,126 @@
+import {
+  HERO_COLLAPSED_MIN_HEIGHT_PX,
+  HERO_EXPANDED_MIN_HEIGHT_PX,
+  readHeroCollapsedState,
+} from "./EveningBriefingHero";
+import { OemPriceImpactCardPlaceholder } from "./OemPriceImpactCard";
+
+function SkeletonLine({ className }: { className: string }) {
+  return <div className={`rounded bg-white/[0.07] ${className}`} />;
+}
+
+function SectionLabelPlaceholder({ width = "w-24" }: { width?: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="h-3.5 w-3.5 rounded bg-qep-orange/25" />
+      <SkeletonLine className={`h-2.5 ${width}`} />
+      <div className="h-px flex-1 bg-white/[0.06]" />
+    </div>
+  );
+}
+
 export function TodayFeedSkeleton() {
+  const heroCollapsed = readHeroCollapsedState("today-hero");
+
   return (
     <div
       role="status"
       aria-busy="true"
       aria-live="polite"
       aria-label="Loading today's agenda"
-      className="px-4 py-4 space-y-5 max-w-lg mx-auto pb-8 animate-pulse motion-reduce:animate-none"
+      className="px-4 py-4 space-y-4 max-w-lg mx-auto pb-8 animate-pulse motion-reduce:animate-none"
     >
       <span className="sr-only">Loading today's agenda…</span>
-      {/* Mobile header skeleton */}
+
       <div className="flex items-center justify-between px-4 py-3 sm:hidden">
-        <div className="h-6 w-20 bg-white/[0.08] rounded-md" />
-        <div className="w-10 h-10 rounded-full bg-qep-orange/30" />
+        <SkeletonLine className="h-6 w-20" />
+        <div className="h-10 w-10 rounded-full bg-qep-orange/30" />
       </div>
 
-      {/* Briefing hero (gradient orange placeholder) */}
       <div
-        className="rounded-2xl h-[148px] relative overflow-hidden"
+        data-testid="today-feed-skeleton-hero"
+        className="relative overflow-hidden rounded-2xl px-5 py-5"
         style={{
+          minHeight: heroCollapsed
+            ? HERO_COLLAPSED_MIN_HEIGHT_PX
+            : HERO_EXPANDED_MIN_HEIGHT_PX,
           background:
             "linear-gradient(135deg, rgba(232,119,34,0.5) 0%, rgba(242,149,86,0.45) 40%, rgba(216,100,32,0.5) 100%)",
         }}
       >
-        <div className="absolute -top-10 -right-10 w-44 h-44 rounded-full bg-white/[0.08] blur-[44px]" />
-        <div className="absolute inset-x-5 top-5 space-y-2.5">
-          <div className="h-3 w-32 bg-white/25 rounded" />
-          <div className="h-5 w-44 bg-white/35 rounded-md" />
-          <div className="h-3 w-3/4 bg-white/25 rounded mt-3" />
-          <div className="h-3 w-2/3 bg-white/20 rounded" />
+        <div className="absolute -right-10 -top-10 h-44 w-44 rounded-full bg-white/[0.08] blur-[44px]" />
+        <div className="relative space-y-2.5">
+          <SkeletonLine className="h-3 w-32 bg-white/25" />
+          <SkeletonLine className="h-6 w-52 bg-white/30" />
+          {!heroCollapsed && (
+            <>
+              <SkeletonLine className="mt-3 h-3 w-3/4 bg-white/25" />
+              <SkeletonLine className="h-3 w-2/3 bg-white/20" />
+              <div className="mt-4 h-9 w-36 rounded-full bg-white/20" />
+            </>
+          )}
         </div>
       </div>
 
-      {/* Momentum strip placeholder */}
-      <div className="space-y-2">
-        <div className="h-2.5 w-24 bg-white/[0.06] rounded" />
-        <div className="h-[80px] rounded-xl bg-white/[0.04] border border-white/[0.05]" />
-      </div>
+      <section
+        data-testid="today-feed-skeleton-narrative"
+        className="min-h-[132px] rounded-2xl border border-white/[0.06] bg-[hsl(var(--card))] p-5"
+      >
+        <SkeletonLine className="h-3 w-24" />
+        <SkeletonLine className="mt-3 h-4 w-full" />
+        <SkeletonLine className="mt-2 h-4 w-11/12" />
+        <SkeletonLine className="mt-2 h-4 w-2/3" />
+      </section>
 
-      {/* Live signals strip placeholder */}
-      <div className="space-y-2">
-        <div className="h-2.5 w-28 bg-white/[0.06] rounded" />
+      <div data-testid="today-feed-skeleton-live-signals" className="space-y-2">
+        <SkeletonLine className="h-2.5 w-28" />
         <div className="flex gap-2 overflow-hidden">
-          {[0, 1, 2].map((i) => (
+          {[0, 1, 2].map((item) => (
             <div
-              key={i}
-              className="w-[140px] shrink-0 h-[76px] bg-white/[0.04] rounded-xl border border-white/[0.05]"
+              key={item}
+              className="h-[76px] w-[140px] shrink-0 rounded-xl border border-white/[0.05] bg-white/[0.04]"
             />
           ))}
         </div>
       </div>
 
-      {/* Priority actions section */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="w-3.5 h-3.5 bg-qep-orange/30 rounded" />
-          <div className="h-2.5 w-28 bg-white/[0.06] rounded" />
-          <div className="flex-1 h-px bg-white/[0.06]" />
-        </div>
-        {[0, 1].map((i) => (
-          <div
-            key={i}
-            className="h-[96px] bg-white/[0.04] rounded-xl border border-white/[0.05]"
-          />
-        ))}
-      </div>
+      <OemPriceImpactCardPlaceholder />
 
-      {/* Approvals section placeholder (Phase 2C) */}
-      <div className="space-y-2.5">
-        <div className="flex items-center gap-2">
-          <div className="w-3.5 h-3.5 bg-amber-400/25 rounded" />
-          <div className="h-2.5 w-20 bg-white/[0.06] rounded" />
-          <div className="flex-1 h-px bg-white/[0.06]" />
-        </div>
-        <div className="h-[68px] bg-white/[0.04] rounded-xl border border-amber-400/15" />
-        <div className="h-[68px] bg-white/[0.04] rounded-xl border border-amber-400/10" />
-      </div>
+      <div
+        data-testid="today-feed-skeleton-streak"
+        className="h-11 w-full rounded-full border border-white/[0.06] bg-card"
+      />
 
-      {/* Meetings section placeholder */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="w-3.5 h-3.5 bg-purple-400/30 rounded" />
-          <div className="h-2.5 w-32 bg-white/[0.06] rounded" />
-          <div className="flex-1 h-px bg-white/[0.06]" />
+      <section data-testid="today-feed-skeleton-actions" className="space-y-3">
+        <SectionLabelPlaceholder width="w-20" />
+        <div className="min-h-[226px] rounded-3xl border border-qep-orange/40 bg-qep-orange/[0.12]" />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="min-h-[160px] rounded-2xl border border-qep-orange/20 bg-qep-orange/[0.06]" />
+          <div className="min-h-[160px] rounded-2xl border border-white/[0.08] bg-[hsl(var(--card))]" />
         </div>
-        <div className="h-[88px] bg-white/[0.04] rounded-xl border border-white/[0.05]" />
-      </div>
+      </section>
+
+      <div
+        data-testid="today-feed-skeleton-tomorrow"
+        aria-hidden="true"
+        className="h-[112px] w-full rounded-xl border border-white/[0.08] bg-[hsl(var(--card))]"
+      />
+
+      <section
+        data-testid="today-feed-skeleton-quick-tools"
+        className="rounded-2xl border border-white/[0.06] bg-[hsl(var(--card))] p-4"
+      >
+        <SkeletonLine className="h-2.5 w-32" />
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((item) => (
+            <div
+              key={item}
+              className="h-[50px] rounded-xl border border-white/[0.08] bg-black/20"
+            />
+          ))}
+        </div>
+      </section>
+
     </div>
   );
 }

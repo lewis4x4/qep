@@ -168,7 +168,7 @@ export function MyMirrorPage() {
               </div>
               <Link
                 to="/qrm/deals"
-                className="inline-flex items-center gap-1 text-xs font-semibold text-qep-orange whitespace-nowrap pt-0.5"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-qep-orange-accessible whitespace-nowrap pt-0.5"
               >
                 All deals <ArrowUpRight className="h-3 w-3" aria-hidden />
               </Link>
@@ -206,7 +206,7 @@ export function MyMirrorPage() {
                             {deal.dealName}
                           </p>
                         </div>
-                        <span className="shrink-0 text-sm font-semibold text-qep-orange tabular-nums">
+                        <span className="shrink-0 text-sm font-semibold text-qep-orange-accessible tabular-nums">
                           {formatCurrency(deal.weightedAmount)}
                         </span>
                       </div>

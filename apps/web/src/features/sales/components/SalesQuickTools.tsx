@@ -69,7 +69,7 @@ function QuickToolLink({ tool }: { tool: Tool }) {
       className="group flex items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-black/20 px-3 py-2.5 transition-all hover:border-qep-orange/40 hover:bg-qep-orange/[0.08] active:scale-[0.98]"
     >
       <span className="flex min-w-0 items-center gap-2">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-qep-orange/15 text-qep-orange">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-qep-orange/15 text-qep-orange-accessible">
           <Icon className="h-3.5 w-3.5" aria-hidden="true" />
         </span>
         <span className="min-w-0">
@@ -81,7 +81,7 @@ function QuickToolLink({ tool }: { tool: Tool }) {
           </span>
         </span>
       </span>
-      <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-qep-orange" />
+      <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-qep-orange-accessible" />
     </Link>
   );
 }

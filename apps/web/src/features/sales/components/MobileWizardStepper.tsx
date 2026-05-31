@@ -94,7 +94,7 @@ export function MobileWizardStepper({
                     "border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15",
                   step.status === "available" &&
                     "border-white/[0.12] bg-foreground/[0.04] text-foreground hover:border-white/30",
-                  locked && "border-white/[0.06] bg-foreground/[0.02] text-muted-foreground/60 cursor-not-allowed",
+                  locked && "border-white/[0.06] bg-foreground/[0.02] text-muted-foreground cursor-not-allowed",
                 )}
                 data-step-id={step.id}
                 data-status={step.status}

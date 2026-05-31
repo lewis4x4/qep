@@ -59,7 +59,7 @@ export function PrepCard({ card }: { card: PrepCardType }) {
               <div className="space-y-1">
                 {fleetItems.map((item, i) => (
                   <div key={i} className="flex items-center gap-2 text-xs">
-                    <Truck className="w-3 h-3 text-muted-foreground/50 shrink-0" />
+                    <Truck className="w-3 h-3 text-muted-foreground shrink-0" />
                     <span>{item}</span>
                   </div>
                 ))}
@@ -72,7 +72,7 @@ export function PrepCard({ card }: { card: PrepCardType }) {
 
         {/* Last contact */}
         {card.last_interaction && (
-          <p className="text-xs text-muted-foreground/60 mt-2">
+          <p className="text-xs text-muted-foreground mt-2">
             Last contact: {card.last_interaction}
           </p>
         )}
@@ -96,12 +96,12 @@ export function PrepCard({ card }: { card: PrepCardType }) {
 
         {/* Footer */}
         <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/[0.06]">
-          <span className="text-xs text-muted-foreground/60">
+          <span className="text-xs text-muted-foreground">
             {card.talking_points.length > 0
               ? `${card.talking_points.length} AI talking points`
               : "Meeting prep ready"}
           </span>
-          <span className="text-xs font-semibold text-qep-orange flex items-center gap-0.5">
+          <span className="text-xs font-semibold text-qep-orange-accessible flex items-center gap-0.5">
             Full Prep <ChevronRight className="w-3 h-3" />
           </span>
         </div>

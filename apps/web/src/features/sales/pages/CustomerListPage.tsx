@@ -33,7 +33,12 @@ export function CustomerListPage() {
   const isSearching = search.trim().length >= 2;
 
   if (isLoading) {
-    return <CustomerSkeleton />;
+    return (
+      <>
+        <h1 className="sr-only">Customers</h1>
+        <CustomerSkeleton />
+      </>
+    );
   }
 
   // Hero stats — always computed from the unfiltered set.
@@ -51,6 +56,7 @@ export function CustomerListPage() {
 
   return (
     <div className="flex flex-col pb-20 max-w-lg mx-auto">
+      <h1 className="sr-only">Customers</h1>
       {/* Hero stats */}
       <div
         className="px-4 pt-3.5 pb-3 border-b border-white/[0.06]"
@@ -61,7 +67,7 @@ export function CustomerListPage() {
       >
         <div className="flex items-end justify-between mb-3">
           <div>
-            <p className="text-[10px] font-extrabold text-muted-foreground/60 uppercase tracking-[0.1em] mb-0.5">
+            <p className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-[0.1em] mb-0.5">
               My Book of Business
             </p>
             <div className="flex items-baseline gap-2">
@@ -75,15 +81,15 @@ export function CustomerListPage() {
           </div>
           <div className="flex gap-4">
             <div className="text-right">
-              <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-[0.08em]">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.08em]">
                 Open Deals
               </p>
-              <p className="text-[15px] font-extrabold text-qep-orange">
+              <p className="text-[15px] font-extrabold text-qep-orange-accessible">
                 {totalOpen}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-[0.08em]">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.08em]">
                 Hot
               </p>
               <p className="text-[15px] font-extrabold text-red-400 flex items-center gap-1 justify-end">
@@ -124,13 +130,13 @@ export function CustomerListPage() {
           <div className="px-4 pt-2.5 pb-0 flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <div className="w-[22px] h-[22px] rounded-[7px] bg-qep-orange/10 flex items-center justify-center">
-                <Zap className="w-[11px] h-[11px] text-qep-orange" />
+                <Zap className="w-[11px] h-[11px] text-qep-orange-accessible" />
               </div>
               <span className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-[0.08em]">
                 {isSearching ? "In Your Book" : "Iron-Ranked by Opportunity"}
               </span>
             </div>
-            <span className="text-[11px] text-muted-foreground/60 font-semibold">
+            <span className="text-[11px] text-muted-foreground font-semibold">
               {visibleCustomers.length} result
               {visibleCustomers.length !== 1 ? "s" : ""}
             </span>
@@ -151,7 +157,7 @@ export function CustomerListPage() {
               />
             ))
           ) : isSearching ? (
-            <p className="text-center text-[12px] text-muted-foreground/70 py-2">
+            <p className="text-center text-[12px] text-muted-foreground py-2">
               No book matches — see dealer directory below.
             </p>
           ) : (
@@ -203,8 +209,8 @@ function InsightFilterBanner({
         <div className="flex items-center gap-2 min-w-0">
           <span className="w-1.5 h-1.5 rounded-full bg-qep-orange animate-pulse shrink-0" />
           <p className="text-[12px] font-bold text-foreground truncate">
-            Filtered: <span className="text-qep-orange">{label}</span>
-            <span className="text-muted-foreground/70 font-normal ml-1.5">
+            Filtered: <span className="text-qep-orange-accessible">{label}</span>
+            <span className="text-muted-foreground font-normal ml-1.5">
               · {count} {count === 1 ? "customer" : "customers"}
             </span>
           </p>
@@ -212,7 +218,7 @@ function InsightFilterBanner({
         <button
           type="button"
           onClick={onClear}
-          className="flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold text-qep-orange hover:bg-qep-orange/15 transition-colors shrink-0"
+          className="flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold text-qep-orange-accessible hover:bg-qep-orange/15 transition-colors shrink-0"
         >
           <X className="w-3 h-3" />
           Clear

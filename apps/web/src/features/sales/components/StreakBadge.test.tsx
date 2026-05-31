@@ -12,6 +12,7 @@ describe("StreakBadge", () => {
     ).toBeTruthy();
     const badge = screen.getByTestId("streak-badge");
     expect(badge.getAttribute("data-state")).toBe("empty");
+    expect(badge.className).toContain("h-11");
   });
 
   test("shows broken-streak copy with days-since + record when history exists", () => {
@@ -70,7 +71,9 @@ describe("StreakBadge", () => {
     render(
       <StreakBadge currentStreak={0} longestStreak={0} isLoading />,
     );
-    expect(screen.getByTestId("streak-badge-loading")).toBeTruthy();
+    const loadingBadge = screen.getByTestId("streak-badge-loading");
+    expect(loadingBadge).toBeTruthy();
+    expect(loadingBadge.className).toContain("h-11");
     expect(screen.queryByTestId("streak-badge")).toBeNull();
   });
 });

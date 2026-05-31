@@ -58,7 +58,7 @@ export function QuickLogSheet({ companyId, dealId, onLogged }: QuickLogSheetProp
           onClick={() => save("call")}
           className="flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-foreground/[0.04] py-3 text-sm font-semibold text-foreground disabled:opacity-40"
         >
-          <PhoneCall className="h-4 w-4 text-qep-orange" />
+          <PhoneCall className="h-4 w-4 text-qep-orange-accessible" />
           Call
         </button>
         <button
@@ -67,7 +67,7 @@ export function QuickLogSheet({ companyId, dealId, onLogged }: QuickLogSheetProp
           onClick={() => save("email")}
           className="flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-foreground/[0.04] py-3 text-sm font-semibold text-foreground disabled:opacity-40"
         >
-          <Mail className="h-4 w-4 text-qep-orange" />
+          <Mail className="h-4 w-4 text-qep-orange-accessible" />
           Email
         </button>
         <button
@@ -76,7 +76,7 @@ export function QuickLogSheet({ companyId, dealId, onLogged }: QuickLogSheetProp
           onClick={() => save("visit")}
           className="flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-foreground/[0.04] py-3 text-sm font-semibold text-foreground disabled:opacity-40"
         >
-          <MapPin className="h-4 w-4 text-qep-orange" />
+          <MapPin className="h-4 w-4 text-qep-orange-accessible" />
           Visit
         </button>
         <button
@@ -85,7 +85,7 @@ export function QuickLogSheet({ companyId, dealId, onLogged }: QuickLogSheetProp
           onClick={() => save("note", noteText.trim())}
           className="flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-foreground/[0.04] py-3 text-sm font-semibold text-foreground disabled:opacity-40"
         >
-          <StickyNote className="h-4 w-4 text-qep-orange" />
+          <StickyNote className="h-4 w-4 text-qep-orange-accessible" />
           Note
         </button>
       </div>

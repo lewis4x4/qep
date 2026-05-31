@@ -134,7 +134,7 @@ export function DealDetailPage() {
           </p>
           <Link
             to="/sales/pipeline"
-            className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-qep-orange"
+            className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-qep-orange-accessible"
           >
             Back to pipeline <ArrowRight className="h-3 w-3" aria-hidden />
           </Link>
@@ -194,7 +194,7 @@ export function DealDetailPage() {
                   <button
                     type="button"
                     onClick={() => handleCall(deal.customer.phone ?? "")}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-foreground/[0.04] px-3 py-2 text-xs font-semibold text-foreground hover:border-qep-orange/60 hover:text-qep-orange transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-foreground/[0.04] px-3 py-2 text-xs font-semibold text-foreground hover:border-qep-orange/60 hover:text-qep-orange-accessible transition-colors"
                     data-testid="deal-detail-tel"
                   >
                     <Phone className="h-3.5 w-3.5" aria-hidden />
@@ -205,7 +205,7 @@ export function DealDetailPage() {
                   <button
                     type="button"
                     onClick={() => handleEmail(deal.customer.email ?? "")}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-foreground/[0.04] px-3 py-2 text-xs font-semibold text-foreground hover:border-qep-orange/60 hover:text-qep-orange transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-foreground/[0.04] px-3 py-2 text-xs font-semibold text-foreground hover:border-qep-orange/60 hover:text-qep-orange-accessible transition-colors"
                     data-testid="deal-detail-mailto"
                   >
                     <Mail className="h-3.5 w-3.5" aria-hidden />
@@ -230,7 +230,7 @@ export function DealDetailPage() {
             data-testid="deal-detail-quote-card"
           >
             <div className="flex items-start gap-3">
-              <Sparkles className="mt-0.5 h-4 w-4 text-qep-orange shrink-0" aria-hidden />
+              <Sparkles className="mt-0.5 h-4 w-4 text-qep-orange-accessible shrink-0" aria-hidden />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-foreground">
                   Start a new quote
@@ -261,7 +261,7 @@ export function DealDetailPage() {
               <button
                 type="button"
                 onClick={() => setQuickLogOpen(true)}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-qep-orange"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-qep-orange-accessible"
               >
                 <PlusCircle className="h-3.5 w-3.5" aria-hidden />
                 Log

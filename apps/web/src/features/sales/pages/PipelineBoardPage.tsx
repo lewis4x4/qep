@@ -49,7 +49,12 @@ export function PipelineBoardPage() {
   );
 
   if (isLoading) {
-    return <PipelineSkeleton />;
+    return (
+      <>
+        <h1 className="sr-only">Pipeline</h1>
+        <PipelineSkeleton />
+      </>
+    );
   }
 
   // ── Compute pipeline analytics ──
@@ -110,6 +115,7 @@ export function PipelineBoardPage() {
 
   return (
     <div className="flex flex-col pb-20 max-w-lg mx-auto">
+      <h1 className="sr-only">Pipeline</h1>
       {/* Forecast Hero */}
       <div
         className="px-4 pt-3.5 pb-3 border-b border-white/[0.06]"
@@ -121,7 +127,7 @@ export function PipelineBoardPage() {
         {/* Title + Weighted */}
         <div className="flex items-start justify-between mb-2.5">
           <div>
-            <p className="text-[10px] font-extrabold text-muted-foreground/60 uppercase tracking-[0.1em] mb-0.5">
+            <p className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-[0.1em] mb-0.5">
               {new Date().toLocaleDateString(undefined, { month: "long" })} Pipeline
             </p>
             <div className="flex items-baseline gap-2">
@@ -137,10 +143,10 @@ export function PipelineBoardPage() {
             </div>
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-[0.08em] mb-0.5">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.08em] mb-0.5">
               Weighted
             </p>
-            <span className="text-lg font-extrabold text-qep-orange">
+            <span className="text-lg font-extrabold text-qep-orange-accessible">
               {formatCurrency(weightedValue)}
             </span>
           </div>
@@ -270,8 +276,8 @@ function InsightFilterBanner({
         <div className="flex items-center gap-2 min-w-0">
           <span className="w-1.5 h-1.5 rounded-full bg-qep-orange animate-pulse shrink-0" />
           <p className="text-[12px] font-bold text-foreground truncate">
-            Filtered: <span className="text-qep-orange">{label}</span>
-            <span className="text-muted-foreground/70 font-normal ml-1.5">
+            Filtered: <span className="text-qep-orange-accessible">{label}</span>
+            <span className="text-muted-foreground font-normal ml-1.5">
               · {count} {count === 1 ? "deal" : "deals"}
             </span>
           </p>
@@ -279,7 +285,7 @@ function InsightFilterBanner({
         <button
           type="button"
           onClick={onClear}
-          className="flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold text-qep-orange hover:bg-qep-orange/15 transition-colors shrink-0"
+          className="flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold text-qep-orange-accessible hover:bg-qep-orange/15 transition-colors shrink-0"
         >
           <X className="w-3 h-3" />
           Clear
@@ -335,7 +341,7 @@ function QuickStat({
     <div
       className={`flex-1 px-2.5 py-2 rounded-[10px] border ${styles.bg} ${styles.border}`}
     >
-      <p className="text-[10px] text-muted-foreground/60 font-bold uppercase tracking-[0.04em] mb-0.5">
+      <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-[0.04em] mb-0.5">
         {label}
       </p>
       <p

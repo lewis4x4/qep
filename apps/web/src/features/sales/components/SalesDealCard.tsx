@@ -20,7 +20,7 @@ function AiScoreChip({ score }: { score: number }) {
     score >= 80
       ? "bg-emerald-500/15 text-emerald-400"
       : score >= 50
-        ? "bg-qep-orange/15 text-qep-orange"
+        ? "bg-qep-orange/15 text-qep-orange-accessible"
         : "bg-red-500/15 text-red-400";
   return (
     <span
@@ -55,7 +55,7 @@ function HeatDot({ heat }: { heat: string }) {
 function getStageColor(stage: string): string {
   const s = stage.toLowerCase();
   if (s.includes("closing") || s.includes("close")) return "text-emerald-400";
-  if (s.includes("negotiat")) return "text-qep-orange";
+  if (s.includes("negotiat")) return "text-qep-orange-accessible";
   if (s.includes("quot")) return "text-amber-400";
   if (s.includes("qualif")) return "text-purple-400";
   return "text-blue-400";
@@ -201,7 +201,7 @@ export function SalesDealCard({
                 {money}
               </p>
             )}
-            <p className="text-[10px] text-muted-foreground/60 font-semibold">
+            <p className="text-[10px] text-muted-foreground font-semibold">
               {stagePercent}% likely
             </p>
           </div>
@@ -218,7 +218,7 @@ export function SalesDealCard({
         </div>
 
         {/* Meta row */}
-        <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground/60 mb-0">
+        <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground mb-0">
           <span
             className={`flex items-center gap-1 ${stalled ? "text-amber-400 font-bold" : ""}`}
           >
@@ -258,7 +258,7 @@ export function SalesDealCard({
             onClick={handleCall}
             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-foreground text-xs font-bold hover:bg-foreground/[0.04] transition-colors"
           >
-            <PhoneCall className="w-[13px] h-[13px] text-qep-orange" />
+            <PhoneCall className="w-[13px] h-[13px] text-qep-orange-accessible" />
             Call
           </button>
         ) : (

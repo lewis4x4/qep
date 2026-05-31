@@ -62,7 +62,7 @@ export function CustomerPickerInline({
         <button
           type="button"
           onClick={onClose}
-          className="text-[11px] font-semibold text-qep-orange"
+          className="text-[11px] font-semibold text-qep-orange-accessible"
         >
           Cancel
         </button>
@@ -70,6 +70,7 @@ export function CustomerPickerInline({
       <input
         autoFocus
         type="text"
+        aria-label="Find a customer"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         placeholder="Customer name…"

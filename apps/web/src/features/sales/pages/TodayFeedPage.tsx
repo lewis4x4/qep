@@ -9,7 +9,11 @@ import { SalesActionsBlock } from "../components/SalesActionsBlock";
 import { SalesQuickTools } from "../components/SalesQuickTools";
 import { TomorrowFirstMove } from "../components/TomorrowFirstMove";
 import { LiveSignalsStrip } from "../components/LiveSignalsStrip";
-import { OemPriceImpactCard } from "../components/OemPriceImpactCard";
+import {
+  OemPriceImpactCard,
+  OemPriceImpactCardEmpty,
+  OemPriceImpactCardPlaceholder,
+} from "../components/OemPriceImpactCard";
 import { StreakBadge } from "../components/StreakBadge";
 import { TodayFeedSkeleton } from "../components/TodayFeedSkeleton";
 import { PrepCard } from "../components/PrepCard";
@@ -109,6 +113,7 @@ export function TodayFeedPage() {
     livePriorityActions,
     pipeline,
     priceImpacts,
+    priceImpactsLoading,
     timeOfDay,
     isLoading,
   } = useTodayFeed();
@@ -127,7 +132,12 @@ export function TodayFeedPage() {
   );
 
   if (isLoading) {
-    return <TodayFeedSkeleton />;
+    return (
+      <>
+        <h1 className="sr-only">Today</h1>
+        <TodayFeedSkeleton />
+      </>
+    );
   }
 
   const dealMap = new Map(pipeline.map((d) => [d.deal_id, d]));
@@ -167,11 +177,14 @@ export function TodayFeedPage() {
   });
 
   const handleVoiceDictate = () => setLogVisitOpen(true);
+  const showPriceImpactCard =
+    priceImpacts != null && priceImpacts.summary.visibleImpactCount > 0;
 
   return (
     <div className="px-4 py-4 space-y-4 max-w-lg mx-auto pb-8">
+      <h1 className="sr-only">Today</h1>
       <div className="flex items-center justify-between px-4 py-3 sm:hidden">
-        <h1 className="text-xl font-bold text-foreground">Today</h1>
+        <h2 className="text-xl font-bold text-foreground">Today</h2>
         <button
           type="button"
           aria-label="Log a visit"
@@ -202,29 +215,33 @@ export function TodayFeedPage() {
 
       <SalesNarrativeBlock firstName={firstName} />
 
-      {pipeline.length > 0 && (
+      {pipeline.length > 0 ? (
         <LiveSignalsStrip
           pipeline={pipeline}
           expiringQuoteCount={briefing?.expiring_quotes?.length ?? 0}
         />
+      ) : (
+        <LiveSignalsReservedSlot />
       )}
 
-      {priceImpacts && priceImpacts.summary.visibleImpactCount > 0 && (
+      {priceImpactsLoading ? (
+        <OemPriceImpactCardPlaceholder />
+      ) : showPriceImpactCard && priceImpacts ? (
         <OemPriceImpactCard
           summary={priceImpacts.summary}
           impacts={priceImpacts.impacts}
           onReview={() => navigate("/sales/price-impacts")}
         />
+      ) : (
+        <OemPriceImpactCardEmpty />
       )}
 
-      {(pipeline.length > 0 || streaks.currentStreak > 0 || streaks.longestStreak > 0) && (
-        <StreakBadge
-          currentStreak={streaks.currentStreak}
-          longestStreak={streaks.longestStreak}
-          lastActiveAt={streaks.lastActiveAt}
-          isLoading={streaks.isLoading}
-        />
-      )}
+      <StreakBadge
+        currentStreak={streaks.currentStreak}
+        longestStreak={streaks.longestStreak}
+        lastActiveAt={streaks.lastActiveAt}
+        isLoading={streaks.isLoading}
+      />
 
       <SalesActionsBlock
         pipeline={pipeline}
@@ -232,14 +249,18 @@ export function TodayFeedPage() {
         onVoiceQuote={handleVoiceDictate}
       />
 
-      {pipeline.length > 0 && <TomorrowFirstMove pipeline={pipeline} />}
+      {pipeline.length > 0 ? (
+        <TomorrowFirstMove pipeline={pipeline} />
+      ) : (
+        <TomorrowFirstMoveReservedSlot />
+      )}
 
       <SalesQuickTools />
 
       {priorities.length > 0 && (
         <div>
           <SectionHeader
-            icon={<Flame className="w-3.5 h-3.5 text-qep-orange" />}
+            icon={<Flame className="w-3.5 h-3.5 text-qep-orange-accessible" />}
             label="Priority Actions"
             trailing={`${priorities.length} items`}
           />
@@ -280,6 +301,53 @@ export function TodayFeedPage() {
   );
 }
 
+function LiveSignalsReservedSlot() {
+  return (
+    <div
+      data-testid="live-signals-reserved-slot"
+      className="space-y-2"
+      role="region"
+      aria-label="Live sales signals"
+    >
+      <div className="h-2.5 w-28 rounded bg-white/[0.04]" aria-hidden="true" />
+      <div className="flex gap-2 overflow-hidden" aria-hidden="true">
+        {[0, 1, 2].map((item) => (
+          <div
+            key={item}
+            className="h-[76px] w-[140px] shrink-0 rounded-xl border border-white/[0.05] bg-white/[0.025]"
+          />
+        ))}
+      </div>
+      <span className="sr-only">Live signals will appear once pipeline activity is available.</span>
+    </div>
+  );
+}
+
+function TomorrowFirstMoveReservedSlot() {
+  return (
+    <div
+      data-testid="tomorrow-first-move-reserved-slot"
+      className="h-[112px] w-full rounded-xl border border-white/[0.08] bg-[hsl(var(--card))] px-4 py-3.5"
+      role="region"
+      aria-label="Tomorrow's first move"
+    >
+      <div className="mb-2 flex items-center gap-2">
+        <div className="h-3.5 w-3.5 rounded bg-qep-orange/20" aria-hidden="true" />
+        <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+          Tomorrow's First Move
+        </span>
+        <div className="h-px flex-1 bg-white/[0.06]" />
+      </div>
+      <p className="text-sm font-semibold text-foreground leading-tight">
+        Build your first move from today’s pipeline
+      </p>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        Add or advance a deal and Iron will reserve the first touch.
+      </p>
+    </div>
+  );
+}
+
 function SectionHeader({
   icon,
   label,
@@ -292,12 +360,12 @@ function SectionHeader({
   return (
     <div className="flex items-center gap-2 mb-3">
       {icon}
-      <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+      <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
         {label}
-      </span>
+      </h2>
       <div className="flex-1 h-px bg-white/[0.06]" />
       {trailing && (
-        <span className="text-[11px] text-muted-foreground/60 font-medium">
+        <span className="text-[11px] text-muted-foreground font-medium">
           {trailing}
         </span>
       )}
@@ -361,7 +429,7 @@ function ApprovalsSection({
       <SectionHeader
         icon={
           <ClipboardCheck
-            className={`w-3.5 h-3.5 ${showManager ? "text-qep-orange" : "text-amber-400"}`}
+            className={`w-3.5 h-3.5 ${showManager ? "text-qep-orange-accessible" : "text-amber-400"}`}
           />
         }
         label="Approvals"
@@ -382,18 +450,18 @@ function ApprovalsSection({
           >
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-full bg-qep-orange/20 flex items-center justify-center shrink-0">
-                <ClipboardCheck className="w-4.5 h-4.5 text-qep-orange" />
+                <ClipboardCheck className="w-4.5 h-4.5 text-qep-orange-accessible" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-[14px] font-semibold text-foreground leading-tight">
-                  <span className="tabular-nums text-qep-orange">
+                  <span className="tabular-nums text-qep-orange-accessible">
                     {pendingApprovals.manager_pending_count}
                   </span>{" "}
                   {pendingApprovals.manager_pending_count === 1 ? "quote" : "quotes"}{" "}
                   need your decision
                 </p>
                 {olderThan24h > 0 && (
-                  <p className="text-[12px] text-foreground/70 mt-0.5">
+                  <p className="text-[12px] text-foreground mt-0.5">
                     <span className="tabular-nums font-medium text-amber-300">
                       {olderThan24h}
                     </span>{" "}
@@ -401,7 +469,7 @@ function ApprovalsSection({
                   </p>
                 )}
               </div>
-              <ChevronRight className="w-4 h-4 shrink-0 text-qep-orange/80" />
+              <ChevronRight className="w-4 h-4 shrink-0 text-qep-orange-accessible" />
             </div>
           </button>
 
@@ -418,7 +486,7 @@ function ApprovalsSection({
                     <p className="text-[13px] font-medium text-foreground truncate">
                       {row.customer_name ?? "Customer"}
                       {row.quote_number && (
-                        <span className="text-muted-foreground/70 font-normal ml-1.5">
+                        <span className="text-muted-foreground font-normal ml-1.5">
                           · {row.quote_number}
                         </span>
                       )}
@@ -434,7 +502,7 @@ function ApprovalsSection({
                       </span>
                     </p>
                   </div>
-                  <ChevronRight className="w-3.5 h-3.5 shrink-0 text-muted-foreground/60" />
+                  <ChevronRight className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
                 </button>
               ))}
             </div>
@@ -450,7 +518,6 @@ function ApprovalsSection({
               type="button"
               onClick={() => navigate("/sales/my-approvals")}
               className="w-full text-left rounded-xl border border-amber-400/30 bg-amber-400/[0.05] hover:bg-amber-400/[0.08] transition-colors px-3.5 py-3 active:scale-[0.995]"
-              aria-label={`Quote ${row.quote_number ?? ""} stuck for ${row.hours_pending} hours`}
             >
               <div className="flex items-center gap-3">
                 <Clock className="w-4 h-4 shrink-0 text-amber-300/90" />
@@ -458,7 +525,7 @@ function ApprovalsSection({
                   <p className="text-[13.5px] font-semibold text-foreground truncate">
                     {row.customer_name ?? "Customer"}
                     {row.quote_number && (
-                      <span className="text-muted-foreground/70 font-normal ml-1.5">
+                      <span className="text-muted-foreground font-normal ml-1.5">
                         · {row.quote_number}
                       </span>
                     )}

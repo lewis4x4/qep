@@ -67,8 +67,8 @@ const ACCENT_STYLES: Record<
     activeBg: "bg-qep-orange/20",
     activeBorder: "border-qep-orange ring-1 ring-qep-orange/50",
     iconBg: "bg-qep-orange/20",
-    iconColor: "text-qep-orange",
-    valueColor: "text-qep-orange",
+    iconColor: "text-qep-orange-accessible",
+    valueColor: "text-qep-orange-accessible",
   },
   warning: {
     bg: "bg-amber-500/[0.06]",
@@ -104,11 +104,11 @@ export function PipelineInsightsStrip({
       <div className="flex items-center justify-between mb-1.5">
         <p
           id="pipeline-insights-heading"
-          className="text-[10px] font-extrabold text-muted-foreground/70 uppercase tracking-[0.12em]"
+          className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-[0.12em]"
         >
           AI Insights
         </p>
-        <p className="text-[10px] text-muted-foreground/50 italic">
+        <p className="text-[10px] text-muted-foreground italic">
           tap to filter
         </p>
       </div>
@@ -170,7 +170,7 @@ function InsightCard({
       <p className={`text-[18px] font-black leading-none mb-1 ${styles.valueColor}`}>
         {insight.value}
       </p>
-      <p className="text-[10.5px] text-muted-foreground/85 leading-snug line-clamp-2">
+      <p className="text-[10.5px] text-muted-foreground leading-snug line-clamp-2">
         {insight.subtitle}
       </p>
     </button>

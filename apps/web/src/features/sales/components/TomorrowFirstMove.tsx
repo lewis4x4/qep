@@ -71,7 +71,7 @@ function pickFirstMove(pipeline: RepPipelineDeal[]): Move | null {
       deal: d.deal_name,
       dealId: d.deal_id,
       suggestedTime: "Confirm details by noon",
-      urgencyColor: "text-qep-orange",
+      urgencyColor: "text-qep-orange-accessible",
     };
   }
 
@@ -112,12 +112,12 @@ export function TomorrowFirstMove({ pipeline }: TomorrowFirstMoveProps) {
       className="w-full text-left bg-[hsl(var(--card))] border border-white/[0.08] rounded-xl px-4 py-3.5 active:scale-[0.99] transition-transform hover:border-white/[0.15]"
     >
       <div className="flex items-center gap-2 mb-2">
-        <Sunrise className="w-3.5 h-3.5 text-qep-orange" />
+        <Sunrise className="w-3.5 h-3.5 text-qep-orange-accessible" />
         <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
           Tomorrow's First Move
         </span>
         <div className="flex-1 h-px bg-white/[0.06]" />
-        <ChevronRight className="w-4 h-4 text-muted-foreground/50" />
+        <ChevronRight className="w-4 h-4 text-muted-foreground" />
       </div>
       <p className="text-sm font-semibold text-foreground leading-tight">
         {move.customer}
@@ -129,8 +129,8 @@ export function TomorrowFirstMove({ pipeline }: TomorrowFirstMoveProps) {
         <span className={`text-[11px] font-semibold ${move.urgencyColor}`}>
           {move.suggestedTime}
         </span>
-        <span className="text-muted-foreground/40">·</span>
-        <span className="text-[11px] text-muted-foreground/80">
+        <span className="text-muted-foreground">·</span>
+        <span className="text-[11px] text-muted-foreground">
           {move.reason}
         </span>
       </div>

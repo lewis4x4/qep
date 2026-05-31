@@ -40,7 +40,7 @@ export function LiveSignalsStrip({
     {
       key: "closing",
       icon: Flame,
-      iconClass: "text-qep-orange",
+      iconClass: "text-qep-orange-accessible",
       label: "Closing this week",
       count: closingSoonCount,
       to: "/sales/pipeline?filter=closing_this_week",

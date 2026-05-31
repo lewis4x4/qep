@@ -1,5 +1,8 @@
 import { Flame } from "lucide-react";
 
+const STREAK_BADGE_CLASS =
+  "w-full h-11 sm:inline-flex flex items-center gap-2 overflow-hidden whitespace-nowrap rounded-full border border-white/[0.06] px-3.5 py-2";
+
 export interface StreakBadgeProps {
   currentStreak: number;
   longestStreak: number;
@@ -26,7 +29,7 @@ export function StreakBadge({
     return (
       <div
         data-testid="streak-badge-loading"
-        className="w-full sm:inline-flex h-9 rounded-full bg-card border border-white/[0.06] animate-pulse"
+        className={`${STREAK_BADGE_CLASS} bg-card animate-pulse motion-reduce:animate-none`}
         aria-hidden="true"
       />
     );
@@ -48,13 +51,13 @@ export function StreakBadge({
       <div
         data-testid="streak-badge"
         data-state={hasHistory ? "broken" : "empty"}
-        className="w-full sm:inline-flex flex items-center gap-2 px-3.5 py-2 rounded-full bg-card border border-white/[0.06] text-muted-foreground"
+        className={`${STREAK_BADGE_CLASS} bg-card text-muted-foreground`}
       >
         <Flame
-          className={`w-3.5 h-3.5 shrink-0 ${hasHistory ? "text-amber-400/80" : "text-muted-foreground/60"}`}
+          className={`w-3.5 h-3.5 shrink-0 ${hasHistory ? "text-amber-400/80" : "text-muted-foreground"}`}
           aria-hidden="true"
         />
-        <span className="text-[12.5px] font-medium">{copy}</span>
+        <span className="min-w-0 truncate text-[12.5px] font-medium">{copy}</span>
       </div>
     );
   }
@@ -70,17 +73,17 @@ export function StreakBadge({
     <div
       data-testid="streak-badge"
       data-state={isPersonalBest ? "personal-best" : isOneFromRecord ? "one-from-record" : "active"}
-      className="w-full sm:inline-flex flex items-center gap-2 px-3.5 py-2 rounded-full bg-card border border-white/[0.06]"
+      className={`${STREAK_BADGE_CLASS} bg-card`}
     >
       <Flame
-        className="w-3.5 h-3.5 shrink-0 text-qep-orange"
+        className="w-3.5 h-3.5 shrink-0 text-qep-orange-accessible"
         aria-hidden="true"
       />
-      <span className="text-[12.5px] font-semibold text-foreground tabular-nums">
+      <span className="shrink-0 text-[12.5px] font-semibold text-foreground tabular-nums">
         {label}
       </span>
       {subtitle && (
-        <span className="text-[11.5px] text-muted-foreground">
+        <span className="min-w-0 truncate text-[11.5px] text-muted-foreground">
           · {subtitle}
         </span>
       )}

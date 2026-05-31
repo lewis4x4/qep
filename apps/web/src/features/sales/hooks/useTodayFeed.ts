@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchTodayBriefing, fetchRepPipeline } from "../lib/sales-api";
 import { fetchRepPriceImpacts } from "@/features/price-intelligence/lib/price-intelligence-api";
@@ -11,10 +12,51 @@ function getTimeOfDay(): "morning" | "afternoon" | "evening" {
   return "evening";
 }
 
+function useAfterFirstPaint(): boolean {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      setReady(true);
+      return;
+    }
+
+    let timeoutId: number | undefined;
+    let rafId: number | undefined;
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (
+        callback: () => void,
+        options?: { timeout: number },
+      ) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    let idleId: number | undefined;
+
+    const markReady = () => setReady(true);
+    rafId = window.requestAnimationFrame(() => {
+      if (idleWindow.requestIdleCallback) {
+        idleId = idleWindow.requestIdleCallback(markReady, { timeout: 1500 });
+        return;
+      }
+      timeoutId = window.setTimeout(markReady, 0);
+    });
+
+    return () => {
+      if (rafId !== undefined) window.cancelAnimationFrame(rafId);
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      if (idleId !== undefined) idleWindow.cancelIdleCallback?.(idleId);
+    };
+  }, []);
+
+  return ready;
+}
+
 export function useTodayFeed() {
+  const loadBriefingAfterFirstPaint = useAfterFirstPaint();
   const briefingQuery = useQuery({
     queryKey: ["sales", "briefing", new Date().toISOString().split("T")[0]],
     queryFn: fetchTodayBriefing,
+    enabled: loadBriefingAfterFirstPaint,
     staleTime: 60 * 60 * 1000, // 1 hour — briefing is generated once daily
   });
 
@@ -68,8 +110,12 @@ export function useTodayFeed() {
     priceImpactsLoading: priceImpactsQuery.isLoading,
     priceImpactsError: priceImpactsQuery.error,
     timeOfDay,
-    isLoading: briefingQuery.isLoading || pipelineQuery.isLoading,
-    error: briefingQuery.error || pipelineQuery.error,
+    // Keep the LLM-backed briefing off the first-paint loading gate. The
+    // locally-derived hero/action copy can render from the fast pipeline path;
+    // AI prep/priority cards hydrate when the briefing query resolves after
+    // first paint. Price impacts stay in the gate to avoid mid-page OEM card CLS.
+    isLoading: pipelineQuery.isLoading || priceImpactsQuery.isLoading,
+    error: pipelineQuery.error || priceImpactsQuery.error || briefingQuery.error,
     briefingError: briefingQuery.error,
     pipelineError: pipelineQuery.error,
     hasBriefing: Boolean(briefing),

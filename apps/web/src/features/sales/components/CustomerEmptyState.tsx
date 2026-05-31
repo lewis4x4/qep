@@ -29,7 +29,7 @@ export function CustomerEmptyState({
           </span>
           .
         </p>
-        <p className="text-muted-foreground/60 text-xs mt-1">
+        <p className="text-muted-foreground text-xs mt-1">
           Try a different name, city, or contact.
         </p>
       </div>
@@ -47,7 +47,7 @@ export function CustomerEmptyState({
           <button
             type="button"
             onClick={onClearFilter}
-            className="mt-2 text-xs font-bold text-qep-orange hover:underline"
+            className="mt-2 text-xs font-bold text-qep-orange-accessible hover:underline"
           >
             Clear filter
           </button>
@@ -121,7 +121,7 @@ function FullEmptyState() {
         />
       </div>
 
-      <p className="text-[11px] text-muted-foreground/60 text-center mt-5 px-4 leading-relaxed">
+      <p className="text-[11px] text-muted-foreground text-center mt-5 px-4 leading-relaxed">
         Once customers land here, the page surfaces hot accounts, quiet
         relationships, and quote opportunities — ranked by opportunity score.
       </p>
@@ -156,7 +156,7 @@ function ActionRow({
       <div
         className={`w-10 h-10 rounded-[11px] flex items-center justify-center shrink-0 ${
           isPrimary
-            ? "bg-qep-orange/20 text-qep-orange"
+            ? "bg-qep-orange/20 text-qep-orange-accessible"
             : "bg-white/[0.05] text-foreground/80"
         }`}
       >
@@ -165,18 +165,18 @@ function ActionRow({
       <div className="flex-1 min-w-0">
         <p
           className={`text-[14px] font-bold leading-tight ${
-            isPrimary ? "text-qep-orange" : "text-foreground"
+            isPrimary ? "text-qep-orange-accessible" : "text-foreground"
           }`}
         >
           {label}
         </p>
-        <p className="text-[11.5px] text-muted-foreground/80 leading-snug mt-0.5">
+        <p className="text-[11.5px] text-muted-foreground leading-snug mt-0.5">
           {hint}
         </p>
       </div>
       <ArrowRight
         className={`w-4 h-4 shrink-0 transition-transform group-active:translate-x-0.5 ${
-          isPrimary ? "text-qep-orange" : "text-muted-foreground/60"
+          isPrimary ? "text-qep-orange-accessible" : "text-muted-foreground"
         }`}
       />
     </button>

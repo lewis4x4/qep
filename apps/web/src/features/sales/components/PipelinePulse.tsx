@@ -33,8 +33,8 @@ const TONE_STYLES: Record<
   neutral: {
     border: "border-qep-orange/20",
     bg: "bg-qep-orange/[0.04]",
-    iconColor: "text-qep-orange",
-    accent: "text-qep-orange",
+    iconColor: "text-qep-orange-accessible",
+    accent: "text-qep-orange-accessible",
   },
 };
 

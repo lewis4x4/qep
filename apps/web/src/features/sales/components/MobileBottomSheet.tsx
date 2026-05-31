@@ -45,6 +45,8 @@ export function MobileBottomSheet({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, onOpenChange]);
 
+  const inertProps = open ? {} : ({ inert: "" } as Record<string, string>);
+
   // Lock body scroll while open
   useEffect(() => {
     if (!open) return;
@@ -58,6 +60,7 @@ export function MobileBottomSheet({
   return (
     <div
       aria-hidden={!open}
+      {...inertProps}
       className={cn(
         "fixed inset-0 z-50 transition-opacity duration-200",
         open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none",

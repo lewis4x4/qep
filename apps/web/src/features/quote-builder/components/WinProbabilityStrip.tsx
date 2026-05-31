@@ -318,6 +318,7 @@ function GaugeBar({ score, barColor }: { score: number; barColor: string }) {
           barColor,
         )}
         style={{ left: `calc(${pct}% - 2px)` }}
+        role="img"
         aria-label={`Score ${score}`}
       />
     </div>

@@ -110,7 +110,7 @@ export function ScheduleFollowUp({ onComplete }: { onComplete: () => void }) {
               setCustomerId(null);
               setCustomerSearch("");
             }}
-            className="mt-2 text-sm text-qep-orange font-medium hover:underline"
+            className="mt-2 text-sm text-qep-orange-accessible font-medium hover:underline"
           >
             Choose a different customer
           </button>

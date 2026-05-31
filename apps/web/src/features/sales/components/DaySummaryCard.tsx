@@ -21,7 +21,7 @@ export function DaySummaryCard({
         <p>{warmDeals} deals with recent activity</p>
         <p>Total pipeline value: ${totalValue.toLocaleString()}</p>
       </div>
-      <p className="text-xs text-muted-foreground/50 mt-3">
+      <p className="text-xs text-muted-foreground mt-3">
         Tomorrow's briefing will be ready at 5am.
       </p>
     </div>

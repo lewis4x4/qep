@@ -274,8 +274,9 @@ export function QuoteListPage() {
       className="relative left-1/2 -mt-8 flex min-h-[calc(100vh-9rem)] -translate-x-1/2 flex-col gap-6 rounded-b-2xl border-x border-b border-border/60 bg-background/25 px-4 pb-8 pt-8 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:px-6 lg:px-10"
       style={{ width: "calc(100vw - clamp(24px, 5vw, 80px))" }}
     >
+      <h1 className="sr-only">Quotes</h1>
       <div className="flex items-center justify-between px-4 py-3 sm:hidden">
-        <h1 className="text-xl font-bold text-foreground">Quotes</h1>
+        <h2 className="text-xl font-bold text-foreground">Quotes</h2>
         <button
           type="button"
           aria-label="Start a Quote"
@@ -287,7 +288,7 @@ export function QuoteListPage() {
       </div>
       <header className="hidden items-start justify-between gap-4 sm:flex">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Quotes</h1>
+          <h2 className="text-2xl font-bold text-foreground">Quotes</h2>
           <p className="mt-1 text-sm text-muted-foreground">All equipment proposals — search, filter, or start a new one.</p>
         </div>
         <Button

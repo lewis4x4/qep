@@ -683,7 +683,7 @@ export function SmartVoiceCapture({
         data-recording-state={state}
       >
         <div className="text-center">
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-qep-orange">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-qep-orange-accessible">
             {state === "starting" ? "Starting microphone…" : "Recording"}
           </p>
           <p className="mt-1 text-5xl font-mono font-extrabold tabular-nums text-foreground">
@@ -716,7 +716,7 @@ export function SmartVoiceCapture({
             onClick={stopRecording}
             disabled={state !== "recording"}
             className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-red-500 px-6 py-4 text-base font-bold text-white shadow-lg active:scale-[0.98] disabled:opacity-50"
-            aria-label="Stop recording"
+            aria-label="Stop & review recording"
           >
             <Square className="h-5 w-5" />
             Stop & review
@@ -738,7 +738,7 @@ export function SmartVoiceCapture({
     return (
       <div className="space-y-4 p-2" data-testid="smart-voice-capture-processing">
         <div className="flex flex-col items-center gap-3 py-10">
-          <Loader2 className="h-10 w-10 animate-spin text-qep-orange" />
+          <Loader2 className="h-10 w-10 animate-spin text-qep-orange-accessible" />
           <p className="text-sm font-semibold text-foreground">
             Transcribing & matching customer…
           </p>
@@ -1006,7 +1006,7 @@ function CustomerReviewBlock({
         data-testid="customer-review-block"
         data-branch="selected"
       >
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-qep-orange">
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-qep-orange-accessible">
           Customer
         </p>
         <p className="mt-1 text-base font-bold text-foreground">
@@ -1014,13 +1014,13 @@ function CustomerReviewBlock({
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
           {confidencePct !== null && (
-            <span className="font-semibold text-qep-orange">
+            <span className="font-semibold text-qep-orange-accessible">
               {confidencePct}% confident
             </span>
           )}
           {matchResult?.reasoning && (
             <>
-              <span className="text-muted-foreground/40">·</span>
+              <span className="text-muted-foreground">·</span>
               <span>{matchResult.reasoning}</span>
             </>
           )}
@@ -1195,7 +1195,7 @@ function ExtractedBlock({
       data-testid="iron-extracted-block"
     >
       <div className="flex items-center justify-between">
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-qep-orange">
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-qep-orange-accessible">
           IRON extracted
         </p>
         {loading && (
@@ -1222,7 +1222,7 @@ function ExtractedBlock({
         <ul className="mt-3 space-y-2">
           {extraction?.next_step && (
             <ExtractedRow
-              icon={<Calendar className="h-3.5 w-3.5 text-qep-orange" />}
+              icon={<Calendar className="h-3.5 w-3.5 text-qep-orange-accessible" />}
               label="Next step"
               value={
                 extraction.next_step_due
@@ -1318,8 +1318,8 @@ function SmartActionsBlock({
       data-testid="iron-proposed-block"
     >
       <div className="flex items-center gap-2">
-        <Sparkles className="h-3.5 w-3.5 text-qep-orange" />
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-qep-orange">
+        <Sparkles className="h-3.5 w-3.5 text-qep-orange-accessible" />
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-qep-orange-accessible">
           IRON proposes
         </p>
       </div>

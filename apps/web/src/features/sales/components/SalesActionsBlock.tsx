@@ -83,7 +83,7 @@ export function SalesActionsBlock({
   return (
     <section data-testid="sales-actions-block" className="space-y-3">
       <div className="flex items-center gap-2">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-qep-orange">
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-qep-orange-accessible">
           02 Actions
         </p>
         <div className="flex-1 h-px bg-white/[0.06]" />
@@ -94,7 +94,7 @@ export function SalesActionsBlock({
       <div
         data-testid="sales-primary-action"
         data-kind={primary.kind}
-        className="relative overflow-hidden rounded-3xl border border-qep-orange/60 p-5"
+        className="relative min-h-[226px] overflow-hidden rounded-3xl border border-qep-orange/60 p-5"
         style={{
           background:
             "linear-gradient(135deg, #E87722 0%, #C66318 55%, #1b0e04 100%)",
@@ -157,18 +157,18 @@ export function SalesActionsBlock({
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-qep-orange text-[#1b0e04]">
                 <Target className="h-3.5 w-3.5" />
               </span>
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-qep-orange">
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-qep-orange-accessible">
                 Follow-ups
               </span>
             </span>
-            <ArrowRight className="h-3.5 w-3.5 text-qep-orange transition-transform group-hover:translate-x-0.5" />
+            <ArrowRight className="h-3.5 w-3.5 text-qep-orange-accessible transition-transform group-hover:translate-x-0.5" />
           </div>
           <div className="mt-1 flex items-end gap-2">
             <span className="text-3xl font-extrabold leading-none tabular-nums text-foreground">
               {followUpHero}
             </span>
             {followUps.tiedUp > 0 && (
-              <span className="pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-qep-orange">
+              <span className="pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-qep-orange-accessible">
                 {formatCompactUsd(followUps.tiedUp)} tied up
               </span>
             )}
@@ -196,7 +196,7 @@ export function SalesActionsBlock({
                 Pipeline
               </span>
             </span>
-            <ArrowRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-qep-orange" />
+            <ArrowRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-qep-orange-accessible" />
           </div>
           <div className="mt-1 flex items-end gap-2">
             <span className="text-3xl font-extrabold leading-none tabular-nums text-foreground">
@@ -206,7 +206,7 @@ export function SalesActionsBlock({
               deals
             </span>
           </div>
-          <p className="text-sm font-extrabold text-qep-orange">
+          <p className="text-sm font-extrabold text-qep-orange-accessible">
             {formatCompactUsd(liveStats.total_pipeline_value)}{" "}
             <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               open

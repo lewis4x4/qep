@@ -63,7 +63,7 @@ export function QuickNote({
         <h3 className="text-lg font-bold text-foreground">{title}</h3>
         {tag && (
           <span
-            className={`text-[10px] font-extrabold uppercase tracking-[0.08em] px-2 py-0.5 rounded-full border ${tag.colorClass ?? "border-qep-orange/40 text-qep-orange bg-qep-orange/10"}`}
+            className={`text-[10px] font-extrabold uppercase tracking-[0.08em] px-2 py-0.5 rounded-full border ${tag.colorClass ?? "border-qep-orange/40 text-qep-orange-accessible bg-qep-orange/10"}`}
           >
             {tag.label}
           </span>
@@ -76,6 +76,7 @@ export function QuickNote({
           <p className="text-sm text-slate-600">Attach to a customer? (optional)</p>
           <input
             type="text"
+            aria-label="Search customers to attach note"
             value={customerSearch}
             onChange={(e) => setCustomerSearch(e.target.value)}
             placeholder="Search customer..."
@@ -102,6 +103,7 @@ export function QuickNote({
       ) : (
         <>
           <textarea
+            aria-label="Quick note text"
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder={placeholder}
