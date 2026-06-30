@@ -1,0 +1,70 @@
+name: QEP agent work-order dispatcher
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "Runner to claim work for."
+        required: true
+        default: "claude_code"
+        type: choice
+        options:
+          - claude_code
+          - cursor_background
+          - repoprompt
+          - github_action
+          - manual
+      max:
+        description: "Maximum work orders to claim."
+        required: true
+        default: "1"
+      dry_run:
+        description: "Print readiness without claiming work."
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: "*/5 * * * *"
+
+concurrency:
+  group: qep-agent-work-orders-${{ github.event.inputs.runner || 'claude_code' }}
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Dispatch queued work orders
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          QEP_AGENT_CLAUDE_COMMAND: ${{ secrets.QEP_AGENT_CLAUDE_COMMAND }}
+          QEP_AGENT_CURSOR_COMMAND: ${{ secrets.QEP_AGENT_CURSOR_COMMAND }}
+          QEP_AGENT_REPOPROMPT_COMMAND: ${{ secrets.QEP_AGENT_REPOPROMPT_COMMAND }}
+        run: |
+          ARGS=(
+            "--runner=${{ github.event.inputs.runner || 'claude_code' }}"
+            "--max=${{ github.event.inputs.max || '1' }}"
+          )
+          if [ "${{ github.event.inputs.dry_run || 'false' }}" = "true" ]; then
+            ARGS+=("--dry-run")
+          fi
+          node ./scripts/agent-work-orders/dispatch.mjs "${ARGS[@]}"
+
+      - name: Upload handoff artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qep-agent-work-order-handoffs
+          path: test-results/agent-work-orders
+          if-no-files-found: ignore
