@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildEquipmentLine, metadataForCatalogEntry } from "../quote-builder-page-helpers";
+import { buildEquipmentLine, draftHasCustomer, metadataForCatalogEntry } from "../quote-builder-page-helpers";
 
 describe("quote-builder-page-helpers", () => {
   test("metadataForCatalogEntry forwards received_at for approval bypass", () => {
@@ -47,5 +47,26 @@ describe("quote-builder-page-helpers", () => {
     expect(metadata.spec_bullets).toEqual(["Horsepower: 74 HP"]);
     expect(metadata.structured_specs).toEqual([expect.objectContaining({ key: "horsepower", value: "74" })]);
     expect(metadata.spec_source).toBe("manufacturer_ingested");
+  });
+
+  test("draftHasCustomer requires CRM customer identity for Q7 prospect-quote denial", () => {
+    expect(draftHasCustomer({
+      customerName: "Walk-in prospect",
+      customerCompany: "Typed-only LLC",
+      contactId: null,
+      companyId: null,
+    })).toBe(false);
+    expect(draftHasCustomer({
+      customerName: "Walk-in prospect",
+      customerCompany: "Typed-only LLC",
+      contactId: "ct-1",
+      companyId: null,
+    })).toBe(true);
+    expect(draftHasCustomer({
+      customerName: "",
+      customerCompany: "Typed-only LLC",
+      contactId: null,
+      companyId: "co-1",
+    })).toBe(true);
   });
 });
