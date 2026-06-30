@@ -1,0 +1,30 @@
+name: QEP sync health check
+
+# Posts a Slack alert if the QEP roadmap sync is unhealthy (errors, stale pending).
+# Runs every 30 minutes. Optional — needs SLACK_WEBHOOK_URL secret.
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run health check
+        env:
+          SUPABASE_URL:             ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SLACK_WEBHOOK_URL:        ${{ secrets.SLACK_WEBHOOK_URL }}
+          ALERT_ERROR_THRESHOLD:        ${{ vars.ALERT_ERROR_THRESHOLD || '3' }}
+          ALERT_STALE_PENDING_THRESHOLD: ${{ vars.ALERT_STALE_PENDING_THRESHOLD || '5' }}
+        # Don't fail the workflow when alerts post — that just creates noise.
+        continue-on-error: true
+        run: node scripts/alert-on-errors.mjs

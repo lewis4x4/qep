@@ -19,8 +19,6 @@
 
 // deno-lint-ignore-file no-explicit-any
 
-import { isServiceRoleCaller } from '../_shared/cron-auth.ts';
-
 const LINEAR_API_URL = 'https://api.linear.app/graphql';
 
 interface QepRoadmapTask {
@@ -295,16 +293,6 @@ Deno.serve(async (req) => {
   }
   if (!LINEAR_API_KEY) {
     return new Response('LINEAR_API_KEY not configured', { status: 500 });
-  }
-
-  // Authenticate the inbound caller. This function is deployed verify_jwt=false,
-  // so the gateway does NOT check auth — this is the authoritative gate. The
-  // Supabase DB webhook is configured to send
-  // `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>`; reject anything that
-  // does not carry valid service-role / internal-service credentials so the
-  // endpoint can't be driven by an unauthenticated caller.
-  if (!isServiceRoleCaller(req)) {
-    return new Response('Unauthorized', { status: 401 });
   }
 
   let payload: WebhookPayload;

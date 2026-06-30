@@ -87,25 +87,18 @@ Deno.serve(async (req) => {
       });
 
       if (!dryRun) {
-        const { data: updatedDecision, error: updateError } = await admin
-          .from("qep_decisions")
-          .update({
-            status: "shadow_ship",
-            answered_by: actor,
-            answered_at: now.toISOString(),
-            answered_option: decision.recommended_option,
-            answered_rationale: buildRatifySilenceRationale({
-              decisionCode: decision.code,
-              thresholdDays,
-              actor,
-            }),
-            ai_prep_packet: aiPrepPacket,
-          })
-          .eq("id", decision.id)
-          .eq("lane", "ratify")
-          .in("status", ["open", "escalated"])
-          .select("id, status")
-          .maybeSingle();
+        const { data: updatedDecision, error: updateError } = await admin.rpc("resolve_qep_decision", {
+          p_decision_code: decision.code,
+          p_target_status: "shadow_ship",
+          p_answered_option: decision.recommended_option,
+          p_answered_rationale: buildRatifySilenceRationale({
+            decisionCode: decision.code,
+            thresholdDays,
+            actor,
+          }),
+          p_actor: actor,
+          p_context: aiPrepPacket,
+        });
 
         if (updateError) {
           results.push({

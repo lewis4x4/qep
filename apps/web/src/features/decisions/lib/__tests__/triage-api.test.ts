@@ -107,7 +107,7 @@ describe("normalizeTriageDecisionRows", () => {
 });
 
 describe("buildOwnerDecisionActionPatch", () => {
-  it("builds owner approve patches with answered fields and owner web stamp", () => {
+  it("builds owner approve context without directly answering the decision", () => {
     const patch = buildOwnerDecisionActionPatch({
       action: "approve",
       ownerRole: "owner",
@@ -117,13 +117,11 @@ describe("buildOwnerDecisionActionPatch", () => {
       nowIso: "2026-05-21T12:00:00.000Z",
     });
 
-    expect(patch).toMatchObject({
-      status: "answered",
-      answered_by: "owner-web:Dana Owner",
-      answered_at: "2026-05-21T12:00:00.000Z",
-      answered_option: "Approve the quiet operator fallback",
-    });
-    expect(patch.answered_rationale).toContain("/decisions");
+    expect(patch).not.toHaveProperty("status");
+    expect(patch).not.toHaveProperty("answered_by");
+    expect(patch).not.toHaveProperty("answered_at");
+    expect(patch).not.toHaveProperty("answered_option");
+    expect(patch).not.toHaveProperty("answered_rationale");
     expect(patch.ai_prep_packet).toMatchObject({
       existing: true,
       owner_web_last_action: {

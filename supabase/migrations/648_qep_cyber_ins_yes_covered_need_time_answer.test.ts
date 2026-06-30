@@ -6,13 +6,13 @@ const migrationPath = join(
   process.cwd(),
   "supabase",
   "migrations",
-  "623_qep_cyber_ins_yes_covered_need_time_answer.sql",
+  "648_qep_cyber_ins_yes_covered_need_time_answer.sql",
 );
 
 const sql = readFileSync(migrationPath, "utf8");
 const compactSql = sql.replace(/\s+/g, " ").toLowerCase();
 
-describe("623_qep_cyber_ins_yes_covered_need_time_answer.sql", () => {
+describe("648_qep_cyber_ins_yes_covered_need_time_answer.sql", () => {
   it("appends the yes_covered_need_time option to CYBER-INS options idempotently", () => {
     expect(compactSql).toContain("update public.qep_decisions");
     expect(compactSql).toContain("set options = options ||");

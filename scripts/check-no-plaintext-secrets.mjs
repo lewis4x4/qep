@@ -12,10 +12,6 @@ const ignoredPathPrefixes = [
   "test-results/",
   "scratch/",
 ];
-const allowedExampleFiles = new Set([
-  ".env.example",
-  "apps/web/.env.example",
-]);
 
 function listScannableFiles() {
   const result = spawnSync("git", [
@@ -45,9 +41,25 @@ function listScannableFiles() {
       !ignoredPathPrefixes.some((prefix) => rel.startsWith(prefix))
     );
 }
-const serviceRoleAssignment = /^(VITE_)?SUPABASE_SERVICE_ROLE_KEY=(?!<|$)/;
+
+const serviceRoleAssignment = /^(?:export\s+)?(?:VITE_)?SUPABASE_SERVICE_ROLE_KEY\s*=\s*(?!<|$|['\"]?<|\$\{|REPLACE_ME|YOUR_|your-|\.\.\.)/i;
 const jwtPattern =
   /eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/g;
+const literalSecretPatterns = [
+  {
+    label: "Linear API key",
+    regex: /lin_api_[A-Za-z0-9]{20,}/g,
+  },
+  {
+    label: "Linear webhook secret",
+    regex: /lin_wh_[A-Za-z0-9]{20,}/g,
+  },
+  {
+    label: "Slack incoming webhook URL",
+    regex:
+      /https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+/g,
+  },
+];
 const findings = [];
 
 function decodeBase64UrlJson(segment) {
@@ -62,13 +74,23 @@ function decodeBase64UrlJson(segment) {
   }
 }
 
-function containsServiceRoleJwt(line) {
+function containsSupabaseJwt(line) {
   for (const match of line.matchAll(jwtPattern)) {
     const [, payloadSegment] = match[0].split(".");
     const payload = decodeBase64UrlJson(payloadSegment);
-    if (payload?.role === "service_role") return true;
+    if (payload?.role === "service_role" || payload?.role === "anon") return true;
+    if (typeof payload?.iss === "string" && payload.iss.includes("supabase")) return true;
   }
   return false;
+}
+
+function collectLiteralSecretFindings(rel, line, lineNumber) {
+  for (const pattern of literalSecretPatterns) {
+    pattern.regex.lastIndex = 0;
+    if (pattern.regex.test(line)) {
+      findings.push(`${rel}:${lineNumber} — ${pattern.label}`);
+    }
+  }
 }
 
 for (const rel of listScannableFiles()) {
@@ -85,16 +107,20 @@ for (const rel of listScannableFiles()) {
 
   const lines = text.split(/\r?\n/);
   lines.forEach((line, index) => {
-    if (allowedExampleFiles.has(rel)) return;
-    if (serviceRoleAssignment.test(line) || containsServiceRoleJwt(line)) {
-      findings.push(`${rel}:${index + 1}`);
+    const lineNumber = index + 1;
+    collectLiteralSecretFindings(rel, line, lineNumber);
+    if (serviceRoleAssignment.test(line)) {
+      findings.push(`${rel}:${lineNumber} — Supabase service-role assignment`);
+    }
+    if (containsSupabaseJwt(line)) {
+      findings.push(`${rel}:${lineNumber} — Supabase anon/service JWT`);
     }
   });
 }
 
 if (findings.length > 0) {
   console.error(
-    "Plaintext secret scan failed. Remove real service-role/JWT values from:",
+    "Plaintext secret scan failed. Remove real Linear, Slack, Supabase service-role/JWT values from:",
   );
   for (const finding of findings) console.error(`  ${finding}`);
   process.exit(1);

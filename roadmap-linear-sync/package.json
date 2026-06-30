@@ -1,0 +1,36 @@
+{
+  "name": "qep-roadmap-linear-sync",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Bidirectional sync between QEP OS qep_roadmap_tasks (Supabase, source of truth) and Linear (live mirror).",
+  "engines": { "node": ">=20.6.0" },
+  "scripts": {
+    "bootstrap":      "node --env-file=.env scripts/linear-bootstrap.mjs",
+    "bootstrap:dry":  "node --env-file=.env scripts/linear-bootstrap.mjs --dry-run",
+
+    "import":         "node --env-file=.env scripts/linear-import-roadmap.mjs",
+    "import:dry":     "node --env-file=.env scripts/linear-import-roadmap.mjs --dry-run",
+    "import:limit10": "node --env-file=.env scripts/linear-import-roadmap.mjs --limit 10",
+
+    "sync":           "node --env-file=.env scripts/linear-sync-roadmap.mjs",
+    "sync:dry":       "node --env-file=.env scripts/linear-sync-roadmap.mjs --dry-run",
+
+    "next":           "node --env-file=.env scripts/linear-next-up.mjs",
+    "next:start":     "node --env-file=.env scripts/linear-next-up.mjs --start",
+
+    "task":           "node --env-file=.env scripts/roadmap-task.mjs",
+
+    "reconcile":      "node --env-file=.env scripts/roadmap-reconcile.mjs",
+    "reconcile:fix":  "node --env-file=.env scripts/roadmap-reconcile.mjs --fix",
+
+    "regen:roadmap":  "node --env-file=.env scripts/regen-unified-roadmap.mjs",
+    "graph":          "node --env-file=.env scripts/roadmap-deps-graph.mjs",
+    "events":         "node --env-file=.env scripts/sync-events.mjs",
+    "events:errors":  "node --env-file=.env scripts/sync-events.mjs --errors --since 7d",
+    "whoami":         "node --env-file=.env scripts/linear-whoami.mjs",
+    "alert":          "node --env-file=.env scripts/alert-on-errors.mjs",
+
+    "comment":        "node --env-file=.env scripts/linear-comment-on-merge.mjs"
+  }
+}

@@ -1,0 +1,42 @@
+name: QEP weekly — regenerate QEP_UNIFIED_ROADMAP snapshot
+
+# Updates the snapshot block in QEP (1)/QEP_UNIFIED_ROADMAP_2026-05-19.md and commits.
+# Runs Monday 06:00 UTC and on workflow_dispatch.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  regen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Regenerate snapshot
+        env:
+          SUPABASE_URL:             ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/regen-unified-roadmap.mjs "QEP (1)/QEP_UNIFIED_ROADMAP_2026-05-19.md"
+
+      - name: Commit if changed
+        run: |
+          git config user.name  "qep-roadmap-bot"
+          git config user.email "bot@blackrockai.co"
+          if git diff --quiet "QEP (1)/QEP_UNIFIED_ROADMAP_2026-05-19.md"; then
+            echo "No changes."
+            exit 0
+          fi
+          git add "QEP (1)/QEP_UNIFIED_ROADMAP_2026-05-19.md"
+          git commit -m "chore: regen QEP unified roadmap snapshot [skip ci]"
+          git push
