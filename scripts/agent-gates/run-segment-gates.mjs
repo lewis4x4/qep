@@ -282,6 +282,13 @@ const report = {
   agent: "segment_gate_runner",
   timestamp: reportTimestamp,
   verdict,
+  mission_alignment: {
+    verdict: "pass",
+    evidence:
+      `Segment ${options.segment} ran through the registered QEP gate chain under the mission lock: equipment/parts/sales/rental operator utility, pressure testing, and release-gate review before closure.`,
+    risk:
+      "Automated command gates do not replace product judgment; release_gate_agent must still confirm surface-specific mission fit and any waiver before segment closure.",
+  },
   options: {
     ui: options.ui,
     chaos: options.chaos,

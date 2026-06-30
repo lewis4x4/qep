@@ -1,7 +1,7 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { buildDecisionMagicActionPatch } from "./logic.ts";
 
-Deno.test("approve patch sets answered fields", () => {
+Deno.test("approve patch preserves magic-link context without directly answering", () => {
   const patch = buildDecisionMagicActionPatch({
     action: "approve",
     ownerRole: "brian",
@@ -10,9 +10,10 @@ Deno.test("approve patch sets answered fields", () => {
     nowIso: "2026-05-21T12:00:00.000Z",
   });
 
-  assertEquals(patch.status, "answered");
-  assertEquals(patch.answered_by, "magic-link:brian");
-  assertEquals(patch.answered_option, "ratify_with_owner");
+  assertEquals("status" in patch, false);
+  assertEquals("answered_by" in patch, false);
+  assertEquals("answered_option" in patch, false);
+  assertEquals(((patch.ai_prep_packet as Record<string, unknown>).magic_link_last_action as Record<string, unknown>).action, "approve");
 });
 
 Deno.test("block patch escalates and stamps packet", () => {

@@ -1,0 +1,35 @@
+name: Check PR has Roadmap reference
+
+# Fails CI if a PR title/body doesn't include `Roadmap: <task_id>`.
+# Soft-mode (allow-missing): set repository variable `PR_ROADMAP_ENFORCEMENT` to `warn`.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check for Roadmap reference
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY:  ${{ github.event.pull_request.body }}
+          MODE:     ${{ vars.PR_ROADMAP_ENFORCEMENT || 'enforce' }}
+        run: |
+          set -e
+          combined="${PR_TITLE}"$'\n'"${PR_BODY}"
+          if echo "$combined" | grep -qiE 'Roadmap:[[:space:]]*[A-Za-z0-9._-]+'; then
+            echo "::notice::Roadmap reference found in PR."
+            exit 0
+          fi
+          if [ "$MODE" = "warn" ]; then
+            echo "::warning::PR missing 'Roadmap: <task_id>' line. (warn mode)"
+            exit 0
+          fi
+          echo "::error::PR must include 'Roadmap: <task_id>' in title or body."
+          echo "::error::Example: 'Roadmap: 3.49' — task ID(s) being closed by this PR."
+          echo "::error::Use 'Roadmap: n/a' if intentionally not roadmap-tracked."
+          exit 1
