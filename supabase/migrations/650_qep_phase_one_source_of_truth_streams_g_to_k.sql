@@ -52,25 +52,39 @@ BEGIN;
 UPDATE qep_roadmap_tasks
 SET ship_state = 'not_started',
     blocking_decision = NULL,
-    notes = COALESCE(notes, '') ||
-            E'\n[2026-05-26] Unblocked by QEP-returned Parts Department Discovery (all 28 DPs answered). '
-            'See QEP (1)/QEP_PARTS_DEPARTMENT_DISCOVERY_COMPLETED_2026-05-26.md and '
-            'QEP_PHASE3_PARTS_BLUEPRINT_2026-05-26.md.',
-    evidence_link = COALESCE(evidence_link, '') ||
-                    ' | QEP_PARTS_DEPARTMENT_DISCOVERY_COMPLETED_2026-05-26.md',
+    notes = CASE
+      WHEN COALESCE(notes, '') LIKE '%[2026-05-26] Unblocked by QEP-returned Parts Department Discovery%'
+        THEN notes
+      ELSE COALESCE(notes, '') ||
+        E'\n[2026-05-26] Unblocked by QEP-returned Parts Department Discovery (all 28 DPs answered). '
+        'See QEP (1)/QEP_PARTS_DEPARTMENT_DISCOVERY_COMPLETED_2026-05-26.md and '
+        'QEP_PHASE3_PARTS_BLUEPRINT_2026-05-26.md.'
+    END,
+    evidence_link = CASE
+      WHEN COALESCE(evidence_link, '') LIKE '%QEP_PARTS_DEPARTMENT_DISCOVERY_COMPLETED_2026-05-26.md%'
+        THEN evidence_link
+      ELSE COALESCE(evidence_link, '') || ' | QEP_PARTS_DEPARTMENT_DISCOVERY_COMPLETED_2026-05-26.md'
+    END,
     updated_at = now()
 WHERE task_id IN ('D3.6', 'D3.7');
 
 UPDATE qep_roadmap_tasks
 SET ship_state = 'shipped',
     blocking_decision = NULL,
-    notes = COALESCE(notes, '') ||
-            E'\n[2026-05-26] Closed by QEP-returned Parts Department Discovery. '
-            'Workshop content fully absorbed into the discovery doc; no separate '
-            'session required. Bobby/Norman remain UAT participants for Phase 3 '
-            'Counter POS (G3) and Lookup (G4) slices.',
-    evidence_link = COALESCE(evidence_link, '') ||
-                    ' | QEP_PARTS_DEPARTMENT_DISCOVERY_COMPLETED_2026-05-26.md',
+    notes = CASE
+      WHEN COALESCE(notes, '') LIKE '%[2026-05-26] Closed by QEP-returned Parts Department Discovery%'
+        THEN notes
+      ELSE COALESCE(notes, '') ||
+        E'\n[2026-05-26] Closed by QEP-returned Parts Department Discovery. '
+        'Workshop content fully absorbed into the discovery doc; no separate '
+        'session required. Bobby/Norman remain UAT participants for Phase 3 '
+        'Counter POS (G3) and Lookup (G4) slices.'
+    END,
+    evidence_link = CASE
+      WHEN COALESCE(evidence_link, '') LIKE '%QEP_PARTS_DEPARTMENT_DISCOVERY_COMPLETED_2026-05-26.md%'
+        THEN evidence_link
+      ELSE COALESCE(evidence_link, '') || ' | QEP_PARTS_DEPARTMENT_DISCOVERY_COMPLETED_2026-05-26.md'
+    END,
     updated_at = now()
 WHERE task_id IN ('E5.4', 'E5.6');
 
@@ -198,7 +212,19 @@ VALUES
  'BLK-INTELLIDEALER-API',
  'QEP_PHASE3_PARTS_BLUEPRINT_2026-05-26.md §9',
  '[2026-05-26] Blocked: VitalEdge/IntelliDealer rep intro needed for parts-side endpoints. Third-party integrations (FileBound, TARGIT) confirm an API exists.',
- 7014);
+ 7014)
+ON CONFLICT (task_id) DO UPDATE SET
+  stream = EXCLUDED.stream,
+  wave = EXCLUDED.wave,
+  title = EXCLUDED.title,
+  description = EXCLUDED.description,
+  ship_state = EXCLUDED.ship_state,
+  owner = EXCLUDED.owner,
+  blocking_decision = EXCLUDED.blocking_decision,
+  evidence_link = EXCLUDED.evidence_link,
+  notes = EXCLUDED.notes,
+  sort_order = EXCLUDED.sort_order,
+  updated_at = now();
 
 COMMIT;
 
@@ -257,11 +283,18 @@ SET ship_state = 'not_started',
       '10% over the approved estimate triggers a documented re-authorization before the extra work proceeds. '
       'Closeout: confirm the repair is complete and operational, communicate completed work and recommendations, '
       'ensure all labor and parts are billed, process payment, and close with complete notes.',
-    notes = COALESCE(notes, '') ||
-            E'\n[2026-05-29] Unblocked - owner Service Discovery v1.1 + SOP/Checklist/Tech-Process docs '
-            'supplied the missing inputs. Now the spec source for Stream H epics H2/H3.',
-    evidence_link = COALESCE(evidence_link, '') ||
-                    ' | QEP_SERVICE_ROADMAP_ALIGNMENT_2026-05-29.md',
+    notes = CASE
+      WHEN COALESCE(notes, '') LIKE '%[2026-05-29] Unblocked - owner Service Discovery v1.1%'
+        THEN notes
+      ELSE COALESCE(notes, '') ||
+        E'\n[2026-05-29] Unblocked - owner Service Discovery v1.1 + SOP/Checklist/Tech-Process docs '
+        'supplied the missing inputs. Now the spec source for Stream H epics H2/H3.'
+    END,
+    evidence_link = CASE
+      WHEN COALESCE(evidence_link, '') LIKE '%QEP_SERVICE_ROADMAP_ALIGNMENT_2026-05-29.md%'
+        THEN evidence_link
+      ELSE COALESCE(evidence_link, '') || ' | QEP_SERVICE_ROADMAP_ALIGNMENT_2026-05-29.md'
+    END,
     updated_at = now()
 WHERE task_id = 'E5.7';
 
@@ -284,11 +317,18 @@ SET ship_state = 'not_started',
       'documentation-review CLOSE gate (labor story complete, work matches approved scope, required photos '
       'uploaded) and returns the job to the technician if incomplete. Time spent in a hold state is EXCLUDED '
       'from technician efficiency.',
-    notes = COALESCE(notes, '') ||
-            E'\n[2026-05-29] Unblocked - owner Service Discovery v1.1 + SOP/Checklist/Tech-Process docs '
-            'supplied the missing inputs. Now the spec source for Stream H epic H5.',
-    evidence_link = COALESCE(evidence_link, '') ||
-                    ' | QEP_SERVICE_ROADMAP_ALIGNMENT_2026-05-29.md',
+    notes = CASE
+      WHEN COALESCE(notes, '') LIKE '%[2026-05-29] Unblocked - owner Service Discovery v1.1%'
+        THEN notes
+      ELSE COALESCE(notes, '') ||
+        E'\n[2026-05-29] Unblocked - owner Service Discovery v1.1 + SOP/Checklist/Tech-Process docs '
+        'supplied the missing inputs. Now the spec source for Stream H epic H5.'
+    END,
+    evidence_link = CASE
+      WHEN COALESCE(evidence_link, '') LIKE '%QEP_SERVICE_ROADMAP_ALIGNMENT_2026-05-29.md%'
+        THEN evidence_link
+      ELSE COALESCE(evidence_link, '') || ' | QEP_SERVICE_ROADMAP_ALIGNMENT_2026-05-29.md'
+    END,
     updated_at = now()
 WHERE task_id = 'E5.8';
 
@@ -607,7 +647,19 @@ VALUES
  'BLK-FIN-WORKING-SESSION',
  'QEP_SERVICE_ROADMAP_ALIGNMENT_2026-05-29.md Section 1.2, Section 6.3, Section 8.2',
  '[2026-05-29] Created from Service Department roadmap alignment. Acceptance: Build-Lock memo G5 is reconciled against the accounting-SoR direction and the decision is logged.',
- 8304);
+ 8304)
+ON CONFLICT (task_id) DO UPDATE SET
+  stream = EXCLUDED.stream,
+  wave = EXCLUDED.wave,
+  title = EXCLUDED.title,
+  description = EXCLUDED.description,
+  ship_state = EXCLUDED.ship_state,
+  owner = EXCLUDED.owner,
+  blocking_decision = EXCLUDED.blocking_decision,
+  evidence_link = EXCLUDED.evidence_link,
+  notes = EXCLUDED.notes,
+  sort_order = EXCLUDED.sort_order,
+  updated_at = now();
 
 COMMIT;
 

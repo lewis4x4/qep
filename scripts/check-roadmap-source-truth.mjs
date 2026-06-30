@@ -84,11 +84,11 @@ const phaseOneMigration = read('supabase/migrations/650_qep_phase_one_source_of_
 for (const [stream, count] of Object.entries(expectedSeedCounts)) {
   const matches = [...phaseOneMigration.matchAll(new RegExp(`\\('${stream}\\d+\\.1',\\s*'${stream}'`, 'g'))];
   if (matches.length !== count) {
-    fail(`migration 646 expected ${count} seed rows for Stream ${stream}, found ${matches.length}`);
+    fail(`migration 650 expected ${count} seed rows for Stream ${stream}, found ${matches.length}`);
   }
 }
-assertIncludes(phaseOneMigration, 'BLK-FIN-WORKING-SESSION', 'migration 646 Stream K gate');
-assertIncludes(phaseOneMigration, 'PART 2', 'migration 646 safety note for gated source SQL');
+assertIncludes(phaseOneMigration, 'BLK-FIN-WORKING-SESSION', 'migration 650 Stream K gate');
+assertIncludes(phaseOneMigration, 'PART 2', 'migration 650 safety note for gated source SQL');
 
 if (failures.length > 0) {
   console.error('Roadmap source-of-truth audit failed:');
