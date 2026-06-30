@@ -6,13 +6,13 @@ const migrationPath = join(
   process.cwd(),
   "supabase",
   "migrations",
-  "623_q10_rebate_stack_case_by_case_answer.sql",
+  "647_q10_rebate_stack_case_by_case_answer.sql",
 );
 
 const sql = readFileSync(migrationPath, "utf8");
 const compactSql = sql.replace(/\s+/g, " ").toLowerCase();
 
-describe("623_q10_rebate_stack_case_by_case_answer.sql owner-answer contract", () => {
+describe("647_q10_rebate_stack_case_by_case_answer.sql owner-answer contract", () => {
   it("targets only the Q10 decision row", () => {
     expect(compactSql).toContain("update public.qep_decisions");
     expect(compactSql).toContain("where code = 'q10'");

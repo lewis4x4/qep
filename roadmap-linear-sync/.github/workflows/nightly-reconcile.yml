@@ -1,0 +1,33 @@
+name: QEP nightly — reconcile Supabase ↔ Linear
+
+# Detects and (optionally) repairs drift between qep_roadmap_tasks and Linear.
+# Runs after the forward sync at 05:45 UTC so any newly-pending rows get pushed.
+
+on:
+  schedule:
+    - cron: '45 5 * * *'
+  workflow_dispatch:
+    inputs:
+      fix:
+        description: 'Mark drifting rows for re-sync (--fix)'
+        required: false
+        default: 'true'
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run reconcile
+        env:
+          LINEAR_API_KEY:            ${{ secrets.LINEAR_API_KEY }}
+          LINEAR_TEAM_KEY:           ${{ vars.LINEAR_TEAM_KEY || 'QEP' }}
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          FIX_FLAG: ${{ inputs.fix != 'false' && '--fix' || '' }}
+        run: node scripts/roadmap-reconcile.mjs $FIX_FLAG

@@ -1,0 +1,36 @@
+name: PR landed → Linear comment
+
+# When a PR merges to main, parse `Roadmap: A1.1` from the PR title and body,
+# look up the corresponding Linear issue via qep_roadmap_tasks.linear_issue_id,
+# and post a "PR landed" comment. Does NOT change ship_state — that stays
+# manual in the QEP roadmap UI / via `npm run task` (Supabase = source of truth).
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  comment:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Post Linear comment
+        env:
+          LINEAR_API_KEY:            ${{ secrets.LINEAR_API_KEY }}
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PR_TITLE:                  ${{ github.event.pull_request.title }}
+          PR_BODY:                   ${{ github.event.pull_request.body }}
+          PR_NUMBER:                 ${{ github.event.pull_request.number }}
+          PR_URL:                    ${{ github.event.pull_request.html_url }}
+          PR_AUTHOR:                 ${{ github.event.pull_request.user.login }}
+          PR_MERGED_AT:              ${{ github.event.pull_request.merged_at }}
+        run: node scripts/linear-comment-on-merge.mjs

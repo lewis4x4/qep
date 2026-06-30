@@ -61,10 +61,21 @@ Deno.serve(async (req) => {
       existingPacket: row.ai_prep_packet,
     });
 
-    const { error: updateError } = await admin
-      .from("qep_decisions")
-      .update(patch)
-      .eq("id", row.id);
+    const actionStatus = payload.action === "approve" ? "answered" : patch.status;
+
+    const { error: updateError } = payload.action === "approve"
+      ? await admin.rpc("resolve_qep_decision", {
+        p_decision_code: row.code,
+        p_target_status: "answered",
+        p_answered_option: row.recommended_option,
+        p_answered_rationale: `Approved via signed magic link by ${payload.owner_role}.`,
+        p_actor: `magic-link:${payload.owner_role}`,
+        p_context: patch.ai_prep_packet ?? {},
+      })
+      : await admin
+        .from("qep_decisions")
+        .update(patch)
+        .eq("id", row.id);
 
     if (updateError) {
       return safeJsonError(`Failed to apply decision action: ${updateError.message}`, 500, origin);
@@ -82,7 +93,7 @@ Deno.serve(async (req) => {
       decision_id: row.id,
       decision_code: row.code,
       action: payload.action,
-      status: patch.status,
+      status: actionStatus,
     }, origin);
   } catch (error) {
     captureEdgeException(error, { fn: "decision-magic-link", req });

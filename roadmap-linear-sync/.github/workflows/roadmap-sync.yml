@@ -1,0 +1,54 @@
+name: QEP Roadmap → Linear sync
+
+# Pulls pending qep_roadmap_tasks rows and pushes deltas to Linear.
+# Runs on a schedule as a safety net for the on-update Edge Function,
+# and on workflow_dispatch for manual runs.
+
+on:
+  schedule:
+    - cron: '17 5 * * *'   # 05:17 UTC nightly (12:17 AM ET)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (no Linear writes)'
+        required: false
+        default: 'false'
+      batch:
+        description: 'Max rows to sync this run'
+        required: false
+        default: '250'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify secrets
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          for var in LINEAR_API_KEY SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY; do
+            if [ -z "${!var}" ]; then
+              echo "::error::Missing secret: $var"
+              exit 1
+            fi
+          done
+
+      - name: Run sync
+        env:
+          LINEAR_API_KEY:           ${{ secrets.LINEAR_API_KEY }}
+          LINEAR_TEAM_KEY:          ${{ vars.LINEAR_TEAM_KEY || 'QEP' }}
+          SUPABASE_URL:             ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DRY_RUN_FLAG:             ${{ inputs.dry_run == 'true' && '--dry-run' || '' }}
+          BATCH:                    ${{ inputs.batch || '250' }}
+        run: |
+          node scripts/linear-sync-roadmap.mjs $DRY_RUN_FLAG --batch "$BATCH"

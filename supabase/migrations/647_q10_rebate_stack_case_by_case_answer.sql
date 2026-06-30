@@ -1,5 +1,5 @@
 -- ============================================================================
--- Migration 623: Q10 rebate-stack precedence — apply owner answer case_by_case
+-- Migration 647: Q10 rebate-stack precedence — apply owner answer case_by_case
 --
 -- Q10 (RATIFY) asked whether a quote with both a cash rebate AND a finance
 -- rebate should stack both, force the customer to pick one, or vary per OEM.

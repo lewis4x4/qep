@@ -8,6 +8,7 @@
     "agent",
     "timestamp",
     "verdict",
+    "mission_alignment",
     "checks"
   ],
   "properties": {
@@ -33,6 +34,42 @@
         "GO_WITH_WAIVER"
       ]
     },
+    "mission_alignment": {
+      "type": "object",
+      "required": [
+        "verdict",
+        "evidence",
+        "risk"
+      ],
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "waiver"
+          ]
+        },
+        "evidence": {
+          "type": "string",
+          "minLength": 1
+        },
+        "risk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "ui": { "type": "boolean" },
+        "chaos": { "type": "boolean" },
+        "design_advisory": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
     "checks": {
       "type": "array",
       "items": {
@@ -53,6 +90,9 @@
               "skipped"
             ]
           },
+          "required": {
+            "type": "boolean"
+          },
           "command": {
             "type": "string"
           },
@@ -66,6 +106,20 @@
         },
         "additionalProperties": false
       }
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "blocking_failures": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
     },
     "findings": {
       "type": "array",

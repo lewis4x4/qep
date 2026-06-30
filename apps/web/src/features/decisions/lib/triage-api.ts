@@ -256,14 +256,7 @@ export function buildOwnerDecisionActionPatch(input: OwnerDecisionActionInput): 
       throw new Error("Approve requires a recommended option to answer the decision");
     }
 
-    return {
-      status: "answered",
-      answered_by: actor,
-      answered_at: nowIso,
-      answered_option: answeredOption,
-      answered_rationale: `Approved on /decisions by ${actorName} at ${nowIso}.`,
-      ai_prep_packet: packet,
-    };
+    return { ai_prep_packet: packet };
   }
 
   if (input.action === "block") {
@@ -288,7 +281,7 @@ export async function applyOwnerDecisionAction(input: {
 
   const { data: current, error: readError } = await supabase
     .from("qep_decisions")
-    .select("id, owner_role, recommended_option, ai_prep_packet")
+    .select("id, code, owner_role, recommended_option, ai_prep_packet")
     .eq("id", input.decisionId)
     .maybeSingle();
 
@@ -310,6 +303,31 @@ export async function applyOwnerDecisionAction(input: {
     actorName,
     nowIso: actionAt,
   });
+
+  if (input.action === "approve") {
+    const { data: resolved, error: resolveError } = await supabase.rpc("resolve_qep_decision", {
+      p_decision_code: asString(current.code),
+      p_target_status: "answered",
+      p_answered_option: typeof current.recommended_option === "string" ? current.recommended_option : null,
+      p_answered_rationale: `Approved on /decisions by ${actorName} at ${actionAt}.`,
+      p_actor: `owner-web:${actorName}`,
+      p_context: asRecord(patch.ai_prep_packet),
+    });
+
+    if (resolveError) {
+      throw new Error(resolveError.message || "Failed to resolve decision action");
+    }
+    if (!resolved) {
+      throw new Error("Decision action was not resolved");
+    }
+
+    return {
+      action: input.action,
+      status: "answered",
+      actionAt,
+      actor: `owner-web:${actorName}`,
+    };
+  }
 
   const { data: updated, error: updateError } = await supabase
     .from("qep_decisions")

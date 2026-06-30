@@ -12,7 +12,6 @@ export interface DecisionActionInput {
 
 export function buildDecisionMagicActionPatch(input: DecisionActionInput): DecisionActionPatch {
   const nowIso = input.nowIso ?? new Date().toISOString();
-  const actor = `magic-link:${input.ownerRole}`;
   const actionStamp = {
     action: input.action,
     owner_role: input.ownerRole,
@@ -24,14 +23,7 @@ export function buildDecisionMagicActionPatch(input: DecisionActionInput): Decis
   };
 
   if (input.action === "approve") {
-    return {
-      status: "answered",
-      answered_by: actor,
-      answered_at: nowIso,
-      answered_option: input.recommendedOption,
-      answered_rationale: `Approved via signed magic link by ${input.ownerRole} at ${nowIso}.`,
-      ai_prep_packet: packet,
-    };
+    return { ai_prep_packet: packet };
   }
 
   if (input.action === "block") {
