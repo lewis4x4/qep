@@ -609,6 +609,42 @@ export type Database = {
           },
         ]
       }
+      ap_approval_matrix: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          max_amount: number | null
+          min_amount: number
+          required_role: string
+          sequence: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          max_amount?: number | null
+          min_amount?: number
+          required_role: string
+          sequence?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          max_amount?: number | null
+          min_amount?: number
+          required_role?: string
+          sequence?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
+      }
       ap_bill_lines: {
         Row: {
           bill_id: string
@@ -785,6 +821,48 @@ export type Database = {
           },
         ]
       }
+      ap_invoice_approvals: {
+        Row: {
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_reason: string | null
+          id: string
+          required_role: string
+          sequence: number
+          status: string
+          updated_at: string
+          vendor_invoice_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_reason?: string | null
+          id?: string
+          required_role: string
+          sequence?: number
+          status?: string
+          updated_at?: string
+          vendor_invoice_id?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_reason?: string | null
+          id?: string
+          required_role?: string
+          sequence?: number
+          status?: string
+          updated_at?: string
+          vendor_invoice_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: []
+      }
       ap_invoice_distributions: {
         Row: {
           created_at: string
@@ -850,6 +928,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ap_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          id: string
+          method: string | null
+          paid_at: string
+          reference: string | null
+          updated_at: string
+          vendor_invoice_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          method?: string | null
+          paid_at?: string
+          reference?: string | null
+          updated_at?: string
+          vendor_invoice_id?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          method?: string | null
+          paid_at?: string
+          reference?: string | null
+          updated_at?: string
+          vendor_invoice_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: []
       }
       approval_bypass_rules: {
         Row: {
@@ -7703,6 +7820,54 @@ export type Database = {
           },
         ]
       }
+      equipment_reversal_audit: {
+        Row: {
+          action: string
+          approver_id: string | null
+          approver_role: string | null
+          created_at: string
+          credit_memo_id: string | null
+          detail: Json
+          id: string
+          original_invoice_id: string | null
+          outcome: string | null
+          reason: string | null
+          reversal_id: string | null
+          stock_number: string | null
+          workspace_id: string
+        }
+        Insert: {
+          action: string
+          approver_id?: string | null
+          approver_role?: string | null
+          created_at?: string
+          credit_memo_id?: string | null
+          detail?: Json
+          id?: string
+          original_invoice_id?: string | null
+          outcome?: string | null
+          reason?: string | null
+          reversal_id?: string | null
+          stock_number?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          action?: string
+          approver_id?: string | null
+          approver_role?: string | null
+          created_at?: string
+          credit_memo_id?: string | null
+          detail?: Json
+          id?: string
+          original_invoice_id?: string | null
+          outcome?: string | null
+          reason?: string | null
+          reversal_id?: string | null
+          stock_number?: string | null
+          workspace_id?: string
+        }
+        Relationships: []
+      }
       equipment_selected_options: {
         Row: {
           created_at: string
@@ -8264,6 +8429,135 @@ export type Database = {
           product_name?: string
           product_type?: string | null
           retail_price_cents?: number | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
+      }
+      fet_exemption_certificates: {
+        Row: {
+          certificate_number: string | null
+          created_at: string
+          crm_company_id: string | null
+          deleted_at: string | null
+          document_url: string | null
+          effective_date: string | null
+          exemption_basis: string | null
+          expiration_date: string | null
+          id: string
+          issuing_authority: string | null
+          status: string
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+          workspace_id: string
+        }
+        Insert: {
+          certificate_number?: string | null
+          created_at?: string
+          crm_company_id?: string | null
+          deleted_at?: string | null
+          document_url?: string | null
+          effective_date?: string | null
+          exemption_basis?: string | null
+          expiration_date?: string | null
+          id?: string
+          issuing_authority?: string | null
+          status?: string
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          certificate_number?: string | null
+          created_at?: string
+          crm_company_id?: string | null
+          deleted_at?: string | null
+          document_url?: string | null
+          effective_date?: string | null
+          exemption_basis?: string | null
+          expiration_date?: string | null
+          id?: string
+          issuing_authority?: string | null
+          status?: string
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+          workspace_id?: string
+        }
+        Relationships: []
+      }
+      fet_liability_lines: {
+        Row: {
+          category_code: string | null
+          created_at: string
+          exemption_certificate_id: string | null
+          fet_amount: number | null
+          fet_rate: number
+          id: string
+          invoice_id: string | null
+          is_exempt: boolean
+          taxable_amount: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          category_code?: string | null
+          created_at?: string
+          exemption_certificate_id?: string | null
+          fet_amount?: number | null
+          fet_rate?: number
+          id?: string
+          invoice_id?: string | null
+          is_exempt?: boolean
+          taxable_amount?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          category_code?: string | null
+          created_at?: string
+          exemption_certificate_id?: string | null
+          fet_amount?: number | null
+          fet_rate?: number
+          id?: string
+          invoice_id?: string | null
+          is_exempt?: boolean
+          taxable_amount?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
+      }
+      fet_taxable_categories: {
+        Row: {
+          category_code: string
+          created_at: string
+          description: string | null
+          fet_rate: number
+          id: string
+          is_active: boolean
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          category_code: string
+          created_at?: string
+          description?: string | null
+          fet_rate?: number
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          category_code?: string
+          created_at?: string
+          description?: string | null
+          fet_rate?: number
+          id?: string
+          is_active?: boolean
           updated_at?: string
           workspace_id?: string
         }
@@ -9655,6 +9949,60 @@ export type Database = {
           },
         ]
       }
+      form_8300_reports: {
+        Row: {
+          cash_amount: number
+          created_at: string
+          crm_company_id: string | null
+          deleted_at: string | null
+          filed_at: string | null
+          filed_by: string | null
+          flagged_at: string
+          id: string
+          invoice_id: string | null
+          notes: string | null
+          payment_method: string | null
+          status: string
+          threshold_amount: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          cash_amount: number
+          created_at?: string
+          crm_company_id?: string | null
+          deleted_at?: string | null
+          filed_at?: string | null
+          filed_by?: string | null
+          flagged_at?: string
+          id?: string
+          invoice_id?: string | null
+          notes?: string | null
+          payment_method?: string | null
+          status?: string
+          threshold_amount?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          cash_amount?: number
+          created_at?: string
+          crm_company_id?: string | null
+          deleted_at?: string | null
+          filed_at?: string | null
+          filed_by?: string | null
+          flagged_at?: string
+          id?: string
+          invoice_id?: string | null
+          notes?: string | null
+          payment_method?: string | null
+          status?: string
+          threshold_amount?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
+      }
       geofence_events: {
         Row: {
           ai_confidence: number | null
@@ -10352,6 +10700,75 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      goods_receipt_lines: {
+        Row: {
+          created_at: string
+          goods_receipt_id: string | null
+          id: string
+          purchase_order_line_id: string | null
+          quantity_received: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          goods_receipt_id?: string | null
+          id?: string
+          purchase_order_line_id?: string | null
+          quantity_received?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          goods_receipt_id?: string | null
+          id?: string
+          purchase_order_line_id?: string | null
+          quantity_received?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
+      }
+      goods_receipts: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          notes: string | null
+          purchase_order_id: string | null
+          receipt_number: string | null
+          received_at: string
+          received_by: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          notes?: string | null
+          purchase_order_id?: string | null
+          receipt_number?: string | null
+          received_at?: string
+          received_by?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          notes?: string | null
+          purchase_order_id?: string | null
+          receipt_number?: string | null
+          received_at?: string
+          received_by?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
       }
       handoff_events: {
         Row: {
@@ -11693,6 +12110,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      invoice_number_sequences: {
+        Row: {
+          branch_legacy_code: string
+          created_at: string
+          dept_prefix: string
+          id: string
+          next_value: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          branch_legacy_code: string
+          created_at?: string
+          dept_prefix: string
+          id?: string
+          next_value?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          branch_legacy_code?: string
+          created_at?: string
+          dept_prefix?: string
+          id?: string
+          next_value?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
       }
       iron_conversations: {
         Row: {
@@ -13208,6 +13655,66 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      margin_matrix_entries: {
+        Row: {
+          cost_cents: number
+          created_at: string
+          deleted_at: string | null
+          gross_margin_cents: number | null
+          id: string
+          line_class: Database["public"]["Enums"]["margin_line_class"]
+          margin_pct: number | null
+          metadata: Json
+          net_margin_cents: number | null
+          occurred_on: string | null
+          sale_cents: number
+          segment: Database["public"]["Enums"]["margin_segment"]
+          shop_burden_cents: number
+          source_id: string | null
+          source_type: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          cost_cents?: number
+          created_at?: string
+          deleted_at?: string | null
+          gross_margin_cents?: number | null
+          id?: string
+          line_class: Database["public"]["Enums"]["margin_line_class"]
+          margin_pct?: number | null
+          metadata?: Json
+          net_margin_cents?: number | null
+          occurred_on?: string | null
+          sale_cents?: number
+          segment: Database["public"]["Enums"]["margin_segment"]
+          shop_burden_cents?: number
+          source_id?: string | null
+          source_type: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          cost_cents?: number
+          created_at?: string
+          deleted_at?: string | null
+          gross_margin_cents?: number | null
+          id?: string
+          line_class?: Database["public"]["Enums"]["margin_line_class"]
+          margin_pct?: number | null
+          metadata?: Json
+          net_margin_cents?: number | null
+          occurred_on?: string | null
+          sale_cents?: number
+          segment?: Database["public"]["Enums"]["margin_segment"]
+          shop_burden_cents?: number
+          source_id?: string | null
+          source_type?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
       }
       margin_waterfalls: {
         Row: {
@@ -47304,6 +47811,20 @@ export type Database = {
         }
         Relationships: []
       }
+      v_margin_matrix_summary: {
+        Row: {
+          cost_cents: number | null
+          entry_count: number | null
+          gross_margin_cents: number | null
+          line_class: Database["public"]["Enums"]["margin_line_class"] | null
+          net_margin_cents: number | null
+          sale_cents: number | null
+          segment: Database["public"]["Enums"]["margin_segment"] | null
+          shop_burden_cents: number | null
+          workspace_id: string | null
+        }
+        Relationships: []
+      }
       v_machine_parts_connections: {
         Row: {
           association_strength: number | null
@@ -48519,6 +49040,14 @@ export type Database = {
         }[]
       }
       analytics_quick_kpi: { Args: { p_metric_key: string }; Returns: number }
+      compute_segment_margin: {
+        Args: {
+          p_cost_cents: number
+          p_sale_cents: number
+          p_shop_burden_cents?: number
+        }
+        Returns: number
+      }
       confirm_voice_capture_speaker_label: {
         Args: {
           p_display_name?: string
@@ -48570,6 +49099,30 @@ export type Database = {
       archive_crm_company: { Args: { p_company_id: string }; Returns: Json }
       archive_crm_contact: { Args: { p_contact_id: string }; Returns: Json }
       archive_crm_deal: { Args: { p_deal_id: string }; Returns: Json }
+      assert_customer_not_on_hold: {
+        Args: { p_company_id: string }
+        Returns: undefined
+      }
+      assert_reversal_approver: {
+        Args: { p_approver_id: string }
+        Returns: string
+      }
+      audit_equipment_reversal: {
+        Args: {
+          p_action: string
+          p_approver_id: string
+          p_approver_role: string
+          p_credit_memo_id: string
+          p_detail?: Json
+          p_original_invoice_id: string
+          p_outcome: string
+          p_reason: string
+          p_reversal_id: string
+          p_stock_number: string
+          p_workspace_id: string
+        }
+        Returns: string
+      }
       backfill_customer_lifecycle_events: {
         Args: never
         Returns: {
@@ -48661,6 +49214,10 @@ export type Database = {
         Args: { p_workspace_id: string }
         Returns: number
       }
+      compute_fet: {
+        Args: { p_is_exempt?: boolean; p_rate?: number; p_taxable_amount: number }
+        Returns: number
+      }
       compute_handoff_seam_scores: {
         Args: {
           p_period_end: string
@@ -48668,6 +49225,10 @@ export type Database = {
           p_workspace_id: string
         }
         Returns: undefined
+      }
+      compute_margin_pct: {
+        Args: { p_cost_cents: number; p_sale_cents: number }
+        Returns: number
       }
       compute_ownership_health_score: {
         Args: { p_workspace?: string }
@@ -48972,6 +49533,18 @@ export type Database = {
           p_run_id: string
           p_workflow_slug: string
         }
+        Returns: string
+      }
+      evaluate_credit_holds: {
+        Args: { p_workspace_id?: string }
+        Returns: number
+      }
+      evaluate_form_8300: {
+        Args: { p_invoice_id: string }
+        Returns: string
+      }
+      evaluate_three_way_match: {
+        Args: { p_vendor_invoice_id: string }
         Returns: string
       }
       exec_suppress_override_update: {
@@ -49325,6 +49898,10 @@ export type Database = {
         Returns: string
       }
       kb_health_snapshot: { Args: never; Returns: Json }
+      is_customer_on_credit_hold: {
+        Args: { p_company_id: string }
+        Returns: boolean
+      }
       list_crm_companies_page: {
         Args: {
           p_after_id?: string
@@ -49647,6 +50224,14 @@ export type Database = {
         }
         Returns: Json
       }
+      next_invoice_number: {
+        Args: {
+          p_branch_legacy_code: string
+          p_invoice_type: string
+          p_workspace_id: string
+        }
+        Returns: string
+      }
       next_vendor_order_date: {
         Args: { p_branch?: string; p_from_date?: string; p_vendor_id: string }
         Returns: string
@@ -49900,6 +50485,15 @@ export type Database = {
         Args: { p_company_id: string }
         Returns: undefined
       }
+      record_ap_payment: {
+        Args: {
+          p_amount: number
+          p_method?: string
+          p_reference?: string
+          p_vendor_invoice_id: string
+        }
+        Returns: string
+      }
       record_handoff_event: {
         Args: {
           p_from_user_id: string
@@ -50024,6 +50618,25 @@ export type Database = {
           reversal_id: string
           stock_number: string
         }[]
+      }
+      reverse_equipment_sale_with_approval: {
+        Args: {
+          p_approver_id?: string
+          p_finance_approved_by?: string
+          p_manager_approved_by?: string
+          p_owner_approved_by?: string
+          p_reason: string
+          p_reversal_id: string
+          p_revert_availability?: string
+          p_revert_in_out_state?: string
+          p_revert_inventory_type?: string
+          p_stock_number: string
+        }
+        Returns: Json
+      }
+      route_ap_invoice_for_approval: {
+        Args: { p_vendor_invoice_id: string }
+        Returns: number
       }
       run_data_quality_audit: {
         Args: never
@@ -50436,6 +51049,8 @@ export type Database = {
         | "rental_fleet"
       invoice_print_control: "use_default" | "yes" | "no"
       labor_type: "detail" | "parts" | "changes" | "comments" | "maintenance"
+      margin_line_class: "parts" | "service" | "equipment"
+      margin_segment: "customer" | "warranty" | "internal" | "sublet"
       meter_reading_code: "actual" | "estimate" | "tampered" | "replaced"
       operator_entity_type:
         | "deal"
