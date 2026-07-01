@@ -24,6 +24,20 @@ export interface TaxJurisdictionInput {
   surtax_cap_amount?: number | string | null;
 }
 
+/**
+ * A single taxable line item. Used for the PER-ITEM Florida discretionary
+ * surtax cap: the $5,000 cap applies to each single item of tangible personal
+ * property, not to the invoice as a whole. `taxable_amount` is the extended,
+ * post-discount amount for that line (already net of any line-level trade or
+ * discount). Non-taxable lines should either be omitted or flagged via
+ * `taxable: false`.
+ */
+export interface TaxLineItemInput {
+  description?: string | null;
+  taxable_amount: number | string;
+  taxable?: boolean;
+}
+
 export interface TaxComputationInput {
   subtotal: number;
   discountTotal: number;
@@ -31,7 +45,18 @@ export interface TaxComputationInput {
   taxProfile: QuoteTaxProfile;
   stateCode?: string | null;
   countyName?: string | null;
+  // Ship-To sourcing: the county below MUST be derived from the ship-to
+  // (delivery) address — customer_invoices.ship_to_address_id /
+  // qb_quotes.ship_to_address_id -> qrm_company_ship_to_addresses — NOT the
+  // Bill-To. Prefer the explicit ship_to_county field; delivery_county is kept
+  // for backward compatibility but must also come from the ship-to address.
+  shipToCounty?: string | null;
+  deliveryCounty?: string | null;
   jurisdiction?: TaxJurisdictionInput | null;
+  // Preferred path: pass per-item taxable amounts so the surtax cap is applied
+  // per item. When omitted, the function falls back to the single aggregate
+  // taxable basis (legacy behavior), which over-caps multi-item invoices.
+  lineItems?: TaxLineItemInput[];
   exemptionsApplied?: string[];
   taxOverrideAmount?: number | null;
   taxOverrideReason?: string | null;
@@ -122,10 +147,34 @@ export function computeQuoteTax(input: TaxComputationInput): TaxComputationResul
   const cap = input.jurisdiction?.surtax_cap_amount == null
     ? null
     : clampCurrency(input.jurisdiction.surtax_cap_amount);
-  const countyBasis = cap == null ? taxableBasis : Math.min(taxableBasis, cap);
+
+  // Florida discretionary surtax cap is PER SINGLE ITEM of tangible personal
+  // property, not per invoice. When line items are supplied, cap each taxable
+  // line at `cap` before applying the county surtax rate, then sum. This is the
+  // preferred path. When no line items are supplied we fall back to the legacy
+  // single-basis behavior (cap applied once to the whole basis), which
+  // over-caps invoices that contain more than one item above the cap.
+  const taxableLineItems = (input.lineItems ?? []).filter(
+    (item) => item.taxable !== false,
+  );
+  let countyBasis: number;
+  if (taxableLineItems.length > 0) {
+    countyBasis = taxableLineItems.reduce((sum, item) => {
+      const itemAmount = clampCurrency(item.taxable_amount);
+      const cappedAmount = cap == null ? itemAmount : Math.min(itemAmount, cap);
+      return sum + cappedAmount;
+    }, 0);
+  } else {
+    countyBasis = cap == null ? taxableBasis : Math.min(taxableBasis, cap);
+  }
   const countyTax = roundedTax(countyBasis * countyRate);
   const jurisdictionId = input.jurisdiction?.id ?? null;
-  const countyLabel = input.jurisdiction?.county_name ?? input.countyName ?? "delivery county";
+  // Sourced from the ship-to (delivery) address, never Bill-To.
+  const countyLabel = input.jurisdiction?.county_name ??
+    input.shipToCounty ??
+    input.deliveryCounty ??
+    input.countyName ??
+    "delivery county";
   const taxLines: TaxLine[] = [];
 
   if (stateTax > 0) {

@@ -46,6 +46,48 @@ Deno.test("Florida county surtax applies Columbia 1.5% rate only to the $5K cap"
   assertEquals(result.tax_lines[1]?.cap_applied, 5_000);
 });
 
+Deno.test("E01420 Columbia County invoice caps discretionary surtax per item", () => {
+  // Invoice E01420: one big equipment line above the $5,000 cap plus two
+  // smaller items under the cap. Ship-To sourced to Columbia County, FL
+  // (1.5% discretionary surtax, $5,000 per-item cap).
+  const bigItem = 60_000;
+  const midItem = 3_000;
+  const smallItem = 1_500;
+  const cap = 5_000;
+  const countyRate = 0.015;
+
+  const result = computeQuoteTax({
+    subtotal: bigItem + midItem + smallItem,
+    discountTotal: 0,
+    tradeAllowance: 0,
+    taxProfile: "standard",
+    stateCode: "FL",
+    shipToCounty: "Columbia",
+    lineItems: [
+      { description: "Grapple truck (E01420)", taxable_amount: bigItem },
+      { description: "Attachment kit", taxable_amount: midItem },
+      { description: "Delivery prep", taxable_amount: smallItem },
+    ],
+    jurisdiction: {
+      id: "jurisdiction-columbia",
+      state_code: "FL",
+      county_name: "Columbia",
+      state_rate: 0.06,
+      county_surtax_rate: countyRate,
+      surtax_cap_amount: cap,
+    },
+  });
+
+  // State tax applies to the full taxable basis.
+  assertEquals(result.state_tax, 3_870);
+  // Per-item cap: big item capped to $5,000; small items counted in full.
+  const expectedCountyBasis = cap + midItem + smallItem; // 9,500
+  assertEquals(result.county_tax, expectedCountyBasis * countyRate); // 142.50
+  assertEquals(result.county_tax, 142.5);
+  assertEquals(result.total_tax, 3_870 + 142.5);
+  assertEquals(result.tax_lines[1]?.cap_applied, cap);
+});
+
 Deno.test("verified or selected exemptions zero out tax before overrides", () => {
   const result = computeQuoteTax({
     subtotal: 50_000,
