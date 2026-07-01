@@ -452,6 +452,11 @@ const FlowAdminPage = lazy(() =>
 const FlareAdminPage = lazy(() =>
   import("./features/admin/pages/FlareAdminPage").then((m) => ({ default: m.FlareAdminPage }))
 );
+const FinanceEnforcementPage = lazy(() =>
+  import("./features/finance-enforcement/pages/FinanceEnforcementPage").then((m) => ({
+    default: m.FinanceEnforcementPage,
+  }))
+);
 const FlareBoardPage = lazy(() =>
   import("./features/admin/pages/FlareBoardPage").then((m) => ({ default: m.FlareBoardPage }))
 );
@@ -1103,6 +1108,16 @@ function App() {
                 element={
                   canAccessManagerAdminSurface(profile.role) ? (
                     <AdminPage userRole={profile.role} userId={profile.id} />
+                  ) : (
+                    <Navigate to={homeRoute} replace />
+                  )
+                }
+              />
+              <Route
+                path="/finance-enforcement"
+                element={
+                  hasManagerOrAboveRole ? (
+                    <FinanceEnforcementPage userRole={profile.role} userId={profile.id} />
                   ) : (
                     <Navigate to={homeRoute} replace />
                   )
