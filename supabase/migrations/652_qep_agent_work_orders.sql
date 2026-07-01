@@ -341,8 +341,8 @@ DROP POLICY IF EXISTS qep_agent_work_orders_authenticated_read ON public.qep_age
 CREATE POLICY qep_agent_work_orders_authenticated_read ON public.qep_agent_work_orders
   FOR SELECT TO authenticated
   USING (
-    public.get_my_role() IN ('admin', 'manager', 'owner')
-    OR EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.is_agent_service_account = true)
+    (select public.get_my_role()) IN ('admin', 'manager', 'owner')
+    OR EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = (select auth.uid()) AND p.is_agent_service_account = true)
   );
 
 REVOKE ALL ON public.qep_agent_work_orders FROM anon;
