@@ -187,12 +187,13 @@ grant execute on function public.audit_equipment_reversal(text, text, text, uuid
 -- 4. ENFORCEMENT WRAPPER
 -- ============================================================
 -- Same params as reverse_equipment_sale_by_stock_number(...) plus p_approver_id.
--- (a) assert the approver -> on failure write a 'rejected' audit row + re-raise;
+-- (a) gate the approver -> on rejection write a 'rejected' audit row and
+--     return {approved:false} WITHOUT raising (so the audit row commits);
 -- (b) call the untouched 540 base function, passing the approver as the manager
 --     approval (and, when the approver is an owner, also the owner approval);
 -- (c) write an 'executed' audit row.
--- The base function RETURNS TABLE, so we capture its row and return a jsonb
--- summary {reversal_id, credit_memo_id, approver_role, ...}.
+-- The base function RETURNS TABLE, so we capture its row into a record and
+-- return a jsonb summary {reversal_id, credit_memo_id, approver_role, ...}.
 create or replace function public.reverse_equipment_sale_with_approval(
   p_stock_number text,
   p_reversal_id text,
@@ -213,33 +214,50 @@ as $$
 declare
   v_workspace_id text := public.get_my_workspace();
   v_approver_role text;
-  v_result public.reverse_equipment_sale_by_stock_number%rowtype;
+  v_result record;
   v_manager_approved_by uuid;
   v_owner_approved_by uuid;
 begin
-  -- (a) Approval gate. On failure, record a rejected attempt then re-raise.
-  begin
-    v_approver_role := public.assert_reversal_approver(p_approver_id);
-  exception
-    when others then
-      perform public.audit_equipment_reversal(
-        v_workspace_id,
-        nullif(trim(coalesce(p_reversal_id, '')), ''),
-        nullif(trim(coalesce(p_stock_number, '')), ''),
-        null,
-        null,
-        'rejected',
-        p_approver_id,
-        null,
-        nullif(trim(coalesce(p_reason, '')), ''),
-        sqlerrm,
-        jsonb_build_object(
-          'sqlstate', sqlstate,
-          'gate', 'assert_reversal_approver'
-        )
-      );
-      raise;
-  end;
+  -- (a) Approval gate. Read the approver's role directly (get_my_role only
+  -- resolves the CURRENT user). We deliberately do NOT raise on rejection:
+  -- a raise would roll back the rejected-attempt audit row written in this
+  -- same transaction (SECURITY DEFINER does not open a subtransaction), and
+  -- Q4.4 requires EVERY attempt — including rejected ones — to be recorded.
+  -- Instead we persist the rejected audit and return a rejection result; the
+  -- base reversal is never invoked, so the Sales Manager / Iron Manager gate
+  -- still holds hard.
+  select p.role::text
+    into v_approver_role
+  from public.profiles p
+  where p.id = p_approver_id;
+
+  if p_approver_id is null
+     or v_approver_role is null
+     or v_approver_role not in ('manager', 'owner') then
+    perform public.audit_equipment_reversal(
+      v_workspace_id,
+      nullif(trim(coalesce(p_reversal_id, '')), ''),
+      nullif(trim(coalesce(p_stock_number, '')), ''),
+      null,
+      null,
+      'rejected',
+      p_approver_id,
+      v_approver_role,
+      nullif(trim(coalesce(p_reason, '')), ''),
+      'approval_denied',
+      jsonb_build_object(
+        'gate', 'reversal_approver',
+        'approver_role', v_approver_role
+      )
+    );
+    return jsonb_build_object(
+      'approved', false,
+      'outcome', 'rejected',
+      'reason', 'reversal requires Sales Manager or Iron Manager approval',
+      'approver_id', p_approver_id,
+      'approver_role', v_approver_role
+    );
+  end if;
 
   -- Approval gate passed.
   perform public.audit_equipment_reversal(

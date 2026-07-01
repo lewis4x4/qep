@@ -72,6 +72,15 @@ describe("656_fl_discretionary_surtax_and_ship_to_sourcing.sql contract", () => 
     );
   });
 
+  it("supersedes stale FL global jurisdiction rows keyed on a different effective_date", () => {
+    // Deactivates migration 542's current_date-keyed Columbia row (0.01) so the
+    // resolver (is_active + effective_date DESC) deterministically returns this
+    // DR-15DSS 2026 seed instead of a run-date-dependent stale rate.
+    expect(compactSql).toContain("update public.tax_jurisdictions");
+    expect(compactSql).toContain("set is_active = false");
+    expect(compactSql).toContain("effective_date <> date '2026-01-01'");
+  });
+
   it("documents Ship-To (delivery) county sourcing", () => {
     expect(compactSql).toContain("ship-to");
     expect(compactSql).toContain("qrm_company_ship_to_addresses");

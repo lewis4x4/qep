@@ -77,7 +77,7 @@ describe("655_branch_prefixed_invoice_numbering.sql contract", () => {
       "(select public.get_my_role()) in ('admin', 'manager', 'owner')",
     );
     // security-definer bypass path for the generator
-    expect(compactSql).toContain("auth.role() = 'service_role'");
+    expect(compactSql).toContain("(select auth.role()) = 'service_role'");
     // guard against accidentally bare helper calls in a policy predicate
     expect(compactSql).not.toMatch(/using\s*\(\s*workspace_id\s*=\s*public\.get_my_workspace\(\)/i);
   });

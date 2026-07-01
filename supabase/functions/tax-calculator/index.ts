@@ -68,6 +68,19 @@ Deno.serve(async (req) => {
     const taxProfile = (typeof body.tax_profile === "string" ? body.tax_profile : "standard") as QuoteTaxProfile;
     const deliveryState = typeof body.delivery_state === "string" ? body.delivery_state.trim().toUpperCase() : null;
     const deliveryCounty = typeof body.delivery_county === "string" ? body.delivery_county.trim() : null;
+    const shipToCounty = typeof body.ship_to_county === "string" ? body.ship_to_county.trim() : null;
+    // Per-item FL discretionary surtax cap: pass each taxable line's extended
+    // (post-discount) amount so the $5k cap is applied per single item of TPP,
+    // not to the invoice basis as a whole. Omitted/empty -> legacy per-basis path.
+    const lineItems = Array.isArray(body.line_items)
+      ? body.line_items
+        .map((item: Record<string, unknown>) => ({
+          description: typeof item?.description === "string" ? item.description : null,
+          taxable_amount: clampCurrency(item?.taxable_amount ?? item?.amount ?? 0),
+          taxable: item?.taxable === false ? false : true,
+        }))
+        .filter((item: { taxable_amount: number }) => item.taxable_amount > 0)
+      : null;
     const taxOverrideAmount = body.tax_override_amount == null || body.tax_override_amount === ""
       ? null
       : clampCurrency(body.tax_override_amount);
@@ -130,6 +143,9 @@ Deno.serve(async (req) => {
       taxProfile,
       stateCode,
       countyName: deliveryCounty,
+      shipToCounty,
+      deliveryCounty,
+      lineItems,
       exemptionsApplied,
       taxOverrideAmount,
       taxOverrideReason,
@@ -165,6 +181,9 @@ Deno.serve(async (req) => {
         taxProfile,
         stateCode,
         countyName: deliveryCounty,
+        shipToCounty,
+        deliveryCounty,
+        lineItems,
         jurisdiction: jurisdiction
           ? {
             id: typeof jurisdiction.id === "string" ? jurisdiction.id : null,

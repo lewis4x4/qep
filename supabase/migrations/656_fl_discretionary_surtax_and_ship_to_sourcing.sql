@@ -125,4 +125,18 @@ on conflict (workspace_id, state_code, county_name, effective_date) do update se
   metadata = public.tax_jurisdictions.metadata || excluded.metadata,
   updated_at = now();
 
+-- Supersede any earlier ad-hoc FL 'global' jurisdiction rows (e.g. migration
+-- 542 seeded Columbia keyed on its run-date current_date at 0.01). Those rows
+-- carry an effective_date other than 2026-01-01 and would otherwise sort ABOVE
+-- this DR-15DSS 2026 seed in the resolver's `is_active = true ORDER BY
+-- effective_date DESC` lookup, silently returning a stale rate that depends on
+-- the migration run date. Deactivating them makes this seed the single active
+-- authoritative FL surtax source, deterministic regardless of run date.
+update public.tax_jurisdictions
+set is_active = false,
+    updated_at = now()
+where workspace_id = 'global'
+  and state_code = 'FL'
+  and effective_date <> date '2026-01-01';
+
 commit;

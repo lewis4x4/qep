@@ -116,12 +116,15 @@ describe("659_equipment_reversal_approver_and_audit.sql contract", () => {
     // Same base params plus p_approver_id.
     expect(fn).toContain("p_approver_id uuid default null");
     expect(fn).toContain("returns jsonb");
-    // (a) approval gate + rejected audit on failure + re-raise.
-    expect(fn).toContain(
-      "v_approver_role := public.assert_reversal_approver(p_approver_id)",
-    );
+    // (a) approval gate reads the approver's role by id (not get_my_role),
+    // writes a 'rejected' audit row, and returns approved:false WITHOUT raising
+    // (raising would roll back the rejected audit row in the same transaction).
+    expect(fn).toContain("from public.profiles p");
+    expect(fn).toContain("v_approver_role not in ('manager', 'owner')");
     expect(fn).toContain("'rejected'");
-    expect(fn).toContain("raise;");
+    expect(fn).toContain("'approved', false");
+    // The wrapper itself must NOT re-raise (that would discard the audit row).
+    expect(fn).not.toContain("raise;");
     // (b) delegates to the untouched 540 base function.
     expect(fn).toContain(
       "from public.reverse_equipment_sale_by_stock_number(",
