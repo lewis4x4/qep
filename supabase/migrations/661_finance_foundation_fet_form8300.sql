@@ -48,7 +48,7 @@ alter table public.tax_treatments
 create table if not exists public.fet_exemption_certificates (
   id uuid primary key default gen_random_uuid(),
   workspace_id text not null default public.get_my_workspace(),
-  crm_company_id uuid references public.crm_companies(id) on delete set null,
+  crm_company_id uuid,
   portal_customer_id uuid references public.portal_customers(id) on delete set null,
   certificate_number text not null,
   authority text not null default 'IRS',
@@ -69,7 +69,7 @@ create table if not exists public.fet_exemption_certificates (
 );
 
 alter table public.fet_exemption_certificates
-  add column if not exists crm_company_id uuid references public.crm_companies(id) on delete set null,
+  add column if not exists crm_company_id uuid,
   add column if not exists portal_customer_id uuid references public.portal_customers(id) on delete set null,
   add column if not exists certificate_number text,
   add column if not exists authority text not null default 'IRS',
@@ -221,7 +221,7 @@ create table if not exists public.fet_liability_events (
   workspace_id text not null default public.get_my_workspace(),
   quote_package_id uuid references public.quote_packages(id) on delete set null,
   customer_invoice_id uuid references public.customer_invoices(id) on delete set null,
-  crm_company_id uuid references public.crm_companies(id) on delete set null,
+  crm_company_id uuid,
   fet_exemption_certificate_id uuid references public.fet_exemption_certificates(id) on delete set null,
   liability_source text not null check (liability_source in ('quote_estimate', 'invoice_posting', 'credit_memo_reversal')),
   taxable_amount numeric(14,2) not null default 0,
@@ -236,7 +236,7 @@ create table if not exists public.fet_liability_events (
 alter table public.fet_liability_events
   add column if not exists quote_package_id uuid references public.quote_packages(id) on delete set null,
   add column if not exists customer_invoice_id uuid references public.customer_invoices(id) on delete set null,
-  add column if not exists crm_company_id uuid references public.crm_companies(id) on delete set null,
+  add column if not exists crm_company_id uuid,
   add column if not exists fet_exemption_certificate_id uuid references public.fet_exemption_certificates(id) on delete set null,
   add column if not exists liability_source text not null default 'quote_estimate',
   add column if not exists taxable_amount numeric(14,2) not null default 0,
@@ -299,7 +299,7 @@ create table if not exists public.form_8300_compliance_events (
   workspace_id text not null default public.get_my_workspace(),
   payment_validation_id uuid references public.payment_validations(id) on delete set null,
   customer_invoice_id uuid references public.customer_invoices(id) on delete set null,
-  crm_company_id uuid references public.crm_companies(id) on delete set null,
+  crm_company_id uuid,
   customer_id uuid references public.crm_contacts(id) on delete set null,
   cash_amount numeric(14,2) not null,
   aggregate_window_start date not null,
@@ -319,7 +319,7 @@ create table if not exists public.form_8300_compliance_events (
 alter table public.form_8300_compliance_events
   add column if not exists payment_validation_id uuid references public.payment_validations(id) on delete set null,
   add column if not exists customer_invoice_id uuid references public.customer_invoices(id) on delete set null,
-  add column if not exists crm_company_id uuid references public.crm_companies(id) on delete set null,
+  add column if not exists crm_company_id uuid,
   add column if not exists customer_id uuid references public.crm_contacts(id) on delete set null,
   add column if not exists cash_amount numeric(14,2) not null default 0,
   add column if not exists aggregate_window_start date not null default current_date,
