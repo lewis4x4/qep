@@ -29,7 +29,8 @@ alter table public.vendor_invoices
   add column if not exists match_status text not null default 'unmatched',
   add column if not exists match_evaluated_at timestamptz,
   add column if not exists reconditioning_amount numeric(14, 2),
-  add column if not exists approval_route_status text not null default 'not_routed';
+  add column if not exists approval_route_status text not null default 'not_routed',
+  add column if not exists deleted_at timestamptz;
 
 do $$
 begin
@@ -96,6 +97,9 @@ create table if not exists public.goods_receipts (
   deleted_at timestamptz
 );
 
+alter table public.goods_receipts
+  add column if not exists deleted_at timestamptz;
+
 comment on table public.goods_receipts is
   'AP receiving header for the PO -> receipt -> bill 3-way match leg.';
 
@@ -116,6 +120,9 @@ create table if not exists public.goods_receipt_lines (
   updated_at timestamptz not null default now(),
   deleted_at timestamptz
 );
+
+alter table public.goods_receipt_lines
+  add column if not exists deleted_at timestamptz;
 
 comment on table public.goods_receipt_lines is
   'Received quantity/value by purchase-order line for AP 3-way matching.';
@@ -145,6 +152,9 @@ create table if not exists public.ap_approval_matrix (
   check (reconditioning_soft_cap_amount is null or reconditioning_soft_cap_amount >= 0)
 );
 
+alter table public.ap_approval_matrix
+  add column if not exists deleted_at timestamptz;
+
 comment on table public.ap_approval_matrix is
   'AP approval routing matrix. The reconditioning soft-cap row exists with a nullable threshold and is inactive until configured.';
 
@@ -165,6 +175,9 @@ create table if not exists public.ap_invoice_approvals (
   unique (vendor_invoice_id, approval_sequence, required_role)
 );
 
+alter table public.ap_invoice_approvals
+  add column if not exists deleted_at timestamptz;
+
 comment on table public.ap_invoice_approvals is
   'Materialized approval steps for vendor invoices. Rows are generated from ap_approval_matrix.';
 
@@ -184,6 +197,9 @@ create table if not exists public.ap_payments (
   updated_at timestamptz not null default now(),
   deleted_at timestamptz
 );
+
+alter table public.ap_payments
+  add column if not exists deleted_at timestamptz;
 
 comment on table public.ap_payments is
   'AP payment ledger with cross-system idempotency guards so a bill cannot be paid twice by QEP OS, QuickBooks, or check register.';
