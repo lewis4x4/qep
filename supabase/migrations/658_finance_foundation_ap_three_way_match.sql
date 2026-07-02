@@ -153,6 +153,16 @@ create table if not exists public.ap_approval_matrix (
 );
 
 alter table public.ap_approval_matrix
+  add column if not exists route_code text,
+  add column if not exists description text,
+  add column if not exists min_amount numeric(14, 2),
+  add column if not exists max_amount numeric(14, 2),
+  add column if not exists required_role text,
+  add column if not exists approval_sequence integer not null default 1,
+  add column if not exists reconditioning_soft_cap_amount numeric(14, 2),
+  add column if not exists is_reconditioning_soft_cap boolean not null default false,
+  add column if not exists active boolean not null default true,
+  add column if not exists updated_at timestamptz not null default now(),
   add column if not exists deleted_at timestamptz;
 
 comment on table public.ap_approval_matrix is
@@ -312,11 +322,21 @@ insert into public.ap_approval_matrix (
   approval_sequence,
   active
 )
-values
+select *
+from (
+  values
   ('default', 'ap_standard_finance_admin', 'Standard AP invoice finance review', 0, null, 'finance_admin', 1, true),
   ('default', 'ap_owner_exception', 'Owner review for AP exception invoices and unmatched holds', null, null, 'owner', 2, true),
   ('default', 'ap_reconditioning_soft_cap', 'Reconditioning soft-cap route; inactive until threshold is configured', null, null, 'manager', 1, false)
-on conflict do nothing;
+) as seed(workspace_id, route_code, description, min_amount, max_amount, required_role, approval_sequence, active)
+where not exists (
+  select 1
+  from public.ap_approval_matrix existing
+  where existing.workspace_id = seed.workspace_id
+    and existing.route_code = seed.route_code
+    and existing.approval_sequence = seed.approval_sequence
+    and existing.deleted_at is null
+);
 
 create or replace function public.evaluate_three_way_match(p_vendor_invoice_id uuid)
 returns text
