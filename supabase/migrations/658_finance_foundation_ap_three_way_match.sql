@@ -241,48 +241,63 @@ alter table public.ap_approval_matrix enable row level security;
 alter table public.ap_invoice_approvals enable row level security;
 alter table public.ap_payments enable row level security;
 
+drop policy if exists "goods_receipts_service_all" on public.goods_receipts;
 create policy "goods_receipts_service_all" on public.goods_receipts for all
   using ((select auth.role()) = 'service_role') with check ((select auth.role()) = 'service_role');
+drop policy if exists "goods_receipts_finance_all" on public.goods_receipts;
 create policy "goods_receipts_finance_all" on public.goods_receipts for all
   using (workspace_id = (select public.get_my_workspace()) and public.qep_finance_can_read())
   with check (workspace_id = (select public.get_my_workspace()) and public.qep_finance_can_mutate());
 
+drop policy if exists "goods_receipt_lines_service_all" on public.goods_receipt_lines;
 create policy "goods_receipt_lines_service_all" on public.goods_receipt_lines for all
   using ((select auth.role()) = 'service_role') with check ((select auth.role()) = 'service_role');
+drop policy if exists "goods_receipt_lines_finance_all" on public.goods_receipt_lines;
 create policy "goods_receipt_lines_finance_all" on public.goods_receipt_lines for all
   using (workspace_id = (select public.get_my_workspace()) and public.qep_finance_can_read())
   with check (workspace_id = (select public.get_my_workspace()) and public.qep_finance_can_mutate());
 
+drop policy if exists "ap_approval_matrix_service_all" on public.ap_approval_matrix;
 create policy "ap_approval_matrix_service_all" on public.ap_approval_matrix for all
   using ((select auth.role()) = 'service_role') with check ((select auth.role()) = 'service_role');
+drop policy if exists "ap_approval_matrix_finance_all" on public.ap_approval_matrix;
 create policy "ap_approval_matrix_finance_all" on public.ap_approval_matrix for all
   using (workspace_id = (select public.get_my_workspace()) and public.qep_finance_can_read())
   with check (workspace_id = (select public.get_my_workspace()) and public.qep_finance_can_mutate());
 
+drop policy if exists "ap_invoice_approvals_service_all" on public.ap_invoice_approvals;
 create policy "ap_invoice_approvals_service_all" on public.ap_invoice_approvals for all
   using ((select auth.role()) = 'service_role') with check ((select auth.role()) = 'service_role');
+drop policy if exists "ap_invoice_approvals_finance_all" on public.ap_invoice_approvals;
 create policy "ap_invoice_approvals_finance_all" on public.ap_invoice_approvals for all
   using (workspace_id = (select public.get_my_workspace()) and public.qep_finance_can_read())
   with check (workspace_id = (select public.get_my_workspace()) and public.qep_finance_can_mutate());
 
+drop policy if exists "ap_payments_service_all" on public.ap_payments;
 create policy "ap_payments_service_all" on public.ap_payments for all
   using ((select auth.role()) = 'service_role') with check ((select auth.role()) = 'service_role');
+drop policy if exists "ap_payments_finance_all" on public.ap_payments;
 create policy "ap_payments_finance_all" on public.ap_payments for all
   using (workspace_id = (select public.get_my_workspace()) and public.qep_finance_can_read())
   with check (workspace_id = (select public.get_my_workspace()) and public.qep_finance_can_mutate());
 
+drop trigger if exists set_goods_receipts_updated_at on public.goods_receipts;
 create trigger set_goods_receipts_updated_at
   before update on public.goods_receipts
   for each row execute function public.set_updated_at();
+drop trigger if exists set_goods_receipt_lines_updated_at on public.goods_receipt_lines;
 create trigger set_goods_receipt_lines_updated_at
   before update on public.goods_receipt_lines
   for each row execute function public.set_updated_at();
+drop trigger if exists set_ap_approval_matrix_updated_at on public.ap_approval_matrix;
 create trigger set_ap_approval_matrix_updated_at
   before update on public.ap_approval_matrix
   for each row execute function public.set_updated_at();
+drop trigger if exists set_ap_invoice_approvals_updated_at on public.ap_invoice_approvals;
 create trigger set_ap_invoice_approvals_updated_at
   before update on public.ap_invoice_approvals
   for each row execute function public.set_updated_at();
+drop trigger if exists set_ap_payments_updated_at on public.ap_payments;
 create trigger set_ap_payments_updated_at
   before update on public.ap_payments
   for each row execute function public.set_updated_at();
