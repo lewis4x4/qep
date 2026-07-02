@@ -326,8 +326,8 @@ select *
 from (
   values
   ('default', 'ap_standard_finance_admin', 'Standard AP invoice finance review', 0::numeric, null::numeric, 'finance_admin', 1, true),
-  ('default', 'ap_owner_exception', 'Owner review for AP exception invoices and unmatched holds', null::numeric, null::numeric, 'owner', 2, true),
-  ('default', 'ap_reconditioning_soft_cap', 'Reconditioning soft-cap route; inactive until threshold is configured', null::numeric, null::numeric, 'manager', 1, false)
+  ('default', 'ap_owner_exception', 'Owner review for AP exception invoices and unmatched holds', 0::numeric, null::numeric, 'owner', 2, true),
+  ('default', 'ap_reconditioning_soft_cap', 'Reconditioning soft-cap route; inactive until threshold is configured', 0::numeric, null::numeric, 'manager', 1, false)
 ) as seed(workspace_id, route_code, description, min_amount, max_amount, required_role, approval_sequence, active)
 where not exists (
   select 1
