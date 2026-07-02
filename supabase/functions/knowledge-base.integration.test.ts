@@ -336,7 +336,7 @@ liveTest("finance audience document does not leak to rep chat", async () => {
     const payload = await uploadResponse.json();
     uploaded.push({ documentId: payload.documentId, title });
 
-    const result = await chat(REP_TOKEN, `What is ${secretPhrase}?`);
+    const result = await chat(REP_TOKEN, `What is the restricted finance-only policy marker in ${title}?`);
     if (result.sources.some((source) => source.title.includes(title))) {
       throw new Error(`Rep should not receive finance document source ${title}`);
     }
