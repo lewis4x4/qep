@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { computeQuoteTax } from "./tax-logic.ts";
+import { computeFederalExciseTax, computeQuoteTax } from "./tax-logic.ts";
 
 Deno.test("Florida tax applies 6% state tax after discount and trade", () => {
   const result = computeQuoteTax({
@@ -92,4 +92,32 @@ Deno.test("manual override returns audited override tax when not exempt", () => 
   assertEquals(result.total_tax, 1234.56);
   assertEquals(result.manual_override_applied, true);
   assertEquals(result.tax_lines[0]?.applies_to, "manual_override");
+});
+
+Deno.test("federal excise tax computes separately at the configured rate", () => {
+  const result = computeFederalExciseTax({
+    taxableBasis: 100_000,
+    applicable: true,
+    rate: 0.12,
+  });
+
+  assertEquals(result.fet_amount, 12_000);
+  assertEquals(result.fet_rate, 0.12);
+  assertEquals(result.fet_lines[0]?.applies_to, "federal_excise_tax");
+});
+
+Deno.test("verified FET exemption preserves certificate metadata and zeros amount", () => {
+  const result = computeFederalExciseTax({
+    taxableBasis: 100_000,
+    applicable: true,
+    rate: 0.12,
+    exemptionApplied: true,
+    exemptionLabel: "FET exempt (cert #FET-1)",
+    certificateId: "cert-1",
+  });
+
+  assertEquals(result.fet_amount, 0);
+  assertEquals(result.fet_exemption_applied, true);
+  assertEquals(result.fet_certificate_id, "cert-1");
+  assertEquals(result.fet_lines[0]?.amount, 0);
 });

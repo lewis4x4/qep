@@ -47,6 +47,24 @@ export interface TaxComputationResult {
   manual_override_applied: boolean;
 }
 
+export interface FetComputationInput {
+  taxableBasis: number;
+  applicable: boolean;
+  rate?: number | string | null;
+  exemptionApplied?: boolean;
+  exemptionLabel?: string | null;
+  certificateId?: string | null;
+}
+
+export interface FetComputationResult {
+  fet_lines: TaxLine[];
+  fet_rate: number;
+  fet_amount: number;
+  fet_taxable_basis: number;
+  fet_exemption_applied: boolean;
+  fet_certificate_id: string | null;
+}
+
 export function clampCurrency(value: unknown): number {
   const numeric = Number(value ?? 0);
   if (!Number.isFinite(numeric)) return 0;
@@ -64,6 +82,57 @@ function roundedTax(value: number): number {
 function numericOr(value: unknown, fallback: number): number {
   const numeric = Number(value ?? fallback);
   return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+export function computeFederalExciseTax(input: FetComputationInput): FetComputationResult {
+  const taxableBasis = clampCurrency(input.taxableBasis);
+  const rate = input.applicable ? numericOr(input.rate, 0.12) : 0;
+  const certificateId = input.certificateId ?? null;
+
+  if (!input.applicable || taxableBasis <= 0) {
+    return {
+      fet_lines: [],
+      fet_rate: rate,
+      fet_amount: 0,
+      fet_taxable_basis: taxableBasis,
+      fet_exemption_applied: false,
+      fet_certificate_id: certificateId,
+    };
+  }
+
+  if (input.exemptionApplied) {
+    return {
+      fet_lines: [{
+        description: input.exemptionLabel ?? "Federal excise tax exemption",
+        rate,
+        amount: 0,
+        applies_to: "federal_excise_tax_exemption",
+        jurisdiction_id: certificateId,
+      }],
+      fet_rate: rate,
+      fet_amount: 0,
+      fet_taxable_basis: taxableBasis,
+      fet_exemption_applied: true,
+      fet_certificate_id: certificateId,
+    };
+  }
+
+  const amount = roundedTax(taxableBasis * rate);
+  return {
+    fet_lines: amount > 0
+      ? [{
+        description: "Federal excise tax",
+        rate,
+        amount,
+        applies_to: "federal_excise_tax",
+      }]
+      : [],
+    fet_rate: rate,
+    fet_amount: amount,
+    fet_taxable_basis: taxableBasis,
+    fet_exemption_applied: false,
+    fet_certificate_id: certificateId,
+  };
 }
 
 export function computeQuoteTax(input: TaxComputationInput): TaxComputationResult {

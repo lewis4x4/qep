@@ -28,6 +28,16 @@ export interface TaxCalculation {
   taxable_basis: number;
   exemptions_applied: string[];
   manual_override_applied?: boolean;
+  fet_lines?: TaxLine[];
+  fet_rate?: number;
+  fet_amount?: number;
+  fet_taxable_basis?: number;
+  fet_exemption_applied?: boolean;
+  fet_certificate_id?: string | null;
+  total_liability?: number;
+  form_8300_required?: boolean;
+  form_8300_cash_amount?: number;
+  form_8300_status?: "not_required" | "pending" | "filed" | "void";
   section_179: Section179Result | null;
   equipment_cost: number;
 }
@@ -44,6 +54,10 @@ export async function calculateTax(params: {
   delivery_county?: string;
   tax_override_amount?: number | null;
   tax_override_reason?: string | null;
+  include_fet?: boolean;
+  fet_applicable?: boolean;
+  fet_taxable_amount?: number | null;
+  cash_received_amount?: number | null;
   include_179?: boolean;
   tax_year?: number;
   effective_tax_rate?: number;
