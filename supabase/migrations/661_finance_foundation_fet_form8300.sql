@@ -68,6 +68,25 @@ create table if not exists public.fet_exemption_certificates (
   deleted_at timestamptz
 );
 
+alter table public.fet_exemption_certificates
+  add column if not exists crm_company_id uuid references public.crm_companies(id) on delete set null,
+  add column if not exists portal_customer_id uuid references public.portal_customers(id) on delete set null,
+  add column if not exists certificate_number text,
+  add column if not exists authority text not null default 'IRS',
+  add column if not exists exemption_type text not null default 'unknown',
+  add column if not exists covers_equipment boolean not null default true,
+  add column if not exists covers_attachments boolean not null default false,
+  add column if not exists effective_date date not null default current_date,
+  add column if not exists expiration_date date,
+  add column if not exists document_url text,
+  add column if not exists verified_by uuid references public.profiles(id) on delete set null,
+  add column if not exists verified_at timestamptz,
+  add column if not exists status text not null default 'pending',
+  add column if not exists notes text,
+  add column if not exists metadata jsonb not null default '{}'::jsonb,
+  add column if not exists updated_at timestamptz not null default now(),
+  add column if not exists deleted_at timestamptz;
+
 comment on table public.fet_exemption_certificates is
   'Federal excise tax exemption certificate domain. Kept separate from state sales-tax certificates because FET authority, coverage, and evidence differ.';
 comment on column public.fet_exemption_certificates.authority is
@@ -79,11 +98,13 @@ create index if not exists idx_fet_exemption_certificates_company
 
 alter table public.fet_exemption_certificates enable row level security;
 
+drop policy if exists "fet_exemption_certificates_service_all" on public.fet_exemption_certificates;
 create policy "fet_exemption_certificates_service_all"
   on public.fet_exemption_certificates for all
   using ((select auth.role()) = 'service_role')
   with check ((select auth.role()) = 'service_role');
 
+drop policy if exists "fet_exemption_certificates_finance_read" on public.fet_exemption_certificates;
 create policy "fet_exemption_certificates_finance_read"
   on public.fet_exemption_certificates for select
   using (
@@ -91,6 +112,7 @@ create policy "fet_exemption_certificates_finance_read"
     and public.qep_finance_can_read()
   );
 
+drop policy if exists "fet_exemption_certificates_finance_mutate" on public.fet_exemption_certificates;
 create policy "fet_exemption_certificates_finance_mutate"
   on public.fet_exemption_certificates for all
   using (
@@ -211,6 +233,19 @@ create table if not exists public.fet_liability_events (
   created_at timestamptz not null default now()
 );
 
+alter table public.fet_liability_events
+  add column if not exists quote_package_id uuid references public.quote_packages(id) on delete set null,
+  add column if not exists customer_invoice_id uuid references public.customer_invoices(id) on delete set null,
+  add column if not exists crm_company_id uuid references public.crm_companies(id) on delete set null,
+  add column if not exists fet_exemption_certificate_id uuid references public.fet_exemption_certificates(id) on delete set null,
+  add column if not exists liability_source text not null default 'quote_estimate',
+  add column if not exists taxable_amount numeric(14,2) not null default 0,
+  add column if not exists rate numeric(8,6) not null default 0.120000,
+  add column if not exists amount numeric(14,2) not null default 0,
+  add column if not exists status text not null default 'estimated',
+  add column if not exists source_reference text,
+  add column if not exists metadata jsonb not null default '{}'::jsonb;
+
 comment on table public.fet_liability_events is
   'Separate federal excise tax liability ledger for quotes, invoices, and credit memo reversals.';
 
@@ -220,11 +255,13 @@ create index if not exists idx_fet_liability_events_invoice
 
 alter table public.fet_liability_events enable row level security;
 
+drop policy if exists "fet_liability_events_service_all" on public.fet_liability_events;
 create policy "fet_liability_events_service_all"
   on public.fet_liability_events for all
   using ((select auth.role()) = 'service_role')
   with check ((select auth.role()) = 'service_role');
 
+drop policy if exists "fet_liability_events_finance_read" on public.fet_liability_events;
 create policy "fet_liability_events_finance_read"
   on public.fet_liability_events for select
   using (
@@ -232,6 +269,7 @@ create policy "fet_liability_events_finance_read"
     and public.qep_finance_can_read()
   );
 
+drop policy if exists "fet_liability_events_finance_mutate" on public.fet_liability_events;
 create policy "fet_liability_events_finance_mutate"
   on public.fet_liability_events for all
   using (
@@ -278,6 +316,24 @@ create table if not exists public.form_8300_compliance_events (
   deleted_at timestamptz
 );
 
+alter table public.form_8300_compliance_events
+  add column if not exists payment_validation_id uuid references public.payment_validations(id) on delete set null,
+  add column if not exists customer_invoice_id uuid references public.customer_invoices(id) on delete set null,
+  add column if not exists crm_company_id uuid references public.crm_companies(id) on delete set null,
+  add column if not exists customer_id uuid references public.crm_contacts(id) on delete set null,
+  add column if not exists cash_amount numeric(14,2) not null default 0,
+  add column if not exists aggregate_window_start date not null default current_date,
+  add column if not exists aggregate_window_end date not null default current_date,
+  add column if not exists status text not null default 'pending',
+  add column if not exists due_date date,
+  add column if not exists filed_at timestamptz,
+  add column if not exists filed_by uuid references public.profiles(id) on delete set null,
+  add column if not exists irs_acknowledgement_reference text,
+  add column if not exists notes text,
+  add column if not exists metadata jsonb not null default '{}'::jsonb,
+  add column if not exists updated_at timestamptz not null default now(),
+  add column if not exists deleted_at timestamptz;
+
 comment on table public.form_8300_compliance_events is
   'Finance compliance queue for Form 8300 review when cash receipts exceed the configured threshold. Payment validation flags are non-blocking.';
 
@@ -287,11 +343,13 @@ create unique index if not exists uq_form_8300_payment_validation
 
 alter table public.form_8300_compliance_events enable row level security;
 
+drop policy if exists "form_8300_compliance_events_service_all" on public.form_8300_compliance_events;
 create policy "form_8300_compliance_events_service_all"
   on public.form_8300_compliance_events for all
   using ((select auth.role()) = 'service_role')
   with check ((select auth.role()) = 'service_role');
 
+drop policy if exists "form_8300_compliance_events_finance_read" on public.form_8300_compliance_events;
 create policy "form_8300_compliance_events_finance_read"
   on public.form_8300_compliance_events for select
   using (
@@ -299,6 +357,7 @@ create policy "form_8300_compliance_events_finance_read"
     and public.qep_finance_can_read()
   );
 
+drop policy if exists "form_8300_compliance_events_finance_mutate" on public.form_8300_compliance_events;
 create policy "form_8300_compliance_events_finance_mutate"
   on public.form_8300_compliance_events for all
   using (
