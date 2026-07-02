@@ -165,24 +165,56 @@ create unique index if not exists uq_branches_legacy_invoice_branch_code
   on public.branches(workspace_id, legacy_invoice_branch_code)
   where legacy_invoice_branch_code is not null and deleted_at is null;
 
-update public.branches
+with candidate as (
+  select id
+  from public.branches
+  where workspace_id = 'default'
+    and legacy_invoice_branch_code is null
+    and deleted_at is null
+    and (
+      lower(slug) in ('lake-city', 'lake_city', 'lc', '01')
+      or lower(short_code) = 'lc'
+      or lower(display_name) like '%lake city%'
+    )
+  order by is_active desc, created_at asc, id asc
+  limit 1
+)
+update public.branches b
 set legacy_invoice_branch_code = '01'
-where workspace_id = 'default'
-  and legacy_invoice_branch_code is null
-  and (
-    lower(slug) in ('lake-city', 'lake_city', 'lc', '01')
-    or lower(short_code) = 'lc'
-    or lower(display_name) like '%lake city%'
+from candidate c
+where b.id = c.id
+  and not exists (
+    select 1
+    from public.branches existing
+    where existing.workspace_id = b.workspace_id
+      and existing.legacy_invoice_branch_code = '01'
+      and existing.deleted_at is null
   );
 
-update public.branches
+with candidate as (
+  select id
+  from public.branches
+  where workspace_id = 'default'
+    and legacy_invoice_branch_code is null
+    and deleted_at is null
+    and (
+      lower(slug) in ('belleview', 'my', '02')
+      or lower(short_code) = 'my'
+      or lower(display_name) like '%belleview%'
+    )
+  order by is_active desc, created_at asc, id asc
+  limit 1
+)
+update public.branches b
 set legacy_invoice_branch_code = '02'
-where workspace_id = 'default'
-  and legacy_invoice_branch_code is null
-  and (
-    lower(slug) in ('belleview', 'my', '02')
-    or lower(short_code) = 'my'
-    or lower(display_name) like '%belleview%'
+from candidate c
+where b.id = c.id
+  and not exists (
+    select 1
+    from public.branches existing
+    where existing.workspace_id = b.workspace_id
+      and existing.legacy_invoice_branch_code = '02'
+      and existing.deleted_at is null
   );
 
 alter table public.customer_invoices
