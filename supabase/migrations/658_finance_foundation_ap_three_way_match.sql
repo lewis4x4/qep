@@ -176,6 +176,15 @@ create table if not exists public.ap_invoice_approvals (
 );
 
 alter table public.ap_invoice_approvals
+  add column if not exists vendor_invoice_id uuid references public.vendor_invoices(id) on delete cascade,
+  add column if not exists approval_matrix_id uuid references public.ap_approval_matrix(id) on delete set null,
+  add column if not exists required_role text,
+  add column if not exists approval_sequence integer not null default 1,
+  add column if not exists status text not null default 'pending',
+  add column if not exists decided_by uuid references public.profiles(id) on delete set null,
+  add column if not exists decided_at timestamptz,
+  add column if not exists decision_reason text,
+  add column if not exists updated_at timestamptz not null default now(),
   add column if not exists deleted_at timestamptz;
 
 comment on table public.ap_invoice_approvals is
@@ -199,6 +208,16 @@ create table if not exists public.ap_payments (
 );
 
 alter table public.ap_payments
+  add column if not exists vendor_invoice_id uuid references public.vendor_invoices(id) on delete restrict,
+  add column if not exists source_system text not null default 'qep_os',
+  add column if not exists external_payment_id text,
+  add column if not exists check_number text,
+  add column if not exists amount numeric(14, 2),
+  add column if not exists paid_at timestamptz not null default now(),
+  add column if not exists recorded_by uuid references public.profiles(id) on delete set null,
+  add column if not exists notes text,
+  add column if not exists metadata jsonb not null default '{}'::jsonb,
+  add column if not exists updated_at timestamptz not null default now(),
   add column if not exists deleted_at timestamptz;
 
 comment on table public.ap_payments is
