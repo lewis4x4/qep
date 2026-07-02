@@ -19,8 +19,9 @@
   Edge Function plus cached deterministic fallback.
 - ⏸ **Human-gated:** final `sales.commission-to-date` math still needs
   QA-R2 commission rules; `parts.lost-sales` reason-code depth still
-  needs QA-N1. The current widgets show real source/proxy data and do
-  not render Preview cards.
+  needs the non-pricing QA-N1 decisions. The parts-pricing gate is now
+  documented in `docs/architecture/parts-pricing-ruleset.md`. The current
+  widgets show real source/proxy data and do not render Preview cards.
 
 
 
@@ -43,7 +44,7 @@ heaviest adopters; their Floors should be the most real, the soonest.
 | 1 | `parts.serial-first` | iron_parts_counter | **M** | Juan's Floor becomes functional, not cosmetic | ⏳ pending |
 | 2 | `sales.commission-to-date` | iron_advisor, iron_manager | **M** | Sales adoption lever (per handoff §7, "make-or-break") | ⏳ pending QA-R2 |
 | 3 | `exec.morning-brief` | iron_manager, iron_advisor, iron_owner | ~~**S**~~ **M** | "AI Briefing" rename (C6) lands with substance for three roles | 🔁 deferred — needs narrative edge fn |
-| 4 | `parts.quote-drafts` | iron_parts_counter, iron_parts_manager | **M** | Pairs with #1 — counter gets lookup + drafts on one surface | ⏳ pending QA-N1 |
+| 4 | `parts.quote-drafts` | iron_parts_counter, iron_parts_manager | **M** | Pairs with #1 — counter gets lookup + drafts on one surface | ⏳ pending quote lifecycle decision |
 | 5 | `nervous.customer-health` | iron_manager, iron_owner | **S** | Ryan's Owner Floor goes from 2 real / 2 stubs → 3 real / 1 stub | ✅ shipped |
 | + | `exec.owner-brief` | iron_owner, iron_manager | **XS** | Zero-prop wrap of OwnerBriefCard — fastest unlock for Ryan | ✅ shipped |
 
@@ -239,8 +240,8 @@ Wiring #3 and #5 first buys the biggest "it feels live" perception jump
 at the lowest cost. #1 is a week-2 push because it rightly belongs
 after a brief Norman + Juan workflow capture so the serial search
 behaves the way counter staff expect. #2 and #4 need external
-prerequisites (QA-R2 for commission rules, QA-N1 for parts pricing
-ruleset).
+prerequisites: QA-R2 for commission rules, plus the parts quote lifecycle
+decision called out in the D3.6 review candidate.
 
 ---
 

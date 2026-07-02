@@ -218,7 +218,17 @@ Each narrative below is traceable to code. Bracketed tags show the dominant stat
 
 ## 10. Pricing Workflow
 
-**Status: ✅ Implemented** (engine + extraction + audit). Note: the pricing engine migration `264_pricing_rules_engine.sql` was **discovered during verification** and was not in the original D3.6 seed source list — flag for the owners as a material capability.
+**Status: ✅ Implemented** (engine + extraction + audit), with the D3.7 baseline ruleset now documented in [parts-pricing-ruleset.md](../architecture/parts-pricing-ruleset.md). Note: the pricing engine migration `264_pricing_rules_engine.sql` was **discovered during verification** and was not in the original D3.6 seed source list — flag for the owners as a material capability.
+
+**D3.7 baseline ruleset.** The returned Parts Department Discovery resolves the Norman pricing gate for the Phase 3 baseline:
+
+- Standard parts sell at list price unless a Parts Manager-set customer/volume price applies.
+- Parts pricing targets 35% margin and must not go below the 25% margin floor.
+- Counter staff may discount up to 5% off the parts price.
+- Discounts beyond 5% require Parts Manager approval and block ticket close until approved.
+- Parts pricing is not rep-negotiable; customer-specific and volume pricing are owned by the Parts Manager.
+- Customer-pay service work orders use the standard parts price.
+- Internal work orders use standard sell price minus 10%, never below the 25% margin floor. Controller sign-off remains required before the G11 launch.
 
 **Ingestion.**
 - `extract-price-sheet` (Claude Sonnet 4.6, 16k tokens) extracts manufacturer price documents (PDF/Excel/CSV) into `models / attachments / freight zones / programs`, writing `qb_price_sheet_items` (`item_type ∈ {model, attachment, freight, note}`, `review_status ∈ {approved, pending}`). Routes to `PRICE_BOOK_SYSTEM` vs `PROGRAMS_SYSTEM` prompt by sheet type.
@@ -235,7 +245,9 @@ Each narrative below is traceable to code. Bracketed tags show the dominant stat
 
 **Enforcement.** `parts-pricing-autocorrect` (cron or manual) calls `pricing_suggestions_generate()` (inserts suggestions only for **non-auto** rules) and, when invoked with `apply_auto_rules`, `pricing_suggestions_apply()` for `auto_apply=true` rules. **Margin signal:** `v_parts_margin_signal` correlates list/cost/avg-cost with the latest vendor list price and flags `potential_overpay` when `cost > vendor_list × 1.05`.
 
-**❓ Open / D-5, D-7:** the only gate on automatic price changes is the per-rule `auto_apply` flag — there is no monetary/percentage approval threshold beyond it. Who owns final pricing authority and what guardrails should govern auto-apply?
+**Resolved / D3.7:** final pricing authority for baseline counter discounts is Parts Manager approval beyond the 5% counter cap; Parts Manager also owns customer-specific and volume pricing. The implementation gate is now schema validation: every priced line must be able to carry price source, rule/source identifier, approval state, approver metadata, cost/price/margin snapshots, and floor-applied flag. Cost and margin fields must remain policy-hidden from `sales_rep` and `parts_counter` roles.
+
+**Remaining follow-ups:** freight, emergency-buy, vendor-direct, special-order fee markup, and core/exchange pricing are not fully specified in the returned discovery. Do not infer those markups in G8; represent them as explicit fee/manager-reviewed adjustments until separately signed. The internal work-order formula is documented but still needs Controller sign-off before G11 goes live.
 
 ---
 
