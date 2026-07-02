@@ -336,6 +336,15 @@ where not exists (
     and existing.route_code = seed.route_code
     and existing.approval_sequence = seed.approval_sequence
     and existing.deleted_at is null
+)
+and not exists (
+  select 1
+  from public.ap_approval_matrix existing
+  where existing.workspace_id = seed.workspace_id
+    and existing.min_amount = seed.min_amount
+    and existing.required_role = seed.required_role
+    and existing.approval_sequence = seed.approval_sequence
+    and existing.deleted_at is null
 );
 
 create or replace function public.evaluate_three_way_match(p_vendor_invoice_id uuid)
