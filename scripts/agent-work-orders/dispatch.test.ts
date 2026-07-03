@@ -39,23 +39,29 @@ describe("QEP agent work-order dispatcher contract", () => {
     expect(script).toContain('const LINEAR_API_URL = "https://api.linear.app/graphql"');
     expect(script).toContain("process.env.LINEAR_API_KEY");
     expect(compactScript).toContain("commentcreate(input: $input)");
-    expect(compactScript).toContain("postprogresscomment(workorder, task, \"started\"");
+    expect(compactScript).toContain("postprogresscomment(workorder, task, \"claimed\"");
     expect(compactScript).toContain("postprogresscomment(workorder, task, \"runner_launched\"");
-    expect(compactScript).toContain("postprogresscomment(workorder, task, \"done\"");
-    expect(compactScript).toContain("postprogresscomment(workorder, task, \"failed\"");
+    expect(compactScript).toContain("postprogresscomment(workorder, task, \"completed\"");
+    expect(compactScript).toContain("completion.checkpoint");
+    expect(compactScript).toContain("blocked");
     expect(compactScript).toContain("missing_linear_api_key");
     expect(compactScript).toContain("missing_source_issue_id");
     expect(compactScript).toContain("linear_comment_failed");
     expect(compactScript).toContain("progress_comments: progresscomments");
+    expect(compactScript).toContain("parent_comment_id");
+    expect(compactScript).toContain("abortsignal.timeout");
   });
 
   it("exposes source Linear metadata to configured runners for deeper checkpoints", () => {
+    expect(compactScript).toContain("qep_agent_result_path");
     expect(compactScript).toContain("qep_agent_linear_issue_id");
     expect(compactScript).toContain("qep_agent_linear_issue_identifier");
+    expect(compactScript).toContain("qep_agent_source_comment_id");
     expect(compactScript).toContain("qep_agent_source_comment_url");
     expect(compactScript).toContain("qep_agent_progress_comments");
     expect(compactScript).toContain("tests-green");
     expect(compactScript).toContain("pr-opened");
+    expect(compactScript).toContain("result_summary");
   });
 
   it("exposes a scheduled and manual GitHub Actions dispatcher", () => {

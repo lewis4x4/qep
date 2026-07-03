@@ -25,11 +25,14 @@ describe("675_f28_agent_progress_comments_closeout.sql contract", () => {
     expect(compactSql).toContain("scripts/agent-work-orders/dispatch.mjs");
     expect(compactSql).toContain(".github/workflows/qep-agent-work-orders.yml");
     expect(compactSql).toContain("675_f28_agent_progress_comments_closeout.sql");
-    expect(compactSql).toContain("started");
+    expect(compactSql).toContain("claimed");
     expect(compactSql).toContain("handoff-ready");
     expect(compactSql).toContain("runner-launched");
-    expect(compactSql).toContain("done");
+    expect(compactSql).toContain("completed");
+    expect(compactSql).toContain("blocked");
     expect(compactSql).toContain("failed");
+    expect(compactSql).toContain("runner result overrides");
+    expect(compactSql).toContain("source comment metadata");
     expect(compactSql).toContain("tests-green");
     expect(compactSql).toContain("pr-opened");
   });

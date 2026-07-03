@@ -1,9 +1,15 @@
 #!/usr/bin/env node
 import { createClient } from "@supabase/supabase-js";
 import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { loadLocalEnv } from "../_shared/local-env.mjs";
+import {
+  buildLinearCommentInput,
+  formatProgressComment,
+  normalizeRunnerCompletion,
+  relativeRepoPath,
+} from "./progress-comments.mjs";
 
 const REPO_ROOT = resolve(new URL("../..", import.meta.url).pathname);
 loadLocalEnv(REPO_ROOT);
@@ -103,72 +109,80 @@ async function claimNextWorkOrder() {
 
 async function dispatchWorkOrder(workOrder) {
   const task = await loadTask(workOrder.task_id);
-  const handoff = buildHandoff(workOrder, task);
-  mkdirSync(outputDir, { recursive: true });
   const handoffPath = join(outputDir, `${workOrder.id}.md`);
+  const runnerResultPath = join(outputDir, `${workOrder.id}.result.json`);
+  const handoff = buildHandoff(workOrder, task, runnerResultPath);
+  mkdirSync(outputDir, { recursive: true });
   writeFileSync(handoffPath, handoff);
   const progressComments = [];
-  progressComments.push(await postProgressComment(workOrder, task, "started", { handoffPath }));
+  progressComments.push(await postProgressComment(workOrder, task, "claimed", {
+    handoffPath,
+    status: "running",
+  }));
 
   if (runner === "manual" || runner === "github_action") {
-    progressComments.push(await postProgressComment(workOrder, task, "handoff_ready", { handoffPath }));
     const summary = `Generated handoff for ${workOrder.command} ${workOrder.task_id}; runner=${runner}.`;
-    const outcome = await finish(workOrder, "done", summary, {
-      handoff_path: handoffPath,
-      progress_comments: progressComments,
-    });
-    progressComments.push(await postProgressComment(workOrder, task, "done", {
+    progressComments.push(await postProgressComment(workOrder, task, "handoff_ready", {
+      handoffPath,
+      status: "running",
+    }));
+    progressComments.push(await postProgressComment(workOrder, task, "completed", {
       handoffPath,
       resultSummary: summary,
+      status: "done",
     }));
+    const outcome = await finish(workOrder, "done", summary, {
+      handoff_path: handoffPath,
+      terminal_checkpoint: "completed",
+      progress_comments: progressComments,
+    });
     return { ...outcome, progress_comments: progressComments };
   }
 
-  progressComments.push(await postProgressComment(workOrder, task, "runner_launched", { handoffPath }));
+  progressComments.push(await postProgressComment(workOrder, task, "runner_launched", {
+    handoffPath,
+    runnerResultPath,
+    status: "running",
+  }));
   const runResult = await runConfiguredCommand(command, handoff, {
     QEP_AGENT_WORK_ORDER_ID: workOrder.id,
     QEP_AGENT_TASK_ID: workOrder.task_id,
     QEP_AGENT_COMMAND: workOrder.command,
     QEP_AGENT_HANDOFF_PATH: handoffPath,
+    QEP_AGENT_RESULT_PATH: runnerResultPath,
     QEP_AGENT_RUNNER: runner,
     QEP_AGENT_LINEAR_ISSUE_ID: workOrder.source_issue_id ?? "",
     QEP_AGENT_LINEAR_ISSUE_IDENTIFIER: workOrder.source_issue_identifier ?? "",
+    QEP_AGENT_SOURCE_COMMENT_ID: workOrder.source_comment_id ?? "",
     QEP_AGENT_SOURCE_COMMENT_URL: workOrder.source_comment_url ?? "",
     QEP_AGENT_PROGRESS_COMMENTS: linearApiKey ? "enabled" : "disabled",
   });
 
-  if (runResult.exitCode === 0) {
-    const summary = `Runner ${runner} completed ${workOrder.command} ${workOrder.task_id}.`;
-    const outcome = await finish(workOrder, "done", summary, {
-      handoff_path: handoffPath,
-      runner_exit_code: runResult.exitCode,
-      progress_comments: progressComments,
-    });
-    progressComments.push(await postProgressComment(workOrder, task, "done", {
-      handoffPath,
-      resultSummary: summary,
-    }));
-    return { ...outcome, progress_comments: progressComments };
-  }
-
-  const summary = `Runner ${runner} failed ${workOrder.command} ${workOrder.task_id}.`;
-  const errorExcerpt = runResult.stderr || runResult.stdout || `runner exited ${runResult.exitCode}`;
+  const runnerReport = loadRunnerReport(runnerResultPath);
+  const completion = normalizeRunnerCompletion({ workOrder, runner, runResult, runnerReport });
+  progressComments.push(await postProgressComment(workOrder, task, completion.checkpoint, {
+    handoffPath,
+    runnerResultPath,
+    resultSummary: completion.resultSummary,
+    blockingReason: completion.blockingReason,
+    errorExcerpt: completion.errorExcerpt,
+    status: completion.status,
+  }));
   const outcome = await finish(
     workOrder,
-    "failed",
-    summary,
+    completion.status,
+    completion.resultSummary,
     {
       handoff_path: handoffPath,
+      runner_result_path: runnerResultPath,
       runner_exit_code: runResult.exitCode,
+      runner_report: runnerReport,
+      runner_result: completion.result,
+      terminal_checkpoint: completion.checkpoint,
       progress_comments: progressComments,
     },
-    errorExcerpt,
+    completion.status === "done" ? null : completion.errorExcerpt,
   );
-  progressComments.push(await postProgressComment(workOrder, task, "failed", {
-    handoffPath,
-    resultSummary: summary,
-    errorExcerpt,
-  }));
   return { ...outcome, progress_comments: progressComments };
 }
 
@@ -206,7 +220,7 @@ async function finish(workOrder, status, resultSummary, result, error = null) {
   };
 }
 
-function buildHandoff(workOrder, task) {
+function buildHandoff(workOrder, task, runnerResultPath) {
   return [
     "# QEP Agent Work Order",
     "",
@@ -243,9 +257,10 @@ function buildHandoff(workOrder, task) {
     "- Read AGENTS.md and the current roadmap context before changing files.",
     "- Keep changes scoped to this roadmap task.",
     "- Verify before finishing; include exact commands in the result.",
-    "- Keep the source Linear issue current with started, tests-green, PR-opened, and terminal progress when credentials are available.",
+    "- Keep the source Linear issue current with claimed, tests-green, PR-opened, and terminal progress when credentials are available.",
     "- For build work, commit and push on the active branch; do not auto-merge destructive or AUTHORIZE-class work.",
     "- If blocked, finish the work order as blocked with a concrete reason.",
+    `- To override terminal status, write JSON to ${relativeRepoPath(runnerResultPath, REPO_ROOT)}: {"status":"done|blocked|failed","result_summary":"...","result":{},"error":"..."}.`,
     "",
     "## Source",
     "",
@@ -257,11 +272,21 @@ function buildHandoff(workOrder, task) {
 }
 
 async function postProgressComment(workOrder, task, checkpoint, details = {}) {
-  const issueId = workOrder.source_issue_id?.trim?.() ?? "";
   if (!linearApiKey) {
     return { checkpoint, posted: false, reason: "missing_linear_api_key" };
   }
-  if (!issueId) {
+  const input = buildLinearCommentInput(
+    workOrder,
+    formatProgressComment({
+      workOrder,
+      task,
+      runner,
+      checkpoint,
+      details,
+      repoRoot: REPO_ROOT,
+    }),
+  );
+  if (!input) {
     return { checkpoint, posted: false, reason: "missing_source_issue_id" };
   }
 
@@ -282,12 +307,10 @@ async function postProgressComment(workOrder, task, checkpoint, details = {}) {
           }
         `,
         variables: {
-          input: {
-            issueId,
-            body: formatProgressComment(workOrder, task, checkpoint, details),
-          },
+          input,
         },
       }),
+      signal: AbortSignal.timeout(10_000),
     });
 
     const text = await response.text();
@@ -306,6 +329,8 @@ async function postProgressComment(workOrder, task, checkpoint, details = {}) {
       checkpoint,
       posted: true,
       comment_id: payload.comment?.id ?? null,
+      issue_id: input.issueId,
+      parent_comment_id: input.parentId ?? null,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -321,37 +346,6 @@ async function postProgressComment(workOrder, task, checkpoint, details = {}) {
   }
 }
 
-function formatProgressComment(workOrder, task, checkpoint, details = {}) {
-  const label = {
-    started: "Started",
-    handoff_ready: "Handoff ready",
-    runner_launched: "Runner launched",
-    done: "Done",
-    failed: "Failed",
-  }[checkpoint] ?? checkpoint;
-
-  const lines = [
-    `**QEP agent checkpoint: ${label}**`,
-    "",
-    `Roadmap: ${task.task_id} - ${task.title}`,
-    `Work order: ${workOrder.id}`,
-    `Command: /${workOrder.command}`,
-    `Runner: ${runner}`,
-  ];
-
-  if (details.handoffPath) {
-    lines.push(`Handoff: ${relativeRepoPath(details.handoffPath)}`);
-  }
-  if (details.resultSummary) {
-    lines.push("", details.resultSummary);
-  }
-  if (details.errorExcerpt) {
-    lines.push("", "Error excerpt:", "```", details.errorExcerpt.slice(0, 1200), "```");
-  }
-
-  return lines.join("\n");
-}
-
 function parseJsonResponse(text, status) {
   try {
     return text ? JSON.parse(text) : {};
@@ -365,10 +359,6 @@ function summarizeLinearError(json) {
     return json.errors.map((entry) => entry.message ?? JSON.stringify(entry)).join("; ").slice(0, 1000);
   }
   return JSON.stringify(json).slice(0, 1000);
-}
-
-function relativeRepoPath(path) {
-  return path.startsWith(`${REPO_ROOT}/`) ? path.slice(REPO_ROOT.length + 1) : path;
 }
 
 function runConfiguredCommand(commandLine, stdin, extraEnv) {
@@ -403,6 +393,25 @@ function runConfiguredCommand(commandLine, stdin, extraEnv) {
     });
     child.stdin.end(stdin);
   });
+}
+
+function loadRunnerReport(path) {
+  if (!existsSync(path)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8"));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+    return {
+      status: "failed",
+      error: `Runner result JSON must be an object: ${relativeRepoPath(path, REPO_ROOT)}`,
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      error: `Runner result JSON parse failed for ${relativeRepoPath(path, REPO_ROOT)}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
 }
 
 function parseArgs(argv) {

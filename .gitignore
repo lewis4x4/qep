@@ -10,6 +10,7 @@ dist/
 # OS / local tooling noise
 .DS_Store
 **/.DS_Store
+*.webloc
 
 # Local agent / IDE artifacts (do not ship to remote)
 .agents/
@@ -62,3 +63,4 @@ QEP (1)/
 /qep/
 
 .claude/worktrees/
+scratch/worktrees/

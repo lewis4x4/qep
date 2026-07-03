@@ -92,7 +92,7 @@
     "agent-service-accounts:verify": "bun ./scripts/verify/agent-service-accounts-readiness.mjs",
     "agent-service-accounts:env-check": "node scripts/provision-agent-service-accounts.mjs --require-env",
     "agent-work-orders:dispatch": "node ./scripts/agent-work-orders/dispatch.mjs",
-    "agent-work-orders:contract": "bun test ./scripts/agent-work-orders/dispatch.test.ts",
+    "agent-work-orders:contract": "bun test ./scripts/agent-work-orders/dispatch.test.ts ./scripts/agent-work-orders/progress-comments.test.ts",
     "adr:016:verify": "bun ./scripts/verify/adr-016-acceptance-flow.mjs",
     "brand:guide:audit": "bun ./scripts/verify/brand-guide-compliance-audit.mjs",
     "floor:real-device:verify": "bun ./scripts/verify/floor-real-device-evidence.mjs",

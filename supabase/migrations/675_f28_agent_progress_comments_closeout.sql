@@ -25,7 +25,7 @@ SET
     WHEN COALESCE(notes, '') LIKE '%[2026-07-03] F2.8 shipped%'
       THEN notes
     ELSE COALESCE(notes, '') ||
-      E'\n[2026-07-03] F2.8 shipped: the qep_agent_work_orders dispatcher now posts best-effort Linear progress comments for started, handoff-ready, runner-launched, done, and failed checkpoints; records skipped/failed comment attempts in the work-order result; and passes Linear issue metadata to configured runners for deeper checkpoints such as tests-green and PR-opened.'
+      E'\n[2026-07-03] F2.8 shipped: the qep_agent_work_orders dispatcher now posts best-effort Linear progress comments for claimed, handoff-ready, runner-launched, completed, blocked, and failed checkpoints; records skipped/failed comment attempts plus runner result overrides in the work-order result; and passes Linear issue and source comment metadata to configured runners for deeper checkpoints such as tests-green and PR-opened.'
   END,
   updated_at = now()
 WHERE task_id = 'F2.8';
