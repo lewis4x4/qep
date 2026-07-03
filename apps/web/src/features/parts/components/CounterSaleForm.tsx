@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { CreditCard, ReceiptText, ShieldCheck } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { invokeCreateInternalOrder, invokeSubmitInternalOrder } from "../lib/parts-api";
 
 type Line = { part_number: string; description: string; quantity: string; unit_price: string };
+type PaymentClassification = "cash" | "charge";
 
 export function CounterSaleForm() {
   const navigate = useNavigate();
@@ -15,6 +17,11 @@ export function CounterSaleForm() {
   const [crmCompanyId, setCrmCompanyId] = useState<string | null>(null);
   const [orderSource, setOrderSource] = useState("counter");
   const [notes, setNotes] = useState("");
+  const [paymentClassification, setPaymentClassification] = useState<PaymentClassification>("cash");
+  const [cashPaid, setCashPaid] = useState(false);
+  const [creditApproved, setCreditApproved] = useState(false);
+  const [paymentReference, setPaymentReference] = useState("");
+  const [chargeNote, setChargeNote] = useState("");
   const [lines, setLines] = useState<Line[]>([
     { part_number: "", description: "", quantity: "1", unit_price: "" },
   ]);
@@ -46,6 +53,33 @@ export function CounterSaleForm() {
       }));
   }
 
+  function tenderPayload() {
+    if (paymentClassification === "cash") {
+      return {
+        payment_classification: "cash",
+        payment_status: cashPaid ? "paid" : "unpaid",
+        payment_reference: paymentReference.trim() || null,
+        charge_authorization_status: "not_applicable",
+        charge_authorization_note: null,
+      };
+    }
+
+    return {
+      payment_classification: "charge",
+      payment_status: "charge_account",
+      payment_reference: paymentReference.trim() || null,
+      charge_authorization_status: creditApproved ? "approved_credit" : "pending_ar_approval",
+      charge_authorization_note: chargeNote.trim() || null,
+    };
+  }
+
+  const canRelease =
+    paymentClassification === "cash" ? cashPaid : creditApproved;
+  const releaseBlockMessage =
+    paymentClassification === "cash"
+      ? "Cash ticket needs pay-in-full before release."
+      : "Charge ticket needs approved credit before release.";
+
   const createMut = useMutation({
     mutationFn: async () => {
       const line_items = buildLineItems();
@@ -56,6 +90,7 @@ export function CounterSaleForm() {
         order_source: orderSource,
         notes: notes.trim() || null,
         line_items,
+        ...tenderPayload(),
       });
     },
     onSuccess: (data) => {
@@ -69,11 +104,13 @@ export function CounterSaleForm() {
       const line_items = buildLineItems();
       if (!crmCompanyId) throw new Error("Select a QRM company");
       if (line_items.length === 0) throw new Error("Add at least one line");
+      if (!canRelease) throw new Error(releaseBlockMessage);
       const { order } = await invokeCreateInternalOrder({
         crm_company_id: crmCompanyId,
         order_source: orderSource,
         notes: notes.trim() || null,
         line_items,
+        ...tenderPayload(),
       });
       const id = order?.id as string;
       await invokeSubmitInternalOrder(id);
@@ -144,6 +181,83 @@ export function CounterSaleForm() {
             onChange={(e) => setNotes(e.target.value)}
           />
         </div>
+      </div>
+
+      <div className="space-y-3 rounded-md border border-border/70 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <ReceiptText className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <span className="text-sm font-medium">Ticket tender</span>
+          </div>
+          <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium uppercase">
+            {paymentClassification === "cash" ? "Cash" : "Charge"}
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant={paymentClassification === "cash" ? "default" : "outline"}
+            size="sm"
+            aria-pressed={paymentClassification === "cash"}
+            onClick={() => setPaymentClassification("cash")}
+          >
+            <ReceiptText className="mr-2 h-4 w-4" aria-hidden="true" />
+            Cash
+          </Button>
+          <Button
+            type="button"
+            variant={paymentClassification === "charge" ? "default" : "outline"}
+            size="sm"
+            aria-pressed={paymentClassification === "charge"}
+            onClick={() => setPaymentClassification("charge")}
+          >
+            <CreditCard className="mr-2 h-4 w-4" aria-hidden="true" />
+            Charge
+          </Button>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {paymentClassification === "cash" ? (
+            <label className="flex min-h-9 items-center gap-2 rounded-md border border-border/60 px-3 text-sm">
+              <input
+                type="checkbox"
+                checked={cashPaid}
+                onChange={(e) => setCashPaid(e.target.checked)}
+              />
+              Paid in full
+            </label>
+          ) : (
+            <label className="flex min-h-9 items-center gap-2 rounded-md border border-border/60 px-3 text-sm">
+              <input
+                type="checkbox"
+                checked={creditApproved}
+                onChange={(e) => setCreditApproved(e.target.checked)}
+              />
+              <ShieldCheck className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              Approved credit verified
+            </label>
+          )}
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground">Reference</label>
+            <Input
+              placeholder={paymentClassification === "cash" ? "Receipt, card, cash drawer" : "PO or account note"}
+              value={paymentReference}
+              onChange={(e) => setPaymentReference(e.target.value)}
+            />
+          </div>
+        </div>
+        {paymentClassification === "charge" && (
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground">Charge note</label>
+            <Input
+              placeholder="Credit account, AR note, or approval reference"
+              value={chargeNote}
+              onChange={(e) => setChargeNote(e.target.value)}
+            />
+          </div>
+        )}
+        {!canRelease && (
+          <p className="text-xs text-amber-600">{releaseBlockMessage}</p>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -239,9 +353,9 @@ export function CounterSaleForm() {
           type="button"
           variant="secondary"
           onClick={() => createAndSubmitMut.mutate()}
-          disabled={createMut.isPending || createAndSubmitMut.isPending}
+          disabled={createMut.isPending || createAndSubmitMut.isPending || !canRelease}
         >
-          Submit to fulfillment
+          Tender + release
         </Button>
       </div>
     </Card>

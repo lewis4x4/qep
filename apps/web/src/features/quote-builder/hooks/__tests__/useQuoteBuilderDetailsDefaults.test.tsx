@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import { renderHook } from "@testing-library/react";
 import { useState } from "react";
 
@@ -40,6 +40,19 @@ function useHarness(step: Step, initialDraft: QuoteWorkspaceDraft): QuoteWorkspa
 }
 
 describe("useQuoteBuilderDetailsDefaults", () => {
+  afterEach(() => {
+    setSystemTime();
+  });
+
+  test("seeds missing lifecycle dates from the central 30-day and 3-day defaults", () => {
+    setSystemTime(new Date("2026-05-20T12:00:00.000Z"));
+
+    const { result } = renderHook(() => useHarness("details", makeDraft()));
+
+    expect(result.current.expiresAt).toBe("2026-06-19T12:00:00.000Z");
+    expect(result.current.followUpAt).toBe("2026-05-23T12:00:00.000Z");
+  });
+
   test("preserves user-edited lifecycle dates", () => {
     const { result } = renderHook(() => useHarness("details", makeDraft({
       expiresAt: "2026-07-01T12:00:00.000Z",

@@ -157,6 +157,7 @@ Deno.serve(async (req) => {
         .update({
           last_reading_at: reading.readingAt,
           last_hours: reading.hours,
+          last_odometer_miles: normalized.odometerMiles ?? null,
           last_lat: reading.lat,
           last_lng: reading.lng,
         })

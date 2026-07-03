@@ -2,23 +2,23 @@
 
 Roadmap item: E5.4 / QEP-135
 Source evidence: `QEP (1)/CLAUDE_CODE_HANDOFF_2026-04-23.md` §9
-Status: BLOCKED — Norman parts-pricing ruleset workshop not yet signed
+Status: SUPERSEDED FOR PRICING — the returned Parts Department Discovery closes the pricing-ruleset portion of this gate.
 
 Owner: Norman, Juan, Brian Lewis, and Architect.
-Required before: claiming final `parts.lost-sales`, deep `parts.supplier-health`, or parts-pricing schema/ruleset behavior.
+Required before: claiming final `parts.lost-sales` reason-code depth or deep `parts.supplier-health` scoring. Parts-pricing schema/ruleset behavior now uses `docs/architecture/parts-pricing-ruleset.md`.
 
 ## Decision Record
 
-Meeting date:
-Attendees:
-Signed by:
-Signed at:
+Meeting date: 2026-05-26 returned discovery packet
+Attendees: QEP Parts Discovery respondents; engineering record transcribed in `QEP (1)/QEP_PARTS_DEPARTMENT_DISCOVERY_COMPLETED_2026-05-26.md`
+Signed by: Roadmap migration `650_qep_phase_one_source_of_truth_streams_g_to_k.sql` marks E5.4 shipped and D3.7 unblocked from returned discovery
+Signed at: 2026-05-26 source artifacts, reconciled in repo on 2026-07-02
 
 ## Required Decisions
 
 1. Parts pricing matrix:
    - Question: What categories, vendor families, customer classes, or branch rules drive parts markup?
-   - Decision:
+   - Decision: Standard parts sell at list price unless a Parts Manager-set customer or volume price applies. Parts target 35% margin and must not go below the 25% margin floor.
 
 2. Core charges and exchange programs:
    - Question: Which parts require core charge, exchange, return-window, or refund handling?
@@ -30,7 +30,7 @@ Signed at:
 
 4. Discount authority and exceptions:
    - Question: Who can override parts pricing, what approval threshold applies, and where is the audit trail stored?
-   - Decision:
+   - Decision: Counter staff may discount up to 5% off the parts price. Discounts beyond 5% require Parts Manager approval and block ticket close until approved. Customer-specific and volume pricing are owned by the Parts Manager. Audit fields must capture rule/source identifier, approver metadata, override reason, price/cost/margin snapshots, and floor-applied flag.
 
 5. Price-file source of truth:
    - Question: Which dealer/OEM files or IntelliDealer exports are authoritative for current parts cost/list pricing?
@@ -62,8 +62,8 @@ Signed at:
 
 ## Implementation Gate
 
-Until the decisions above are signed, Floor widgets must label parts pricing, lost-sales, and supplier-health values as source/proxy data. Do not add final parts-pricing schema, reason-code schema, or supplier scoring from assumptions.
+Pricing ruleset implementation may proceed from `docs/architecture/parts-pricing-ruleset.md`. Until the non-pricing decisions above are signed, Floor widgets must label lost-sales and supplier-health values as source/proxy data. Do not add final lost-sale reason-code schema or supplier scoring from assumptions.
 
-## Current blocker
+## Current blocker status
 
-Norman and Juan have not yet provided the parts pricing ruleset document required by `CLAUDE_CODE_HANDOFF_2026-04-23.md` §9. This is a human pricing-policy gate, not a code implementation gate.
+The original Norman/Juan workshop blocker is closed for parts pricing by the returned discovery and D3.7 ruleset. Remaining manual follow-ups are limited to non-pricing QA-N1 dimensions and the Controller sign-off required before G11 internal work-order pricing goes live.

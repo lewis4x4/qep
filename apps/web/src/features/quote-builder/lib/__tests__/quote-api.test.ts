@@ -4,6 +4,7 @@ import {
   buildQuoteSavePayload,
   buildPortalRevisionQuoteData,
   buildQuoteListUrl,
+  QUOTE_PACKAGE_STATUS_VALUES,
   normalizeAvailabilityRequest,
   normalizeClosedDealsAudit,
   normalizeCrmEquipmentQuoteSeed,
@@ -328,6 +329,12 @@ describe("buildQuoteSavePayload", () => {
     expect(freightLines.find((line) => line.id === "freight-inbound")?.outbound_delivery_amount).toBeUndefined();
     expect(freightLines.find((line) => line.id === "freight-outbound")?.outbound_delivery_amount).toBe(2400);
     expect(freightLines.find((line) => line.id === "freight-outbound")?.inbound_freight_amount).toBeUndefined();
+  });
+});
+
+describe("QUOTE_PACKAGE_STATUS_VALUES", () => {
+  test("includes additive low-margin draft status for persisted QB-12 saves", () => {
+    expect(QUOTE_PACKAGE_STATUS_VALUES).toContain("draft_low_margin");
   });
 });
 

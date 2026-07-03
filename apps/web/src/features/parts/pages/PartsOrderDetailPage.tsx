@@ -144,13 +144,35 @@ export function PartsOrderDetailPage() {
     : nullableString(crm?.name) ?? "—";
 
   const status = typeof row?.status === "string" ? row.status : "";
+  const orderSource = typeof row?.order_source === "string" ? row.order_source : "portal";
+  const isPortalOrder = orderSource === "portal";
+  const paymentClassification =
+    nullableString(row?.payment_classification) ?? "cash";
+  const paymentStatus = nullableString(row?.payment_status) ?? "unpaid";
+  const chargeAuthorizationStatus =
+    nullableString(row?.charge_authorization_status) ?? "not_applicable";
+  const receiptNumber = nullableString(row?.receipt_number);
+  const counterTenderReady =
+    paymentClassification === "cash"
+      ? paymentStatus === "paid"
+      : chargeAuthorizationStatus === "approved_credit" ||
+        chargeAuthorizationStatus === "exec_approved";
+  const isTenderReleaseReady = isPortalOrder || counterTenderReady;
+  const tenderLabel =
+    isPortalOrder ? "Portal"
+    : paymentClassification === "cash"
+      ? paymentStatus === "paid" ? "Cash paid" : "Cash due"
+      : isTenderReleaseReady ? "Charge approved" : "Charge pending";
+  const tenderBlockMessage =
+    paymentClassification === "cash"
+      ? "Cash ticket needs pay-in-full before release."
+      : "Charge ticket needs approved credit or AR approval before release.";
   const nextOpts = validNextStatuses(status);
   const fulfillmentRunId =
     typeof row?.fulfillment_run_id === "string" ? row.fulfillment_run_id : null;
-  const orderSource = typeof row?.order_source === "string" ? row.order_source : "portal";
   const isInternalDraft =
     status === "draft" && orderSource !== "portal" && row?.crm_company_id;
-  const canPick = ["confirmed", "processing"].includes(status);
+  const canPick = ["confirmed", "processing"].includes(status) && isTenderReleaseReady;
 
   return (
     <div className="max-w-6xl mx-auto py-6 px-4 space-y-6">
@@ -206,6 +228,7 @@ export function PartsOrderDetailPage() {
             <div className="flex flex-wrap gap-2 items-center">
               <OrderStatusBadge status={status} />
               <Badge variant="outline">{orderSource}</Badge>
+              <Badge variant={isTenderReleaseReady ? "default" : "outline"}>{tenderLabel}</Badge>
               <VoiceOrderBadge orderSource={orderSource} />
               <MachineDownBadge isMachineDown={row.is_machine_down === true} />
             </div>
@@ -224,6 +247,15 @@ export function PartsOrderDetailPage() {
                 </Link>
               </p>
             )}
+            {receiptNumber && (
+              <p>
+                <span className="text-muted-foreground">Receipt: </span>
+                <span className="font-mono text-xs">{receiptNumber}</span>
+              </p>
+            )}
+            {!isTenderReleaseReady && orderSource !== "portal" && (
+              <p className="text-amber-600">{tenderBlockMessage}</p>
+            )}
           </Card>
 
           {isInternalDraft && (
@@ -233,7 +265,7 @@ export function PartsOrderDetailPage() {
                 type="button"
                 size="sm"
                 onClick={() => submitMut.mutate()}
-                disabled={submitMut.isPending}
+                disabled={submitMut.isPending || !isTenderReleaseReady}
               >
                 Submit to fulfillment
               </Button>
@@ -276,7 +308,9 @@ export function PartsOrderDetailPage() {
                   size="sm"
                   disabled={
                     advanceStatus.isPending ||
-                    !(pendingStatus && pendingStatus !== status)
+                    !(pendingStatus && pendingStatus !== status) ||
+                    (!isTenderReleaseReady &&
+                      ["submitted", "confirmed", "processing", "shipped", "delivered"].includes(pendingStatus ?? ""))
                   }
                   onClick={() => {
                     const next = pendingStatus ?? status;
@@ -364,7 +398,7 @@ export function PartsOrderDetailPage() {
                             variant="secondary"
                             size="sm"
                             className="text-xs"
-                            disabled={pickMut.isPending || !pickBranch.trim()}
+                            disabled={pickMut.isPending || !pickBranch.trim() || !isTenderReleaseReady}
                             onClick={() => pickMut.mutate(ln.id)}
                           >
                             Pick

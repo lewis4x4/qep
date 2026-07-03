@@ -88,6 +88,16 @@ export class GenericTelematicsAdapter
           "cumulative_operating_hours",
         ),
       ),
+      odometerMiles: normalizeNumberOrNull(
+        readUnknown(
+          payload,
+          "odometerMiles",
+          "odometer_miles",
+          "odometer",
+          "mileage",
+          "vehicle_mileage",
+        ),
+      ),
       lat: normalizeNumberOrNull(readUnknown(payload, "lat", "latitude")),
       lng: normalizeNumberOrNull(
         readUnknown(payload, "lng", "lon", "longitude"),

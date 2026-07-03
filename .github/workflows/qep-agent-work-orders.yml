@@ -48,6 +48,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
           QEP_AGENT_CLAUDE_COMMAND: ${{ secrets.QEP_AGENT_CLAUDE_COMMAND }}
           QEP_AGENT_CURSOR_COMMAND: ${{ secrets.QEP_AGENT_CURSOR_COMMAND }}
           QEP_AGENT_REPOPROMPT_COMMAND: ${{ secrets.QEP_AGENT_REPOPROMPT_COMMAND }}

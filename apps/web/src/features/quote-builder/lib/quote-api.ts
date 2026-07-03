@@ -41,6 +41,7 @@ export type QuoteListAction = "resume" | "resend" | "duplicate" | "mark_sent" | 
 
 export const QUOTE_PACKAGE_STATUS_VALUES = [
   "draft",
+  "draft_low_margin",
   "pending_approval",
   "approved",
   "approved_with_conditions",

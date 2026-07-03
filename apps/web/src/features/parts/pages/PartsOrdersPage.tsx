@@ -34,6 +34,16 @@ export function PartsOrdersPage() {
     return "—";
   }
 
+  function tenderLabel(r: (typeof rows)[0]) {
+    if (r.payment_classification === "charge") {
+      return r.charge_authorization_status === "approved_credit" ||
+        r.charge_authorization_status === "exec_approved"
+        ? "Charge approved"
+        : "Charge pending";
+    }
+    return r.payment_status === "paid" ? "Cash paid" : "Cash due";
+  }
+
   return (
     <div className="max-w-6xl mx-auto py-6 px-4 space-y-6">
       <PartsSubNav />
@@ -91,6 +101,7 @@ export function PartsOrdersPage() {
               <TableRow>
                 <TableHead>Status</TableHead>
                 <TableHead>Source</TableHead>
+                <TableHead>Tender</TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead className="w-[120px]">Open</TableHead>
@@ -105,6 +116,11 @@ export function PartsOrdersPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">{row.order_source}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={row.payment_status === "paid" || row.charge_authorization_status === "approved_credit" || row.charge_authorization_status === "exec_approved" ? "default" : "outline"}>
+                        {tenderLabel(row)}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-sm">
                       <div className="font-medium">{customerLabel(row)}</div>

@@ -13,6 +13,11 @@ export async function invokeCreateInternalOrder(body: {
   line_items: Array<Record<string, unknown>>;
   fleet_id?: string | null;
   shipping_address?: Record<string, unknown> | null;
+  payment_classification?: string;
+  payment_status?: string;
+  payment_reference?: string | null;
+  charge_authorization_status?: string;
+  charge_authorization_note?: string | null;
 }) {
   const { data, error } = await supabase.functions.invoke("parts-order-manager", {
     body: { action: "create_internal_order", ...body },
@@ -31,7 +36,16 @@ export async function invokeSubmitInternalOrder(parts_order_id: string) {
 
 export async function invokeUpdateInternalOrder(
   parts_order_id: string,
-  fields: { notes?: string; order_source?: string; shipping_address?: Record<string, unknown> | null },
+  fields: {
+    notes?: string;
+    order_source?: string;
+    shipping_address?: Record<string, unknown> | null;
+    payment_classification?: string;
+    payment_status?: string;
+    payment_reference?: string | null;
+    charge_authorization_status?: string;
+    charge_authorization_note?: string | null;
+  },
 ) {
   const { data, error } = await supabase.functions.invoke("parts-order-manager", {
     body: { action: "update_internal_order", parts_order_id, ...fields },

@@ -253,6 +253,10 @@ export type PartsOrderListRow = {
   created_at: string;
   portal_customer_id: string | null;
   crm_company_id: string | null;
+  payment_classification: string;
+  payment_status: string;
+  charge_authorization_status: string;
+  receipt_number: string | null;
   portal_customers: { first_name: string; last_name: string; email: string } | null;
   crm_companies: { id: string; name: string } | null;
 };
@@ -904,6 +908,10 @@ export function normalizePartsOrderListRows(rows: unknown): PartsOrderListRow[] 
       created_at: createdAt,
       portal_customer_id: nullableString(value.portal_customer_id),
       crm_company_id: nullableString(value.crm_company_id),
+      payment_classification: nullableString(value.payment_classification) ?? "cash",
+      payment_status: nullableString(value.payment_status) ?? "unpaid",
+      charge_authorization_status: nullableString(value.charge_authorization_status) ?? "not_applicable",
+      receipt_number: nullableString(value.receipt_number),
       portal_customers: portalCustomer
         ? {
             first_name: stringValue(portalCustomer.first_name),

@@ -318,13 +318,14 @@ liveTest("published upload is retrievable by rep chat", async () => {
 
 liveTest("finance audience document does not leak to rep chat", async () => {
   const secretPhrase = `QEP_FINANCE_SECRET_${crypto.randomUUID().slice(0, 8)}`;
+  const restrictedMarker = "Restricted finance-only policy marker";
   const title = `kb-finance-${crypto.randomUUID().slice(0, 8)}`;
   const uploaded: UploadedDocument[] = [];
 
   try {
     const uploadResponse = await uploadTextDocument(ADMIN_TOKEN, {
       title,
-      content: `Restricted finance-only policy marker: ${secretPhrase}.`,
+      content: `${restrictedMarker}: ${secretPhrase}.`,
       audience: "finance",
       status: "published",
     });
@@ -340,8 +341,8 @@ liveTest("finance audience document does not leak to rep chat", async () => {
     if (result.sources.some((source) => source.title.includes(title))) {
       throw new Error(`Rep should not receive finance document source ${title}`);
     }
-    if (result.text.includes(secretPhrase)) {
-      throw new Error("Rep chat leaked the finance-only secret phrase");
+    if (result.text.includes(restrictedMarker)) {
+      throw new Error("Rep chat leaked the finance-only document body");
     }
   } finally {
     await Promise.all(uploaded.map((doc) => deleteDocument(ADMIN_TOKEN, doc.documentId)));

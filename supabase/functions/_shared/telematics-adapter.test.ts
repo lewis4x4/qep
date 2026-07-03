@@ -22,6 +22,7 @@ Deno.test("GenericTelematicsAdapter normalizes reading payloads", () => {
     device_id: "DEV-1",
     serial: "SN-1",
     cumulative_operating_hours: "42.5",
+    odometer_miles: "314.7",
     latitude: "30.1",
     longitude: "-81.6",
     last_reported_at: "2026-05-21T05:00:00-04:00",
@@ -32,6 +33,7 @@ Deno.test("GenericTelematicsAdapter normalizes reading payloads", () => {
   assertEquals(reading.deviceId, "DEV-1");
   assertEquals(reading.deviceSerial, "SN-1");
   assertEquals(reading.hours, 42.5);
+  assertEquals(reading.odometerMiles, 314.7);
   assertEquals(reading.lat, 30.1);
   assertEquals(reading.lng, -81.6);
   assertEquals(reading.readingAt, "2026-05-21T09:00:00.000Z");

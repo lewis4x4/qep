@@ -40,9 +40,10 @@ describe("computeStats", () => {
     });
   });
 
-  test("pipeline uses only draft, ready, sent, and pending approval", () => {
+  test("pipeline includes ordinary and low-margin drafts, ready, sent, and pending approval", () => {
     const s = computeStats([
       q({ id: "1", status: "draft", net_total: 10_000 }),
+      q({ id: "1b", status: "draft_low_margin", net_total: 15_000 }),
       q({ id: "2", status: "ready", net_total: 20_000 }),
       q({ id: "3", status: "sent", net_total: 30_000 }),
       q({ id: "4", status: "pending_approval", net_total: 40_000 }),
@@ -50,9 +51,9 @@ describe("computeStats", () => {
       q({ id: "6", status: "accepted", net_total: 60_000, accepted_at: "2026-04-05T10:00:00Z" }),
     ], new Date("2026-04-23T12:00:00Z"));
 
-    expect(s.total).toBe(6);
-    expect(s.open).toBe(5);
-    expect(s.pipelineValue).toBe(100_000);
+    expect(s.total).toBe(7);
+    expect(s.open).toBe(6);
+    expect(s.pipelineValue).toBe(115_000);
   });
 
   test("wins MTD uses accepted_at, not created_at", () => {
@@ -95,6 +96,7 @@ describe("stat filters", () => {
 describe("quote list rendering helpers", () => {
   test("status labels are title case and never raw enum values", () => {
     expect(getQuoteStatusLabel("pending_approval")).toBe("Pending Approval");
+    expect(getQuoteStatusLabel("draft_low_margin")).toBe("Low-margin Draft");
     expect(getQuoteStatusLabel("draft")).toBe("Draft");
     expect(getQuoteStatusLabel("accepted")).toBe("Accepted");
   });

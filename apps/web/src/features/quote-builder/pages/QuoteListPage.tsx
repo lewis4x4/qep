@@ -47,7 +47,7 @@ import {
 import { computeCalibrationReport, formatPct } from "../lib/scorer-calibration";
 
 const STATUS_FILTERS = ["all", "draft", "ready", "sent", "accepted"] as const;
-const PIPELINE_STATUSES = new Set(["draft", "ready", "sent", "pending_approval"]);
+const PIPELINE_STATUSES = new Set(["draft", "draft_low_margin", "ready", "sent", "pending_approval"]);
 const TERMINAL_STATUSES = new Set(["accepted", "declined", "rejected", "expired", "archived", "converted_to_deal"]);
 
 export type QuoteStatFilter = "total" | "open" | "pipeline" | "wins";
@@ -69,6 +69,7 @@ interface Stats {
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
+  draft_low_margin: "Low-margin Draft",
   pending_approval: "Pending Approval",
   approved: "Ready",
   approved_with_conditions: "Ready",
@@ -86,6 +87,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 const STATUS_CHIP_CLASSES: Record<string, string> = {
   draft: "bg-slate-600/40 text-slate-100 border-slate-500/30",
+  draft_low_margin: "bg-amber-500/15 text-amber-300 border-amber-500/30",
   pending_approval: "bg-amber-500/15 text-amber-300 border-amber-500/30",
   ready: "bg-blue-500/15 text-blue-300 border-blue-500/30",
   sent: "bg-orange-500/15 text-orange-300 border-orange-500/30",
@@ -813,7 +815,7 @@ function NoMatches({ onClear }: { onClear: () => void }) {
 }
 
 function quickActionsForStatus(status: string): Array<{ action: QuoteListAction; label: string; icon: typeof Mail; disabledReason?: string }> {
-  if (status === "draft") {
+  if (status === "draft" || status === "draft_low_margin") {
     return [
       { action: "resume", label: "Resume", icon: Pencil },
       { action: "duplicate", label: "Duplicate", icon: Copy },
@@ -862,12 +864,13 @@ function titleCaseStatus(status: string): string {
 function normalizeStatusForFilter(status: string): (typeof STATUS_FILTERS)[number] {
   if (status === "approved" || status === "approved_with_conditions") return "ready";
   if (status === "viewed") return "sent";
-  if (status === "changes_requested") return "draft";
+  if (status === "changes_requested" || status === "draft_low_margin") return "draft";
   if (status === "draft" || status === "ready" || status === "sent" || status === "accepted") return status;
   return "all";
 }
 
 function normalizeStatusForChip(status: string): string {
+  if (status in STATUS_CHIP_CLASSES) return status;
   const label = getQuoteStatusLabel(status).toLowerCase().replace(/\s+/g, "_");
   if (label === "pending_approval") return "pending_approval";
   return label;

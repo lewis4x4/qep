@@ -10,6 +10,7 @@ import {
   normalizeSearchPortalOrdersResponse,
   normalizeServiceJobResponse,
   normalizeServiceListResponse,
+  normalizeTechnicianSuggestionsResult,
 } from "./service-api-normalizers";
 
 const job = {
@@ -115,10 +116,63 @@ describe("service API normalizers", () => {
     });
   });
 
+  test("normalizes H6 technician assignment suggestions with reasons and capacity", () => {
+    expect(normalizeTechnicianSuggestionsResult({
+      source: "service_schedule_assignment_candidates",
+      suggestions: [
+        {
+          technician_profile_id: "profile-1",
+          user_id: "tech-1",
+          name: "Jordan Lane",
+          score: "152",
+          branch_id: "OCALA",
+          branch_match: true,
+          shop_field_eligible: true,
+          brand_match: true,
+          legacy_cert_match: false,
+          oem_cert_match: true,
+          in_house_completed_count: "3",
+          active_workload: "2",
+          availability_date: "2026-07-03",
+          available_hours: "9",
+          scheduled_hours: "4",
+          capacity_remaining_hours: "5",
+          reasons: [
+            { key: "branch_match", label: "Branch match", detail: "OCALA" },
+            { key: "bad", detail: "missing label" },
+          ],
+        },
+        { user_id: "", name: "Invalid" },
+      ],
+    })).toEqual({
+      source: "service_schedule_assignment_candidates",
+      suggestions: [{
+        technician_profile_id: "profile-1",
+        user_id: "tech-1",
+        name: "Jordan Lane",
+        score: 152,
+        branch_id: "OCALA",
+        branch_match: true,
+        shop_field_eligible: true,
+        brand_match: true,
+        legacy_cert_match: false,
+        oem_cert_match: true,
+        in_house_completed_count: 3,
+        active_workload: 2,
+        availability_date: "2026-07-03",
+        available_hours: 9,
+        scheduled_hours: 4,
+        capacity_remaining_hours: 5,
+        reasons: [{ key: "branch_match", label: "Branch match", detail: "OCALA" }],
+      }],
+    });
+  });
+
   test("returns safe defaults for malformed optional responses", () => {
     expect(normalizeServiceListResponse(null)).toEqual({ jobs: [], total: 0, page: 1, per_page: 0 });
     expect(normalizeBillingPostResult(null)).toEqual({});
     expect(normalizeSearchPortalOrdersResponse(null)).toEqual([]);
     expect(normalizeCalendarSlotsResult(null)).toEqual({ slots: [], slot_minutes: 0, branch_id: "" });
+    expect(normalizeTechnicianSuggestionsResult(null)).toEqual({ source: "unknown", suggestions: [] });
   });
 });

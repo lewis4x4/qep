@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 
 const repoRoot = resolve(import.meta.dir, "..", "..");
 const requiredStatuses = [
+  "draft_low_margin",
   "approved_with_conditions",
   "changes_requested",
   "pending_approval",
@@ -16,6 +17,7 @@ const files = [
   "apps/web/src/features/quote-builder/lib/saved-quote-draft.ts",
   "supabase/functions/quote-builder-v2/index.ts",
   "supabase/migrations/378_quote_packages_status_widen.sql",
+  "supabase/migrations/712_a58_save_draft_reason_logging.sql",
 ];
 
 const failures = [];
@@ -24,8 +26,11 @@ const evidence = [];
 for (const relativePath of files) {
   const absolutePath = resolve(repoRoot, relativePath);
   const source = readFileSync(absolutePath, "utf8");
-  const missing = requiredStatuses.filter((status) => !source.includes(status));
-  evidence.push({ file: relativePath, required_statuses_present: requiredStatuses.filter((status) => !missing.includes(status)) });
+  const statusesToCheck = relativePath.endsWith("378_quote_packages_status_widen.sql")
+    ? requiredStatuses.filter((status) => status !== "draft_low_margin")
+    : requiredStatuses;
+  const missing = statusesToCheck.filter((status) => !source.includes(status));
+  evidence.push({ file: relativePath, required_statuses_present: statusesToCheck.filter((status) => !missing.includes(status)) });
   if (missing.length > 0) {
     failures.push(`${relativePath} missing statuses: ${missing.join(", ")}`);
   }
@@ -34,6 +39,10 @@ for (const relativePath of files) {
 const migration = readFileSync(resolve(repoRoot, "supabase/migrations/378_quote_packages_status_widen.sql"), "utf8");
 if (!/quote_packages_status_check/.test(migration)) {
   failures.push("migration 378 does not modify quote_packages_status_check");
+}
+const a58Migration = readFileSync(resolve(repoRoot, "supabase/migrations/712_a58_save_draft_reason_logging.sql"), "utf8");
+if (!/quote_packages_status_check/.test(a58Migration) || !/draft_low_margin/.test(a58Migration)) {
+  failures.push("migration 712 does not widen quote_packages_status_check for draft_low_margin");
 }
 
 if (failures.length > 0) {

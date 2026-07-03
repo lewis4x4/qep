@@ -13,6 +13,81 @@ import {
 } from "../_shared/safe-cors.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
+
+type SchedulerRpcReason = {
+  key?: string;
+  label?: string;
+  detail?: string | null;
+};
+
+type SchedulerRpcCandidate = {
+  technician_profile_id?: string | null;
+  technician_user_id?: string | null;
+  technician_name?: string | null;
+  branch_id?: string | null;
+  branch_match?: boolean | null;
+  shop_field_eligible?: boolean | null;
+  brand_match?: boolean | null;
+  legacy_cert_match?: boolean | null;
+  oem_cert_match?: boolean | null;
+  in_house_completed_count?: number | string | null;
+  active_workload?: number | string | null;
+  availability_date?: string | null;
+  available_hours?: number | string | null;
+  scheduled_hours?: number | string | null;
+  capacity_remaining_hours?: number | string | null;
+  suitability_score?: number | string | null;
+  reasons?: SchedulerRpcReason[] | null;
+};
+
+function asNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeRpcReasons(value: unknown): SchedulerRpcReason[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const row = item as Record<string, unknown>;
+    const key = typeof row.key === "string" ? row.key : "";
+    const label = typeof row.label === "string" ? row.label : "";
+    if (!key || !label) return [];
+    return [{
+      key,
+      label,
+      detail: typeof row.detail === "string" ? row.detail : null,
+    }];
+  });
+}
+
+function normalizeRpcCandidate(row: SchedulerRpcCandidate) {
+  const userId = row.technician_user_id ?? null;
+  return {
+    technician_profile_id: row.technician_profile_id ?? null,
+    user_id: userId,
+    name: row.technician_name ?? userId ?? "Unknown technician",
+    score: asNumber(row.suitability_score) ?? 0,
+    branch_id: row.branch_id ?? null,
+    branch_match: row.branch_match === true,
+    shop_field_eligible: row.shop_field_eligible === true,
+    brand_match: row.brand_match === true,
+    legacy_cert_match: row.legacy_cert_match === true,
+    oem_cert_match: row.oem_cert_match === true,
+    in_house_completed_count: asNumber(row.in_house_completed_count) ?? 0,
+    active_workload: asNumber(row.active_workload) ?? 0,
+    availability_date: row.availability_date ?? null,
+    available_hours: asNumber(row.available_hours) ?? 0,
+    scheduled_hours: asNumber(row.scheduled_hours) ?? 0,
+    capacity_remaining_hours: asNumber(row.capacity_remaining_hours) ?? 0,
+    reasons: normalizeRpcReasons(row.reasons),
+  };
+}
+
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   if (req.method === "OPTIONS") return optionsResponse(origin);
@@ -37,6 +112,25 @@ Deno.serve(async (req) => {
       .eq("id", body.job_id)
       .single();
     if (jErr || !job) return safeJsonError("Job not found", 404, origin);
+
+    const { data: rpcCandidates, error: rpcErr } = await supabase.rpc(
+      "service_schedule_assignment_candidates",
+      { p_service_job_id: body.job_id },
+    );
+    if (!rpcErr && Array.isArray(rpcCandidates)) {
+      return safeJsonOk({
+        source: "service_schedule_assignment_candidates",
+        suggestions: rpcCandidates
+          .slice(0, 8)
+          .map((row) => normalizeRpcCandidate(row as SchedulerRpcCandidate)),
+      }, origin);
+    }
+    if (rpcErr) {
+      console.warn("[service-scheduler] H6.1 ranking RPC unavailable, falling back to legacy heuristic", {
+        code: rpcErr.code,
+        message: rpcErr.message,
+      });
+    }
 
     let machineMake: string | null = null;
     let jobCodeName: string | null = null;

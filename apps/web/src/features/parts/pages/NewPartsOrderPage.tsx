@@ -8,9 +8,9 @@ export function NewPartsOrderPage() {
     <div className="max-w-6xl mx-auto py-6 px-4 space-y-6">
       <PartsSubNav />
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">New parts order</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Counter POS</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Counter or phone sale — ties to a QRM company and optional catalog pricing.
+          Lookup, ticket, tender, receipt, and release on the staff parts order spine.
         </p>
       </div>
       <div className="flex flex-wrap gap-2">

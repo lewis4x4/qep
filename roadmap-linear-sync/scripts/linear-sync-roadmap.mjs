@@ -8,8 +8,10 @@
 //   node scripts/linear-sync-roadmap.mjs
 //
 // Flags:
-//   --dry-run     Print actions without mutating.
-//   --batch N     Max rows to process per run (default 100).
+//   --dry-run                         Print actions without mutating.
+//   --batch N                         Max rows to process per run (default 100).
+//   --task-ids A1.1,B2.2              Only sync pending rows with these task IDs.
+//   --linear-issue-identifiers QEP-1  Only sync pending rows with these Linear IDs.
 
 import { LinearClient } from './lib/linear.mjs';
 import { SupabaseClient } from './lib/supabase.mjs';
@@ -20,6 +22,8 @@ const args = process.argv.slice(2);
 const DRY_RUN = args.includes('--dry-run');
 const batchIdx = args.indexOf('--batch');
 const BATCH = batchIdx >= 0 ? parseInt(args[batchIdx + 1], 10) : 100;
+const TASK_IDS = parseListFlags('--task-id', '--task-ids');
+const LINEAR_ISSUE_IDENTIFIERS = parseListFlags('--linear-issue-identifier', '--linear-issue-identifiers');
 
 const {
   LINEAR_API_KEY,
@@ -36,6 +40,30 @@ for (const [k, v] of Object.entries({ LINEAR_API_KEY, SUPABASE_URL, SUPABASE_SER
 }
 
 const log = (...a) => console.log('[sync]', ...a);
+
+function parseListFlags(...names) {
+  const values = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    const eqName = names.find((name) => arg.startsWith(`${name}=`));
+    if (eqName) {
+      values.push(arg.slice(eqName.length + 1));
+      continue;
+    }
+    if (names.includes(arg)) {
+      values.push(args[i + 1] ?? '');
+      i++;
+    }
+  }
+  return [...new Set(values.flatMap((value) => String(value).split(',')).map((value) => value.trim()).filter(Boolean))];
+}
+
+function scopeDescription() {
+  const parts = [];
+  if (TASK_IDS.length > 0) parts.push(`task_ids=${TASK_IDS.join(',')}`);
+  if (LINEAR_ISSUE_IDENTIFIERS.length > 0) parts.push(`linear_issue_identifiers=${LINEAR_ISSUE_IDENTIFIERS.join(',')}`);
+  return parts.length > 0 ? ` scope(${parts.join(' ')})` : '';
+}
 
 async function main() {
   const linear = new LinearClient(LINEAR_API_KEY);
@@ -64,8 +92,11 @@ async function main() {
     return created;
   }
 
-  const pending = await supa.listPendingLinearSync(BATCH);
-  log(`${pending.length} task(s) need sync (batch limit ${BATCH})`);
+  const pending = await supa.listPendingLinearSync(BATCH, {
+    taskIds: TASK_IDS,
+    linearIssueIdentifiers: LINEAR_ISSUE_IDENTIFIERS,
+  });
+  log(`${pending.length} task(s) need sync (batch limit ${BATCH})${scopeDescription()}`);
 
   let updated = 0;
   let createdMissing = 0;

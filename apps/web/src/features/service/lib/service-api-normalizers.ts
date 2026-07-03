@@ -11,6 +11,34 @@ export type BillingPostResult = {
 export type ResyncPartsResult = { inserted: number; cancelled: number; mode: string };
 export type ReassignFromBranchPoolResult = { reassigned: number; replacement: string };
 export type CalendarSlotsResult = { slots: string[]; slot_minutes: number; branch_id: string };
+export type TechnicianSuggestionReason = {
+  key: string;
+  label: string;
+  detail: string | null;
+};
+export type TechnicianSuggestion = {
+  technician_profile_id: string | null;
+  user_id: string;
+  name: string;
+  score: number;
+  branch_id: string | null;
+  branch_match: boolean;
+  shop_field_eligible: boolean;
+  brand_match: boolean;
+  legacy_cert_match: boolean;
+  oem_cert_match: boolean;
+  in_house_completed_count: number;
+  active_workload: number;
+  availability_date: string | null;
+  available_hours: number;
+  scheduled_hours: number;
+  capacity_remaining_hours: number;
+  reasons: TechnicianSuggestionReason[];
+};
+export type TechnicianSuggestionsResult = {
+  source: string;
+  suggestions: TechnicianSuggestion[];
+};
 
 export type PortalOrderSearchRow = {
   id: string;
@@ -180,5 +208,59 @@ export function normalizeCalendarSlotsResult(value: unknown): CalendarSlotsResul
     slots: stringArray(value.slots),
     slot_minutes: numberOrNull(value.slot_minutes) ?? 0,
     branch_id: stringOrNull(value.branch_id) ?? "",
+  };
+}
+
+function normalizeSuggestionReasons(value: unknown): TechnicianSuggestionReason[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    const key = requiredString(item.key);
+    const label = requiredString(item.label);
+    if (!key || !label) return [];
+    return [{
+      key,
+      label,
+      detail: stringOrNull(item.detail),
+    }];
+  });
+}
+
+function normalizeTechnicianSuggestion(value: unknown): TechnicianSuggestion | null {
+  if (!isRecord(value)) return null;
+  const userId = requiredString(value.user_id);
+  const name = requiredString(value.name);
+  if (!userId || !name) return null;
+  return {
+    technician_profile_id: stringOrNull(value.technician_profile_id),
+    user_id: userId,
+    name,
+    score: numberOrNull(value.score) ?? 0,
+    branch_id: stringOrNull(value.branch_id),
+    branch_match: value.branch_match === true,
+    shop_field_eligible: value.shop_field_eligible === true,
+    brand_match: value.brand_match === true,
+    legacy_cert_match: value.legacy_cert_match === true,
+    oem_cert_match: value.oem_cert_match === true,
+    in_house_completed_count: numberOrNull(value.in_house_completed_count) ?? 0,
+    active_workload: numberOrNull(value.active_workload) ?? 0,
+    availability_date: stringOrNull(value.availability_date),
+    available_hours: numberOrNull(value.available_hours) ?? 0,
+    scheduled_hours: numberOrNull(value.scheduled_hours) ?? 0,
+    capacity_remaining_hours: numberOrNull(value.capacity_remaining_hours) ?? 0,
+    reasons: normalizeSuggestionReasons(value.reasons),
+  };
+}
+
+export function normalizeTechnicianSuggestionsResult(value: unknown): TechnicianSuggestionsResult {
+  if (!isRecord(value)) return { source: "unknown", suggestions: [] };
+  return {
+    source: stringOrNull(value.source) ?? "unknown",
+    suggestions: Array.isArray(value.suggestions)
+      ? value.suggestions.flatMap((item) => {
+        const normalized = normalizeTechnicianSuggestion(item);
+        return normalized ? [normalized] : [];
+      })
+      : [],
   };
 }

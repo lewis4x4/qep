@@ -140,9 +140,21 @@ create policy hub_knowledge_chunk_acl_read
 -- Replace match_hub_knowledge with ACL-aware candidate filtering. The filter is
 -- applied in candidate_scope before similarity ranking, so restricted chunks do
 -- not affect order, count, or timing in a way that reveals existence.
-revoke execute on function public.match_hub_knowledge(
-  extensions.vector(1536), text, integer, float
-) from public, authenticated, service_role;
+do $$
+begin
+  if exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname = 'match_hub_knowledge'
+      and pg_get_function_identity_arguments(p.oid) = 'p_query_embedding extensions.vector, p_workspace text, p_match_count integer, p_min_similarity double precision'
+  ) then
+    revoke execute on function public.match_hub_knowledge(
+      extensions.vector(1536), text, integer, float
+    ) from public, authenticated, service_role;
+  end if;
+end $$;
 drop function if exists public.match_hub_knowledge(
   extensions.vector(1536), text, integer, float
 );

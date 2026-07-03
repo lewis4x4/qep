@@ -14,10 +14,13 @@ import {
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
 import { requireServiceUser } from "../_shared/service-auth.ts";
-import { embedText, formatVectorLiteral } from "../_shared/openai-embeddings.ts";
 import {
-  rerankKbEvidence,
+  embedText,
+  formatVectorLiteral,
+} from "../_shared/openai-embeddings.ts";
+import {
   type KbEvidenceRow,
+  rerankKbEvidence,
 } from "../_shared/kb-retrieval.ts";
 
 // ── Types ───────────────────────────────────────────────────
@@ -26,17 +29,47 @@ type QueryType =
   | "part_number"
   | "machine_component"
   | "natural_language"
-  | "cross_reference";
+  | "cross_reference"
+  | "kit"
+  | "supersession";
 
-type MatchType = "exact" | "semantic" | "fts" | "hybrid" | "cross_ref" | "machine_compat";
+type MatchType =
+  | "exact"
+  | "semantic"
+  | "fts"
+  | "hybrid"
+  | "cross_ref"
+  | "machine_compat"
+  | "machine_serial"
+  | "machine_model"
+  | "kit"
+  | "supersession";
 
 interface SearchRequest {
   query: string;
+  lookup_path?:
+    | "auto"
+    | "part_number"
+    | "machine"
+    | "machine_serial"
+    | "machine_model"
+    | "keyword"
+    | "description"
+    | "kit"
+    | "supersession"
+    | "cross_reference";
+  machine?: {
+    make?: string | null;
+    model?: string | null;
+    serial?: string | null;
+    profile_id?: string | null;
+  };
   filters?: {
     manufacturer?: string | null;
     category?: string | null;
     machine_profile_id?: string | null;
   };
+  kit_number?: string | null;
   include_cross_references?: boolean;
   limit?: number;
 }
@@ -62,6 +95,16 @@ interface PartSearchResult {
   intellidealer_status: "not_connected";
   notes: string | null;
   source: "catalog" | "rag" | "cross_ref";
+  lookup_path?: string;
+  kit?: {
+    id: string | null;
+    number: string | null;
+    name: string | null;
+  };
+  stock_on_hand?: number;
+  stock_locations?: unknown[];
+  diagrams?: unknown[];
+  lookup_evidence?: JsonRecord | null;
 }
 
 interface SearchResponse {
@@ -90,6 +133,10 @@ interface SearchResponse {
     exact: number;
     cross_ref: number;
     machine_compat: number;
+    machine_serial: number;
+    machine_model: number;
+    kit: number;
+    supersession: number;
   };
 }
 
@@ -109,6 +156,31 @@ interface HybridPartHit {
   part_id: string;
   hybrid_score: number;
   match_source: string | null;
+}
+
+interface LookupEngineRow {
+  lookup_path: string;
+  rank: number;
+  part_id: string | null;
+  parts_catalog_id: string | null;
+  part_number: string;
+  description: string | null;
+  manufacturer: string | null;
+  category: string | null;
+  kit_id: string | null;
+  kit_number: string | null;
+  kit_name: string | null;
+  machine_profile_id: string | null;
+  machine_make: string | null;
+  machine_model: string | null;
+  serial_prefix: string | null;
+  relationship: string | null;
+  source: string | null;
+  confidence: number;
+  stock_on_hand: number;
+  stock_locations: unknown[];
+  diagrams: unknown[];
+  evidence: JsonRecord | null;
 }
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -189,6 +261,46 @@ function normalizeHybridPartHit(row: unknown): HybridPartHit | null {
   };
 }
 
+function normalizeLookupEngineRow(row: unknown): LookupEngineRow | null {
+  if (!isRecord(row)) return null;
+
+  const lookupPath = stringOrNull(row.lookup_path);
+  const partNumber = stringOrNull(row.part_number);
+  if (!lookupPath || !partNumber) return null;
+
+  const evidence = isRecord(row.evidence) ? row.evidence : null;
+
+  return {
+    lookup_path: lookupPath,
+    rank: numberOrDefault(row.rank, 0),
+    part_id: stringOrNull(row.part_id),
+    parts_catalog_id: stringOrNull(row.parts_catalog_id),
+    part_number: partNumber,
+    description: stringOrNull(row.description),
+    manufacturer: stringOrNull(row.manufacturer),
+    category: stringOrNull(row.category),
+    kit_id: stringOrNull(row.kit_id),
+    kit_number: stringOrNull(row.kit_number),
+    kit_name: stringOrNull(row.kit_name),
+    machine_profile_id: stringOrNull(row.machine_profile_id),
+    machine_make: stringOrNull(row.machine_make),
+    machine_model: stringOrNull(row.machine_model),
+    serial_prefix: stringOrNull(row.serial_prefix),
+    relationship: stringOrNull(row.relationship),
+    source: stringOrNull(row.source),
+    confidence: numberOrDefault(
+      row.confidence,
+      numberOrDefault(row.rank, 0.75),
+    ),
+    stock_on_hand: numberOrDefault(row.stock_on_hand, 0),
+    stock_locations: Array.isArray(row.stock_locations)
+      ? row.stock_locations
+      : [],
+    diagrams: Array.isArray(row.diagrams) ? row.diagrams : [],
+    evidence,
+  };
+}
+
 function normalizeKbEvidenceRow(row: unknown): KbEvidenceRow | null {
   if (!isRecord(row)) return null;
 
@@ -228,7 +340,9 @@ function isRagCircuitOpen(): boolean {
   if (consecutiveRagFailures >= RAG_FAILURE_THRESHOLD) {
     ragCircuitOpenUntil = Date.now() + RAG_CIRCUIT_OPEN_MS;
     console.warn(
-      `[ai-parts-lookup] RAG circuit opened after ${consecutiveRagFailures} failures — FTS-only for ${RAG_CIRCUIT_OPEN_MS / 1000}s`,
+      `[ai-parts-lookup] RAG circuit opened after ${consecutiveRagFailures} failures — FTS-only for ${
+        RAG_CIRCUIT_OPEN_MS / 1000
+      }s`,
     );
     return true;
   }
@@ -252,6 +366,15 @@ const CROSS_REF_KEYWORDS = [
   "substitute",
   "interchange",
 ];
+const KIT_KEYWORDS = ["kit", "pm kit", "service kit", "maintenance kit"];
+const SUPERSESSION_KEYWORDS = [
+  "supersession",
+  "superseded",
+  "supersedes",
+  "replaced by",
+  "replacement for",
+  "obsolete",
+];
 const MACHINE_KEYWORDS = [
   "barko",
   "bandit",
@@ -271,16 +394,39 @@ function classifyQuery(query: string): QueryType {
   if (PART_NUMBER_PATTERN.test(q)) return "part_number";
 
   // Standalone part-number-like patterns (alphanumeric with dashes, 6+ chars, no spaces)
-  if (/^[A-Z0-9][-A-Z0-9]{5,}$/i.test(q) && !q.includes(" ")) return "part_number";
+  if (/^[A-Z0-9][-A-Z0-9]{5,}$/i.test(q) && !q.includes(" ")) {
+    return "part_number";
+  }
 
   const lower = q.toLowerCase();
 
-  if (CROSS_REF_KEYWORDS.some((kw) => lower.includes(kw))) return "cross_reference";
+  if (CROSS_REF_KEYWORDS.some((kw) => lower.includes(kw))) {
+    return "cross_reference";
+  }
+  if (KIT_KEYWORDS.some((kw) => lower.includes(kw))) return "kit";
+  if (SUPERSESSION_KEYWORDS.some((kw) => lower.includes(kw))) {
+    return "supersession";
+  }
 
   const hasMachine = MACHINE_KEYWORDS.some((m) => lower.includes(m));
   if (hasMachine) return "machine_component";
 
   return "natural_language";
+}
+
+function lookupPathForRequest(
+  body: SearchRequest,
+  queryType: QueryType,
+): string {
+  if (typeof body.lookup_path === "string" && body.lookup_path.trim()) {
+    return body.lookup_path.trim();
+  }
+  if (queryType === "machine_component") return "machine";
+  if (queryType === "kit") return "kit";
+  if (queryType === "supersession") return "supersession";
+  if (queryType === "cross_reference") return "cross_reference";
+  if (queryType === "part_number") return "part_number";
+  return "auto";
 }
 
 // ── Embedding (called once per request, reused by semantic + RAG) ──────────
@@ -326,7 +472,8 @@ async function searchExact(
   for (const row of rowsFromData(data)) {
     const catalogRow = normalizeCatalogRow(row);
     if (!catalogRow) continue;
-    const isExact = catalogRow.part_number.toLowerCase() === query.toLowerCase();
+    const isExact =
+      catalogRow.part_number.toLowerCase() === query.toLowerCase();
     out.push(catalogRowToResult(catalogRow, isExact ? 1.0 : 0.85, "exact"));
   }
   return out;
@@ -358,10 +505,16 @@ async function searchCrossRef(
 
     const refs = catalogRow.cross_references;
     const match = refs.find((r) =>
-      r.part_number.toLowerCase().includes(query.toLowerCase()),
+      r.part_number.toLowerCase().includes(query.toLowerCase())
     );
     if (match) {
-      out.push(catalogRowToResult(catalogRow, match.verified ? 0.92 : 0.75, "cross_ref"));
+      out.push(
+        catalogRowToResult(
+          catalogRow,
+          match.verified ? 0.92 : 0.75,
+          "cross_ref",
+        ),
+      );
     }
     if (out.length >= limit) break;
   }
@@ -428,8 +581,8 @@ async function searchHybrid(
     const matchType: MatchType = hit.match_source === "both"
       ? "hybrid"
       : hit.match_source === "semantic"
-        ? "semantic"
-        : "fts";
+      ? "semantic"
+      : "fts";
     out.push(catalogRowToResult(row, hit.hybrid_score, matchType));
     if (out.length >= limit) break;
   }
@@ -489,6 +642,96 @@ function catalogRowToResult(
   };
 }
 
+function lookupPathToMatchType(path: string): MatchType {
+  if (path === "machine_serial") return "machine_serial";
+  if (path === "machine_model") return "machine_model";
+  if (path === "kit") return "kit";
+  if (path === "supersession") return "supersession";
+  if (path === "keyword") return "fts";
+  if (path === "part_number") return "exact";
+  return "hybrid";
+}
+
+function lookupEngineRowToResult(row: LookupEngineRow): PartSearchResult {
+  const compatibleMachines = [
+    [row.machine_make, row.machine_model].filter(Boolean).join(" ").trim(),
+    row.serial_prefix ? `Serial ${row.serial_prefix}*` : "",
+  ].filter((value) => value.length > 0);
+
+  const originalPartNumber =
+    typeof row.evidence?.original_part_number === "string"
+      ? row.evidence.original_part_number
+      : null;
+
+  return {
+    part_id: row.part_id ?? row.parts_catalog_id ?? `lookup:${row.part_number}`,
+    part_number: row.part_number,
+    description: row.description,
+    manufacturer: row.manufacturer,
+    category: row.category,
+    confidence: Math.max(0, Math.min(1, row.rank || row.confidence)),
+    match_type: lookupPathToMatchType(row.lookup_path),
+    cross_references: row.relationship && originalPartNumber
+      ? [{
+        source: row.source ?? "",
+        part_number: originalPartNumber,
+        verified: row.confidence >= 0.9,
+      }]
+      : [],
+    frequently_ordered_with: [],
+    compatible_machines: compatibleMachines,
+    intellidealer_status: "not_connected",
+    notes: row.relationship,
+    source: row.lookup_path === "supersession" ? "cross_ref" : "catalog",
+    lookup_path: row.lookup_path,
+    kit: {
+      id: row.kit_id,
+      number: row.kit_number,
+      name: row.kit_name,
+    },
+    stock_on_hand: row.stock_on_hand,
+    stock_locations: row.stock_locations,
+    diagrams: row.diagrams,
+    lookup_evidence: row.evidence,
+  };
+}
+
+async function searchLookupEngine(
+  supabase: any,
+  request: SearchRequest,
+  query: string,
+  queryType: QueryType,
+  workspaceId: string,
+  limit: number,
+): Promise<PartSearchResult[]> {
+  const { data, error } = await supabase.rpc("parts_lookup_engine", {
+    p_query: query,
+    p_lookup_path: lookupPathForRequest(request, queryType),
+    p_machine_make: request.machine?.make ?? null,
+    p_machine_model: request.machine?.model ?? null,
+    p_machine_serial: request.machine?.serial ?? null,
+    p_kit_number: request.kit_number ?? null,
+    p_machine_profile_id: request.machine?.profile_id ??
+      request.filters?.machine_profile_id ?? null,
+    p_workspace_id: workspaceId,
+    p_limit: Math.max(limit, 20),
+  });
+
+  if (error) {
+    console.warn(
+      "[ai-parts-lookup] parts_lookup_engine failed:",
+      error.message,
+    );
+    return [];
+  }
+
+  return rowsFromData(data)
+    .map(normalizeLookupEngineRow)
+    .filter(isNonNullable)
+    .map(lookupEngineRowToResult)
+    .slice(0, limit);
+}
+
 // ── Machine Identification ──────────────────────────────────
 
 async function identifyMachine(
@@ -497,7 +740,7 @@ async function identifyMachine(
 ): Promise<{ id: string; manufacturer: string; model: string } | null> {
   const words = query.toLowerCase().split(/\s+/);
   const machineWord = words.find((w) =>
-    MACHINE_KEYWORDS.some((m) => w.includes(m)),
+    MACHINE_KEYWORDS.some((m) => w.includes(m))
   );
   if (!machineWord) return null;
 
@@ -581,11 +824,19 @@ async function searchCatalog(
 
   if (queryType === "part_number") {
     primary = await searchExact(supabase, query, filters, limit);
-  } else if (queryType === "cross_reference") {
+  } else if (queryType === "cross_reference" || queryType === "supersession") {
     primary = await searchCrossRef(supabase, query, filters, limit);
+  } else if (queryType === "kit") {
+    primary = [];
   } else {
     // natural_language / machine_component → semantic + FTS hybrid
-    primary = await searchHybrid(supabase, query, queryEmbedding, filters, limit);
+    primary = await searchHybrid(
+      supabase,
+      query,
+      queryEmbedding,
+      filters,
+      limit,
+    );
   }
 
   // Supplement with hybrid if primary path returned < limit results
@@ -611,12 +862,17 @@ async function searchCatalog(
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   if (req.method === "OPTIONS") return optionsResponse(origin);
-  if (req.method !== "POST") return safeJsonError("Method not allowed", 405, origin);
+  if (req.method !== "POST") {
+    return safeJsonError("Method not allowed", 405, origin);
+  }
 
-  const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+  const auth = await requireServiceUser(
+    req.headers.get("Authorization"),
+    origin,
+  );
   if (!auth.ok) return auth.response;
 
-  const { supabase } = auth;
+  const { supabase, workspaceId } = auth;
   const startTime = Date.now();
 
   let body: SearchRequest;
@@ -643,20 +899,38 @@ Deno.serve(async (req) => {
   const queryType = classifyQuery(queryText);
 
   // Embed query ONCE (reused by both semantic catalog search and KB RAG)
-  const needsEmbedding =
-    queryType === "natural_language" || queryType === "machine_component";
-  const queryEmbedding = needsEmbedding ? await embedQueryOnce(queryText) : null;
+  const needsEmbedding = queryType === "natural_language" ||
+    queryType === "machine_component";
+  const queryEmbedding = needsEmbedding
+    ? await embedQueryOnce(queryText)
+    : null;
 
   // Run federated search in parallel
-  const [catalogResults, machineId, ragResults] = await Promise.all([
-    searchCatalog(supabase, queryText, queryType, queryEmbedding, filters, limit),
-    queryType === "machine_component"
-      ? identifyMachine(supabase, queryText)
-      : Promise.resolve(null),
-    needsEmbedding
-      ? searchRag(supabase, queryText, queryEmbedding, limit)
-      : Promise.resolve({ evidence: [], parts: [] }),
-  ]);
+  const [lookupResults, catalogResults, machineId, ragResults] = await Promise
+    .all([
+      searchLookupEngine(
+        supabase,
+        body,
+        queryText,
+        queryType,
+        workspaceId,
+        limit,
+      ),
+      searchCatalog(
+        supabase,
+        queryText,
+        queryType,
+        queryEmbedding,
+        filters,
+        limit,
+      ),
+      queryType === "machine_component"
+        ? identifyMachine(supabase, queryText)
+        : Promise.resolve(null),
+      needsEmbedding
+        ? searchRag(supabase, queryText, queryEmbedding, limit)
+        : Promise.resolve({ evidence: [], parts: [] }),
+    ]);
 
   // Machine-compatibility parts (when a machine was identified)
   let machinePartResults: PartSearchResult[] = [];
@@ -676,7 +950,12 @@ Deno.serve(async (req) => {
   }
 
   // Merge + dedupe
-  const allResults = [...catalogResults, ...machinePartResults, ...ragResults.parts];
+  const allResults = [
+    ...lookupResults,
+    ...catalogResults,
+    ...machinePartResults,
+    ...ragResults.parts,
+  ];
   const seen = new Set<string>();
   const deduped: PartSearchResult[] = [];
   for (const r of allResults.sort((a, b) => b.confidence - a.confidence)) {
@@ -695,23 +974,37 @@ Deno.serve(async (req) => {
     exact: 0,
     cross_ref: 0,
     machine_compat: 0,
+    machine_serial: 0,
+    machine_model: 0,
+    kit: 0,
+    supersession: 0,
   };
   for (const r of finalResults) matchMix[r.match_type]++;
 
-  const degraded = isRagCircuitOpen() || (needsEmbedding && queryEmbedding === null);
+  const degraded = isRagCircuitOpen() ||
+    (needsEmbedding && queryEmbedding === null);
 
   // Best-effort log to counter_inquiries (doesn't block response on failure)
   try {
-    const primaryMatchType =
-      matchMix.hybrid > 0
-        ? "hybrid"
-        : matchMix.semantic > 0
-          ? "semantic"
-          : matchMix.exact > 0 || matchMix.cross_ref > 0
-            ? "exact"
-            : matchMix.fts > 0
-              ? "fts"
-              : null;
+    const primaryMatchType = matchMix.hybrid > 0
+      ? "hybrid"
+      : matchMix.semantic > 0
+      ? "semantic"
+      : matchMix.machine_serial > 0
+      ? "machine_serial"
+      : matchMix.machine_model > 0
+      ? "machine_model"
+      : matchMix.kit > 0
+      ? "kit"
+      : matchMix.supersession > 0
+      ? "supersession"
+      : matchMix.cross_ref > 0
+      ? "cross_ref"
+      : matchMix.exact > 0
+      ? "exact"
+      : matchMix.fts > 0
+      ? "fts"
+      : null;
     await supabase.from("counter_inquiries").insert({
       user_id: auth.userId,
       inquiry_type: "lookup",
@@ -740,7 +1033,10 @@ Deno.serve(async (req) => {
     search_time_ms: Date.now() - startTime,
     degraded,
     ...(degraded
-      ? { degraded_reason: "Semantic search unavailable — showing keyword matches" }
+      ? {
+        degraded_reason:
+          "Semantic search unavailable — showing keyword matches",
+      }
       : {}),
     match_mix: matchMix,
   };

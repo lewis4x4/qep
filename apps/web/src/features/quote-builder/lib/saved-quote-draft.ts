@@ -108,6 +108,7 @@ function isQuoteStatus(
 ): value is NonNullable<QuoteWorkspaceDraft["quoteStatus"]> {
   const statuses: Array<NonNullable<QuoteWorkspaceDraft["quoteStatus"]>> = [
     "draft",
+    "draft_low_margin",
     "pending_approval",
     "approved",
     "approved_with_conditions",

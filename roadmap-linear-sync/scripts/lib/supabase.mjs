@@ -12,6 +12,28 @@ export class SupabaseError extends Error {
   }
 }
 
+function uniqueNonEmpty(values = []) {
+  return [...new Set(values.map((value) => String(value ?? '').trim()).filter(Boolean))];
+}
+
+function quotePostgrestInValue(value) {
+  return `"${String(value).replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
+}
+
+function setInFilter(params, column, values) {
+  const normalized = uniqueNonEmpty(values);
+  if (normalized.length === 0) return;
+  params.set(column, `in.(${normalized.map(quotePostgrestInValue).join(',')})`);
+}
+
+export function buildPendingLinearSyncQuery({ taskIds = [], linearIssueIdentifiers = [] } = {}) {
+  const params = new URLSearchParams();
+  params.set('select', '*');
+  setInFilter(params, 'task_id', taskIds);
+  setInFilter(params, 'linear_issue_identifier', linearIssueIdentifiers);
+  return params.toString();
+}
+
 export class SupabaseClient {
   constructor({ url, serviceRoleKey }) {
     if (!url) throw new Error('SUPABASE_URL required');
@@ -73,9 +95,9 @@ export class SupabaseClient {
     return rows;
   }
 
-  async listPendingLinearSync(limit = 250) {
+  async listPendingLinearSync(limit = 250, filters = {}) {
     return this.select('v_qep_roadmap_tasks_pending_linear_sync', {
-      query: `select=*`,
+      query: buildPendingLinearSyncQuery(filters),
       limit,
     });
   }

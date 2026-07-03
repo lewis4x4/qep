@@ -19,11 +19,13 @@ import {
   normalizeSearchPortalOrdersResponse,
   normalizeServiceJobResponse,
   normalizeServiceListResponse,
+  normalizeTechnicianSuggestionsResult,
   type BillingPostResult,
   type CalendarSlotsResult,
   type PortalOrderSearchRow,
   type ReassignFromBranchPoolResult,
   type ResyncPartsResult,
+  type TechnicianSuggestionsResult,
 } from "./service-api-normalizers";
 
 async function invokeServiceRouter(body: Record<string, unknown>): Promise<unknown> {
@@ -135,12 +137,12 @@ export async function postInternalBillingToInvoice(
   return normalizeBillingPostResult(data);
 }
 
-export async function suggestTechnicians(jobId: string): Promise<unknown> {
+export async function suggestTechnicians(jobId: string): Promise<TechnicianSuggestionsResult> {
   const { data, error } = await supabase.functions.invoke("service-scheduler", {
     body: { job_id: jobId },
   });
   if (error) throw new Error(error.message ?? "scheduler failed");
-  return data;
+  return normalizeTechnicianSuggestionsResult(data);
 }
 
 export async function scanUpsell(machineId: string, jobId?: string): Promise<unknown> {
@@ -351,6 +353,18 @@ export async function acknowledgeSegmentOverrun(payload: {
   overrun_reason: string;
 }): Promise<unknown> {
   return invokeServiceRouter({ action: "acknowledge_segment_overrun", ...payload });
+}
+
+export async function recordSegmentLabor(payload: {
+  segment_id: string;
+  hours_actual?: number;
+  estimated_hours?: number;
+  quoted_labor_hours?: number;
+  complaint?: string;
+  cause?: string;
+  correction?: string;
+}): Promise<unknown> {
+  return invokeServiceRouter({ action: "record_segment_labor", ...payload });
 }
 
 export async function uploadAndRecordSegmentPhoto(payload: {

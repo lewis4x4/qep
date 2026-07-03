@@ -176,7 +176,7 @@ export function PricingAdderBuckets({
           </div>
           <div className="rounded-lg border border-border/70 bg-background/40 p-3">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Misc charges / credits</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">Use for wrap, down payment received, one-off charges, or customer-visible credits not covered above.</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">Use for wrap, one-off charges, or customer-visible credits not covered above. Cash down and deposits have dedicated fields.</p>
             <div className="mt-3 grid gap-3 lg:grid-cols-2">
               <div className="rounded-lg border border-border/60 bg-card/50 p-3">
                 <p className="text-sm font-medium text-foreground">Misc charge</p>

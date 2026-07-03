@@ -10,11 +10,20 @@ export async function generateInvoiceForServiceJob(
   const { data: job, error: jErr } = await supabase
     .from("service_jobs")
     .select(
-      "id, workspace_id, customer_id, quote_total, portal_request_id, comeback_no_rebill",
+      "id, workspace_id, customer_id, quote_total, portal_request_id, comeback_no_rebill, request_type, renter_fault_billable",
     )
     .eq("id", jobId)
     .single();
   if (jErr || !job) return { invoice_id: null, error: "job not found" };
+  if (
+    String(job.request_type ?? "") === "internal" &&
+    job.renter_fault_billable !== true
+  ) {
+    return {
+      invoice_id: null,
+      error: "no customer invoice for internal service cost posting",
+    };
+  }
   if (job.comeback_no_rebill === true) {
     return {
       invoice_id: null,

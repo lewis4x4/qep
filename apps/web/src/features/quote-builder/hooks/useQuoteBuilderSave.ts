@@ -179,6 +179,16 @@ export function resolveSavedQuoteStatus(
   return savedStatus ?? currentStatus ?? "draft";
 }
 
+export function resolveDraftSaveStatus(input: {
+  saveMode: SaveQuoteVariables["saveMode"];
+  marginPct: number;
+  marginFloorPct: number | null;
+}): "draft" | "draft_low_margin" {
+  return input.saveMode === "manual" && isUnderThreshold(input.marginPct, input.marginFloorPct)
+    ? "draft_low_margin"
+    : "draft";
+}
+
 export function useQuoteBuilderSave({
   draft,
   setDraft,

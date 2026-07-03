@@ -16,7 +16,13 @@ import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors
 import { requireServiceUser } from "../_shared/service-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
-import { clampCurrency, computeQuoteTax, type QuoteTaxProfile, type TaxLine } from "./tax-logic.ts";
+import {
+  clampCurrency,
+  computeFederalExciseTax,
+  computeQuoteTax,
+  type QuoteTaxProfile,
+  type TaxLine,
+} from "./tax-logic.ts";
 
 function computeSection179(
   equipmentCost: number,
@@ -87,6 +93,11 @@ Deno.serve(async (req) => {
     const taxOverrideReason = typeof body.tax_override_reason === "string" ? body.tax_override_reason.trim() : "";
     const taxableBasis = clampCurrency(subtotal - discountTotal - tradeAllowance);
     const section179Base = clampCurrency(subtotal - discountTotal);
+    const fetApplicable = body.fet_applicable === true || body.include_fet === true;
+    const fetTaxableBasis = body.fet_taxable_amount == null || body.fet_taxable_amount === ""
+      ? taxableBasis
+      : clampCurrency(body.fet_taxable_amount);
+    const cashReceivedAmount = clampCurrency(body.cash_received_amount);
 
     if (subtotal <= 0) return safeJsonError("subtotal must be positive", 400, origin);
     if (taxOverrideAmount != null && taxOverrideReason.length === 0) {
@@ -229,6 +240,67 @@ Deno.serve(async (req) => {
       };
     }
 
+    let fetRate = 0.12;
+    let fetCertificateId: string | null = null;
+    let fetExemptionLabel: string | null = null;
+
+    if (fetApplicable) {
+      const allowedTreatmentWorkspaces = Array.from(new Set([workspaceId, "default"]));
+      const { data: fetTreatments } = await supabaseAdmin
+        .from("tax_treatments")
+        .select("workspace_id, name, rate, effective_date")
+        .in("workspace_id", allowedTreatmentWorkspaces)
+        .eq("jurisdiction", "US")
+        .eq("tax_type", "federal_excise_tax")
+        .eq("applies_to", "equipment_new")
+        .eq("is_active", true)
+        .order("effective_date", { ascending: false })
+        .limit(10);
+      const treatmentRows = Array.isArray(fetTreatments) ? fetTreatments : [];
+      const fetTreatment = treatmentRows.find((row) => row.workspace_id === workspaceId)
+        ?? treatmentRows.find((row) => row.workspace_id === "default")
+        ?? null;
+      if (fetTreatment?.rate != null && Number.isFinite(Number(fetTreatment.rate))) {
+        fetRate = Number(fetTreatment.rate);
+      }
+
+      if (companyId) {
+        const today = new Date().toISOString().split("T")[0];
+        const { data: fetCertificates } = await supabaseAdmin
+          .from("fet_exemption_certificates")
+          .select("id, certificate_number, exemption_type")
+          .eq("workspace_id", workspaceId)
+          .eq("crm_company_id", companyId)
+          .eq("status", "verified")
+          .eq("covers_equipment", true)
+          .or(`expiration_date.is.null,expiration_date.gte.${today}`)
+          .order("verified_at", { ascending: false })
+          .limit(1);
+        const certificate = Array.isArray(fetCertificates) ? fetCertificates[0] : null;
+        if (certificate?.id) {
+          fetCertificateId = String(certificate.id);
+          const certificateNumber = typeof certificate.certificate_number === "string"
+            ? certificate.certificate_number
+            : "verified";
+          const exemptionType = typeof certificate.exemption_type === "string"
+            ? certificate.exemption_type.replace(/_/g, " ")
+            : "FET";
+          fetExemptionLabel = `${exemptionType} FET exemption (cert #${certificateNumber})`;
+        }
+      }
+    }
+
+    const fetResult = computeFederalExciseTax({
+      taxableBasis: fetTaxableBasis,
+      applicable: fetApplicable,
+      rate: fetRate,
+      exemptionApplied: fetCertificateId != null,
+      exemptionLabel: fetExemptionLabel,
+      certificateId: fetCertificateId,
+    });
+
+    const form8300Required = cashReceivedAmount > 10_000;
+
     // Section 179 scenarios
     let section179 = null;
     if (body.include_179 !== false && section179Base > 0) {
@@ -267,6 +339,16 @@ Deno.serve(async (req) => {
       taxable_basis: taxResult.taxable_basis,
       exemptions_applied: taxResult.exemptions_applied,
       manual_override_applied: taxResult.manual_override_applied,
+      fet_lines: fetResult.fet_lines,
+      fet_rate: fetResult.fet_rate,
+      fet_amount: fetResult.fet_amount,
+      fet_taxable_basis: fetResult.fet_taxable_basis,
+      fet_exemption_applied: fetResult.fet_exemption_applied,
+      fet_certificate_id: fetResult.fet_certificate_id,
+      total_liability: clampCurrency(taxResult.total_tax + fetResult.fet_amount),
+      form_8300_required: form8300Required,
+      form_8300_cash_amount: cashReceivedAmount,
+      form_8300_status: form8300Required ? "pending" : "not_required",
       section_179: section179,
       equipment_cost: section179Base,
     }, origin);
