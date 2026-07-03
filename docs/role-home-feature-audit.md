@@ -270,9 +270,14 @@ The `(select ...)` wrapper avoids InitPlan re-evaluation per row.
 ### B4. Home route resolution ([home-route.ts](apps/web/src/lib/home-route.ts))
 `resolveHomeRoute(userRole, ironRole?, audience?, floorMode?)`:
 1. `audience=stakeholder` → `/brief`
-2. `floorMode=true` → `/floor`
-3. By iron_role: `iron_woman` → `/parts/companion/queue`; `iron_man` → `/service`; `iron_manager` → `/qrm`; `iron_advisor` → `/sales/today`.
-4. By system role: `owner` → `/owner`; `admin|manager` → `/qrm`; `parts` → `/parts/companion/queue`; `service` → `/service`; `rep` → `/sales/today`; default `/dashboard`.
+2. Core business system roles resolve before any floor/iron fallback: `owner` → `/owner`; `admin|manager` → `/qrm`; `parts` → `/parts/companion/queue`; `service` → `/service`; `rental|rentals` → `/rentals`; `rep` → `/sales/today`.
+3. Only non-core roles fall back to `/floor` when `floorMode=true` or the profile has a recognized Floor/Iron assignment.
+4. Unknown roles without floor mode or a recognized Floor/Iron assignment fall back to `/dashboard`.
+
+Route guard helpers keep reps out of non-sales management surfaces:
+- `canAccessFloorSurface("rep")` → `false`; `/floor` deep links redirect reps back to `homeRoute` (`/sales/today`).
+- `canAccessQrmSurface("rep")` and `canAccessManagerAdminRoute("rep", ...)` → `false`; `/qrm` and manager/admin-only routes redirect reps back to `homeRoute`.
+- `manager`, `admin`, and `owner` keep access to QRM/manager surfaces.
 
 `canUseElevatedQrmScopes()` — true if owner/admin/manager OR `iron_manager`.
 
