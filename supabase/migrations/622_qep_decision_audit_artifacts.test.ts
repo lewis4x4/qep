@@ -37,6 +37,6 @@ describe("622_qep_decision_audit_artifacts.sql QEP-150 contract", () => {
   it("keeps service-role write access and authenticated read access only", () => {
     expect(compactSql).toContain("alter table public.qep_decision_audit_artifacts enable row level security");
     expect(compactSql).toContain("for all to service_role using (true) with check (true)");
-    expect(compactSql).toContain("for select to authenticated using (public.get_my_role() in ('admin', 'manager', 'owner'))");
+    expect(compactSql).toContain("for select to authenticated using ((select public.get_my_role()) in ('admin', 'manager', 'owner'))");
   });
 });
