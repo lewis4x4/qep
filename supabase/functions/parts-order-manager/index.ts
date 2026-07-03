@@ -27,7 +27,9 @@ type Action =
   | "update_order_lines"
   | "advance_status"
   | "pick_order_line"
-  | "reserve_interbranch_transfer";
+  | "reserve_interbranch_transfer"
+  | "create_parts_quote"
+  | "convert_parts_quote_to_order";
 
 interface Body {
   action: Action;
@@ -55,6 +57,13 @@ interface Body {
   customer_choice?: string;
   scheduled_at?: string | null;
   oem_order_eta_days?: number;
+  customer_id?: string;
+  contact_id?: string | null;
+  quote_source?: string;
+  expires_at?: string | null;
+  freight_estimate_cents?: number;
+  freight_estimate_source?: string;
+  parts_quote_id?: string;
 }
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -161,6 +170,45 @@ function receiptNumber(): string {
   return `POS-${day}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 }
 
+function partsQuoteNumber(): string {
+  const day = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  return `PQ-${day}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+}
+
+function moneyCents(x: unknown): number | null {
+  const n = num(x);
+  if (n == null || n < 0) return null;
+  return Math.round(n * 100);
+}
+
+function sanitizeQuoteLines(raw: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(raw)) return [];
+  const out: Array<Record<string, unknown>> = [];
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const o = row as Record<string, unknown>;
+    const partNumber =
+      typeof o.part_number === "string" ? o.part_number.trim().slice(0, 120) : "";
+    if (!partNumber) continue;
+    const quantity = Math.max(1, Math.min(99_999, Math.floor(num(o.quantity) ?? 1)));
+    const unitPriceCents = moneyCents(o.unit_price);
+    if (unitPriceCents == null) continue;
+    const description =
+      typeof o.description === "string" ? o.description.trim().slice(0, 500) : null;
+    const extendedPriceCents = unitPriceCents * quantity;
+    out.push({
+      part_number: partNumber,
+      quantity,
+      description,
+      unit_price_cents: unitPriceCents,
+      extended_price_cents: extendedPriceCents,
+      discount_pct: num(o.discount_pct),
+      part_catalog_id: typeof o.part_catalog_id === "string" ? o.part_catalog_id : null,
+    });
+  }
+  return out.slice(0, 200);
+}
+
 function completeTenderPatch(
   patch: CounterTenderPatch,
   current: CounterTenderState | null | undefined,
@@ -227,7 +275,7 @@ Deno.serve(async (req) => {
     }
 
     const srcRaw = typeof body.order_source === "string" ? body.order_source.trim() : "counter";
-    const orderSource = ["counter", "phone", "online", "transfer"].includes(srcRaw)
+    const orderSource = ["counter", "phone", "email", "online", "transfer"].includes(srcRaw)
       ? srcRaw
       : "counter";
 
@@ -447,7 +495,7 @@ Deno.serve(async (req) => {
     if (typeof body.notes === "string") patch.notes = body.notes.trim().slice(0, 4000);
     if (typeof body.order_source === "string") {
       const src = body.order_source.trim();
-      if (["counter", "phone", "online", "transfer"].includes(src)) {
+      if (["counter", "phone", "email", "online", "transfer"].includes(src)) {
         patch.order_source = src;
       }
     }
@@ -884,6 +932,166 @@ Deno.serve(async (req) => {
     }
 
     return safeJsonOk({ reservation }, origin, 201);
+  }
+
+  // ── CREATE PARTS QUOTE ──────────────────────────────────────────────
+  if (action === "create_parts_quote") {
+    const customerId = typeof body.customer_id === "string" ? body.customer_id.trim() : "";
+    const contactId =
+      typeof body.contact_id === "string" && body.contact_id.trim()
+        ? body.contact_id.trim()
+        : null;
+    const quoteSourceRaw =
+      typeof body.quote_source === "string" ? body.quote_source.trim() : "phone";
+    const quoteSource =
+      ["counter", "phone", "email", "walkin", "service", "online"].includes(quoteSourceRaw)
+        ? quoteSourceRaw
+        : "phone";
+    const freightEstimateCents = Math.max(
+      0,
+      Math.floor(num(body.freight_estimate_cents) ?? 0),
+    );
+    const freightSourceRaw =
+      typeof body.freight_estimate_source === "string"
+        ? body.freight_estimate_source.trim()
+        : "unknown";
+    const freightEstimateSource = [
+        "vendor_estimate",
+        "staff_estimate",
+        "not_required",
+        "unknown",
+      ].includes(freightSourceRaw)
+      ? freightSourceRaw
+      : "unknown";
+    const expiresAt =
+      typeof body.expires_at === "string" && body.expires_at.trim()
+        ? body.expires_at.trim()
+        : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const notes = typeof body.notes === "string" ? body.notes.trim().slice(0, 4000) : null;
+    const description =
+      typeof body.notes === "string" ? body.notes.trim().slice(0, 500) : null;
+    const quoteLines = sanitizeQuoteLines(body.line_items);
+
+    if (!customerId) {
+      return safeJsonError("customer_id is required", 400, origin);
+    }
+    if (quoteLines.length === 0) {
+      return safeJsonError(
+        "line_items must contain at least one priced part line",
+        400,
+        origin,
+      );
+    }
+
+    const subtotalCents = quoteLines.reduce(
+      (sum, line) => sum + Number(line.extended_price_cents),
+      0,
+    );
+    const totalCents = subtotalCents + freightEstimateCents;
+
+    const { data: quote, error: quoteErr } = await supabase
+      .from("parts_quotes")
+      .insert({
+        workspace_id: workspaceId,
+        quote_number: partsQuoteNumber(),
+        customer_id: customerId,
+        contact_id: contactId,
+        salesperson_id: userId,
+        assigned_salesperson_id: userId,
+        description,
+        status: "draft",
+        expiry_date: expiresAt.slice(0, 10),
+        expires_at: expiresAt,
+        quote_source: quoteSource,
+        freight_estimate_cents: freightEstimateCents,
+        freight_estimate_source: freightEstimateSource,
+        payment_rule: "cash_up_front_including_freight",
+        subtotal_cents: subtotalCents,
+        discount_cents: 0,
+        tax_cents: 0,
+        total_cents: totalCents,
+        notes,
+        metadata: {
+          source: "parts-order-manager",
+          payment_rule: "cash_up_front_including_freight",
+        },
+      })
+      .select()
+      .single();
+
+    if (quoteErr || !quote?.id) {
+      console.error("parts-order-manager quote create:", quoteErr);
+      return safeJsonError("Failed to create parts quote", 400, origin);
+    }
+
+    const lineRows = quoteLines.map((line, idx) => ({
+      workspace_id: workspaceId,
+      parts_quote_id: quote.id,
+      sort_order: idx,
+      part_catalog_id: line.part_catalog_id,
+      part_number: line.part_number,
+      description: line.description,
+      qty: line.quantity,
+      unit_price_cents: line.unit_price_cents,
+      discount_pct: line.discount_pct,
+      extended_price_cents: line.extended_price_cents,
+    }));
+
+    const { error: linesErr } = await supabase.from("parts_quote_lines").insert(lineRows);
+    if (linesErr) {
+      console.error("parts-order-manager quote lines:", linesErr);
+      await supabase.from("parts_quotes").delete().eq("id", quote.id);
+      return safeJsonError("Failed to create parts quote lines", 500, origin);
+    }
+
+    return safeJsonOk({ quote, lines: lineRows.length }, origin, 201);
+  }
+
+  // ── CONVERT PARTS QUOTE TO ORDER ────────────────────────────────────
+  if (action === "convert_parts_quote_to_order") {
+    const quoteId =
+      typeof body.parts_quote_id === "string" ? body.parts_quote_id.trim() : "";
+    const crmCompanyId =
+      typeof body.crm_company_id === "string" ? body.crm_company_id.trim() : "";
+    const orderSource =
+      typeof body.order_source === "string" && body.order_source.trim()
+        ? body.order_source.trim()
+        : null;
+    const paymentClassification =
+      typeof body.payment_classification === "string" && body.payment_classification.trim()
+        ? body.payment_classification.trim()
+        : "cash";
+
+    if (!quoteId || !crmCompanyId) {
+      return safeJsonError(
+        "parts_quote_id and crm_company_id are required",
+        400,
+        origin,
+      );
+    }
+
+    const { data: conversion, error: convertErr } = await supabase.rpc(
+      "parts_convert_quote_to_order",
+      {
+        p_parts_quote_id: quoteId,
+        p_crm_company_id: crmCompanyId,
+        p_order_source: orderSource,
+        p_payment_classification: paymentClassification,
+        p_created_by: userId,
+        p_workspace_id: workspaceId,
+      },
+    );
+
+    if (convertErr) {
+      console.error("parts-order-manager quote conversion:", convertErr);
+      return safeJsonError(
+        convertErr.message ?? "Failed to convert parts quote",
+        400,
+        origin,
+      );
+    }
+
+    return safeJsonOk({ conversion }, origin, 201);
   }
 
   return safeJsonError(`Unknown action: ${String(action)}`, 400, origin);
