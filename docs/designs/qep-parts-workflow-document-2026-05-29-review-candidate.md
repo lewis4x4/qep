@@ -1,7 +1,7 @@
 # QEP Parts Workflow Document — Review Candidate for Domain Validation
 
 > **Status:** REVIEW CANDIDATE — ready for red-line and sign-off by **Juan + Norman**
-> **Date:** 2026-05-29; refreshed 2026-06-30 after the roadmap source-of-truth migration unblocked D3.6
+> **Date:** 2026-05-29; refreshed 2026-06-30 after the roadmap source-of-truth migration unblocked D3.6; refreshed 2026-07-03 to confirm the owner-review gate remains open
 > **Roadmap task:** D3.6 — "Parts workflow document" (Stream D / Wave D3, _Parts module refinement gate_; roadmap id `3306`, source ref `CLAUDE_CODE_HANDOFF §8`)
 > **Closes the operator-validation loop when:** Juan + Norman validate the workflow stages, confirm/correct the assumptions, and resolve (or defer) the open decision points in §20.
 > **Authoring method:** Assembled from a structured, evidence-backed read of the live QEP codebase on 2026-05-29 (file/line citations throughout), the legacy IntelliDealer Phase-3 Parts index, and the D3.6 roadmap seed. The 2026-06-30 roadmap source-of-truth migration records that the Parts Department Discovery 28-decision-point answers unblocked D3.6; the underlying discovery/blueprint artifacts are still not committed in this repository, so claims that depend on those artifacts remain marked as assumptions (§19) and questions (§20).
@@ -11,6 +11,10 @@
 ## How to read this document
 
 This is a **capture-and-refine** document, not a build spec. The QEP Parts module is already heavily implemented. The job here is to (a) describe the end-to-end parts workflow **as it actually exists in code today**, (b) map each stage to the real surfaces (frontend pages/components, edge functions, DB tables/views/RPCs), and (c) surface the gaps, inconsistencies, and unfinished edges as **decision points for the human owners**.
+
+### 2026-07-03 owner-review gate
+
+This packet remains the D3.6 / QEP-100 owner review packet. No source-controlled Juan + Norman signed v1, dated red-line, or pass/pass-with-exceptions decision was found during the 2026-07-03 roadmap cleanup. D3.6 therefore remains owner-review gated and must not be marked shipped until Juan + Norman validate the workflow stages, resolve or explicitly defer the §20 decisions, and record the signed v1 evidence path in the roadmap row.
 
 Every workflow section carries a **Status line** using this legend:
 

@@ -613,16 +613,18 @@ VALUES
  8202),
 
 -- ================ Stream K — Financials Re-architecture ====================
--- GATED on the owner-requested engineering working session. Every row is
--- pending_decision with blocking_decision = BLK-FIN-WORKING-SESSION; none of
--- this proceeds until that session resolves direction.
+-- 2026-07-03 reconciliation: the SoR direction is decided by
+-- docs/operations/QEP_FINANCE_K_STREAM_DECISION_ARTIFACT_2026-07-03.md.
+-- K1.1 can proceed as implementation work; K4.1 is closed by the decision log.
+-- K3.1 remains open only for concrete migration-path decisions. K2.1 still
+-- carries the original finance working-session gate.
 
 ('K1.1', 'K', 'K1', 'QEP OS native AR/AP + reporting as system of record',
- 'Make QEP OS the accounting system of record: native AR, AP, and reporting that writes its own financial data, generating the customer invoice and owning the ledger. This reverses the current Phase-8 assumption where QuickBooks is the ledger (quickbooks-gl-sync posts journal entries today). GATED on the owner-requested engineering working session on invoicing / AR / AP / reporting and the migration path.',
- 'pending_decision', 'Architect to Engineer',
- 'BLK-FIN-WORKING-SESSION',
- 'QEP_SERVICE_ROADMAP_ALIGNMENT_2026-05-29.md Section 1.2, Section 8.1',
- '[2026-05-29] Created from Service Department roadmap alignment. Acceptance: a written decision from the working session that QEP OS is the system of record, with the native AR/AP/reporting scope defined.',
+ 'Implement QEP OS as the forward accounting system of record for native AR, AP, customer invoices, reporting, tax evidence, close/reopen audit, job costing, and financial source data. QuickBooks Desktop is downstream check-register/CPA-reporting output only. Remaining open finance values must stay parameterized or config-driven; do not hard-code working-session values.',
+ 'not_started', 'Engineer',
+ NULL,
+ 'QEP_SERVICE_ROADMAP_ALIGNMENT_2026-05-29.md Section 1.2, Section 8.1 | docs/operations/QEP_FINANCE_K_STREAM_DECISION_ARTIFACT_2026-07-03.md | supabase/migrations/655_finance_foundation_invoice_numbering.sql | supabase/migrations/656_finance_foundation_quarter_close_reopen.sql | supabase/migrations/657_finance_foundation_ar_dunning_cycle.sql | supabase/migrations/658_finance_foundation_ap_three_way_match.sql | supabase/migrations/659_finance_foundation_county_tax_rentals.sql | supabase/migrations/660_finance_foundation_equipment_reversal_approvals.sql | supabase/migrations/661_finance_foundation_fet_form8300.sql | supabase/migrations/662_finance_foundation_margin_segments.sql | supabase/migrations/663_finance_foundation_intellidealer_master_match_dry_run.sql',
+ '[2026-05-29] Created from Service Department roadmap alignment. Acceptance: QEP OS owns AR/AP/reporting after cutover. [2026-07-03] SoR decision satisfied by the finance K-stream artifact; build-now foundation exists in migrations 655-663, while open finance values remain config/working-session items rather than blockers to the SoR direction.',
  8301),
 
 ('K2.1', 'K', 'K2', 'Structured parts-vs-service revenue split',
@@ -634,19 +636,19 @@ VALUES
  8302),
 
 ('K3.1', 'K', 'K3', 'QuickBooks reduced to vendor-pay + cash + migration path',
- 'Downgrade QuickBooks to vendor-pay and cash collection only (no longer the ledger), and define the migration path from the current QuickBooks-as-ledger implementation to QEP OS as system of record. GATED on the owner-requested engineering working session.',
- 'pending_decision', 'Architect to Engineer',
- 'BLK-FIN-WORKING-SESSION',
- 'QEP_SERVICE_ROADMAP_ALIGNMENT_2026-05-29.md Section 1.2, Section 8.1',
- '[2026-05-29] Created from Service Department roadmap alignment. Acceptance: a defined migration path that reduces QuickBooks to vendor-pay + cash with QEP OS owning AR/AP/reporting.',
+ 'QuickBooks role is decided: downstream vendor-pay, cash/check-register, and CPA-reporting output only, not the ledger. This row remains open only for migration-path decisions: allocation basis, depreciation, lender floor-plan terms, IBS treatment, CPA adjustment posting target, open service-WO migration, invoice width, master-ID strategy, finance-charge basis, and missing finance exports/attachments.',
+ 'pending_decision', 'Finance + Engineer',
+ 'BLK-FIN-MIGRATION-PATH',
+ 'QEP_SERVICE_ROADMAP_ALIGNMENT_2026-05-29.md Section 1.2, Section 8.1 | docs/operations/QEP_FINANCE_K_STREAM_DECISION_ARTIFACT_2026-07-03.md',
+ '[2026-05-29] Created from Service Department roadmap alignment. Acceptance: a defined migration path that reduces QuickBooks to vendor-pay + cash with QEP OS owning AR/AP/reporting. [2026-07-03] QuickBooks-as-ledger question is closed; keep this row open only for the concrete migration-path decisions listed in the K-stream decision artifact.',
  8303),
 
 ('K4.1', 'K', 'K4', 'Revisit Build-Lock memo G5 vs accounting-SoR direction',
- 'Revisit Build-Lock memo G5 against the accounting-system-of-record direction, as the owner explicitly flagged. Pull the memo, diff it against the QEP-OS-as-SoR direction (Section 1.2), and log the decision. GATED on the owner-requested engineering working session.',
- 'pending_decision', 'Architect to Engineer',
- 'BLK-FIN-WORKING-SESSION',
- 'QEP_SERVICE_ROADMAP_ALIGNMENT_2026-05-29.md Section 1.2, Section 6.3, Section 8.2',
- '[2026-05-29] Created from Service Department roadmap alignment. Acceptance: Build-Lock memo G5 is reconciled against the accounting-SoR direction and the decision is logged.',
+ 'Reconcile Build-Lock memo G5 against the accounting-system-of-record direction. Decision logged: G5 remains valid only as a bridge/outbound-feed precedent; Stream K target architecture is QEP OS as SoR and QuickBooks is downstream output.',
+ 'shipped', 'Architect',
+ NULL,
+ 'QEP_SERVICE_ROADMAP_ALIGNMENT_2026-05-29.md Section 1.2, Section 6.3, Section 8.2 | docs/operations/QEP_FINANCE_K_STREAM_DECISION_ARTIFACT_2026-07-03.md',
+ '[2026-05-29] Created from Service Department roadmap alignment. Acceptance: Build-Lock memo G5 is reconciled against the accounting-SoR direction and the decision is logged. [2026-07-03] Shipped by the K-stream decision artifact: native AR/AP remains the long-term target, QuickBooks API is a Phase 1-7 bridge/outbound feed, and any QuickBooks-as-ledger interpretation is superseded.',
  8304)
 ON CONFLICT (task_id) DO UPDATE SET
   stream = EXCLUDED.stream,
