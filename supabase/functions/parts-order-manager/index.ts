@@ -9,6 +9,13 @@ import {
   safeJsonError,
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
+import {
+  assertCounterReleaseAllowed,
+  CounterPosRuleError,
+  normalizeCounterTenderInput,
+  type CounterTenderPatch,
+  type CounterTenderState,
+} from "./counter-pos-rules.ts";
 
 type Action =
   | "create_internal_order"
@@ -32,6 +39,11 @@ interface Body {
   new_status?: string;
   parts_order_line_id?: string;
   branch_id?: string;
+  payment_classification?: string;
+  payment_status?: string;
+  payment_reference?: string | null;
+  charge_authorization_status?: string;
+  charge_authorization_note?: string | null;
 }
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -118,6 +130,52 @@ function totalsFromLines(lines: Array<Record<string, unknown>>): {
   return { subtotal, total: subtotal };
 }
 
+function counterPosErrorResponse(error: unknown, origin: string | null): Response | null {
+  if (error instanceof CounterPosRuleError) {
+    return safeJsonError(error.message, error.status, origin);
+  }
+  return null;
+}
+
+function hasTenderInput(body: Body): boolean {
+  return body.payment_classification !== undefined ||
+    body.payment_status !== undefined ||
+    body.payment_reference !== undefined ||
+    body.charge_authorization_status !== undefined ||
+    body.charge_authorization_note !== undefined;
+}
+
+function receiptNumber(): string {
+  const day = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  return `POS-${day}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+}
+
+function completeTenderPatch(
+  patch: CounterTenderPatch,
+  current: CounterTenderState | null | undefined,
+  actorId: string,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...patch };
+  if (
+    patch.payment_classification === "cash" &&
+    patch.payment_status === "paid" &&
+    current?.payment_status !== "paid"
+  ) {
+    out.payment_received_at = new Date().toISOString();
+    out.receipt_number = receiptNumber();
+  }
+  if (
+    patch.payment_classification === "charge" &&
+    ["approved_credit", "exec_approved"].includes(patch.charge_authorization_status) &&
+    current?.charge_authorization_status !== patch.charge_authorization_status
+  ) {
+    out.charge_authorized_by = actorId;
+    out.charge_authorized_at = new Date().toISOString();
+    out.receipt_number = receiptNumber();
+  }
+  return out;
+}
+
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   if (req.method === "OPTIONS") return optionsResponse(origin);
@@ -173,6 +231,18 @@ Deno.serve(async (req) => {
       typeof body.fleet_id === "string" && body.fleet_id.trim()
         ? body.fleet_id.trim()
         : null;
+    let tenderPatch: Record<string, unknown>;
+    try {
+      tenderPatch = completeTenderPatch(
+        normalizeCounterTenderInput(body as unknown as Record<string, unknown>, null),
+        null,
+        userId,
+      );
+    } catch (e) {
+      const response = counterPosErrorResponse(e, origin);
+      if (response) return response;
+      throw e;
+    }
 
     const insertRow: Record<string, unknown> = {
       workspace_id: wsRow.workspace_id,
@@ -189,6 +259,7 @@ Deno.serve(async (req) => {
       tax: 0,
       shipping: 0,
       total,
+      ...tenderPatch,
     };
 
     const { data: order, error: insErr } = await supabase
@@ -229,7 +300,13 @@ Deno.serve(async (req) => {
       eventType: "created",
       actorId: userId,
       toStatus: "draft",
-      metadata: { order_source: orderSource, line_count: lineRows.length },
+      metadata: {
+        order_source: orderSource,
+        line_count: lineRows.length,
+        payment_classification: insertRow.payment_classification,
+        payment_status: insertRow.payment_status,
+        charge_authorization_status: insertRow.charge_authorization_status,
+      },
     });
 
     return safeJsonOk({ order }, origin, 201);
@@ -245,7 +322,9 @@ Deno.serve(async (req) => {
 
     const { data: row, error: fetchErr } = await supabase
       .from("parts_orders")
-      .select("id, status, workspace_id, portal_customer_id, crm_company_id, order_source")
+      .select(
+        "id, status, workspace_id, portal_customer_id, crm_company_id, order_source, payment_classification, payment_status, charge_authorization_status",
+      )
       .eq("id", orderId)
       .maybeSingle();
 
@@ -257,6 +336,13 @@ Deno.serve(async (req) => {
     }
     if (!row.crm_company_id) {
       return safeJsonError("Internal submit requires crm_company_id on order", 400, origin);
+    }
+    try {
+      assertCounterReleaseAllowed({ ...row, status: "submitted" });
+    } catch (e) {
+      const response = counterPosErrorResponse(e, origin);
+      if (response) return response;
+      throw e;
     }
 
     const { data: run, error: runErr } = await supabase
@@ -290,6 +376,9 @@ Deno.serve(async (req) => {
       payload: {
         parts_order_id: orderId,
         order_source: row.order_source ?? "counter",
+        payment_classification: row.payment_classification ?? "cash",
+        payment_status: row.payment_status ?? "unpaid",
+        charge_authorization_status: row.charge_authorization_status ?? "not_applicable",
         audit_channel: "shop",
       },
     });
@@ -304,7 +393,12 @@ Deno.serve(async (req) => {
       actorId: userId,
       fromStatus: "draft",
       toStatus: "submitted",
-      metadata: { fulfillment_run_id: run.id },
+      metadata: {
+        fulfillment_run_id: run.id,
+        payment_classification: row.payment_classification ?? "cash",
+        payment_status: row.payment_status ?? "unpaid",
+        charge_authorization_status: row.charge_authorization_status ?? "not_applicable",
+      },
     });
 
     return safeJsonOk({ order: updated, fulfillment_run_id: run.id }, origin);
@@ -320,7 +414,9 @@ Deno.serve(async (req) => {
 
     const { data: row, error: fetchErr } = await supabase
       .from("parts_orders")
-      .select("id, status")
+      .select(
+        "id, status, workspace_id, payment_classification, payment_status, charge_authorization_status",
+      )
       .eq("id", orderId)
       .maybeSingle();
 
@@ -341,6 +437,22 @@ Deno.serve(async (req) => {
     }
     if (body.shipping_address !== undefined) {
       patch.shipping_address = body.shipping_address;
+    }
+    if (hasTenderInput(body)) {
+      try {
+        Object.assign(
+          patch,
+          completeTenderPatch(
+            normalizeCounterTenderInput(body as unknown as Record<string, unknown>, row),
+            row,
+            userId,
+          ),
+        );
+      } catch (e) {
+        const response = counterPosErrorResponse(e, origin);
+        if (response) return response;
+        throw e;
+      }
     }
 
     if (Object.keys(patch).length === 0) {
@@ -380,7 +492,9 @@ Deno.serve(async (req) => {
 
     const { data: row, error: fetchErr } = await supabase
       .from("parts_orders")
-      .select("id, status, workspace_id")
+      .select(
+        "id, status, workspace_id, order_source, payment_classification, payment_status, charge_authorization_status",
+      )
       .eq("id", orderId)
       .maybeSingle();
 
@@ -511,6 +625,13 @@ Deno.serve(async (req) => {
         origin,
       );
     }
+    try {
+      assertCounterReleaseAllowed({ ...row, status: newStatus });
+    } catch (e) {
+      const response = counterPosErrorResponse(e, origin);
+      if (response) return response;
+      throw e;
+    }
 
     const patch: Record<string, unknown> = { status: newStatus };
     if (newStatus === "shipped") {
@@ -566,7 +687,9 @@ Deno.serve(async (req) => {
 
     const { data: order, error: oErr } = await supabase
       .from("parts_orders")
-      .select("id, status, workspace_id")
+      .select(
+        "id, status, workspace_id, order_source, payment_classification, payment_status, charge_authorization_status",
+      )
       .eq("id", orderId)
       .maybeSingle();
 
@@ -579,6 +702,13 @@ Deno.serve(async (req) => {
         400,
         origin,
       );
+    }
+    try {
+      assertCounterReleaseAllowed(order);
+    } catch (e) {
+      const response = counterPosErrorResponse(e, origin);
+      if (response) return response;
+      throw e;
     }
 
     const { data: line, error: lErr } = await supabase

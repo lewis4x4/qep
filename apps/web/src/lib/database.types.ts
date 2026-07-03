@@ -16971,6 +16971,10 @@ export type Database = {
         Row: {
           ai_suggested_pm_kit: boolean | null
           ai_suggestion_reason: string | null
+          charge_authorization_note: string | null
+          charge_authorization_status: string
+          charge_authorized_at: string | null
+          charge_authorized_by: string | null
           created_at: string
           created_by: string | null
           crm_company_id: string | null
@@ -16984,6 +16988,10 @@ export type Database = {
           line_items: Json
           notes: string | null
           order_source: string
+          payment_classification: string
+          payment_received_at: string | null
+          payment_reference: string | null
+          payment_status: string
           photo_identification: Json | null
           po_total_cents: number
           po_type: string | null
@@ -17003,6 +17011,10 @@ export type Database = {
         Insert: {
           ai_suggested_pm_kit?: boolean | null
           ai_suggestion_reason?: string | null
+          charge_authorization_note?: string | null
+          charge_authorization_status?: string
+          charge_authorized_at?: string | null
+          charge_authorized_by?: string | null
           created_at?: string
           created_by?: string | null
           crm_company_id?: string | null
@@ -17016,6 +17028,10 @@ export type Database = {
           line_items?: Json
           notes?: string | null
           order_source?: string
+          payment_classification?: string
+          payment_received_at?: string | null
+          payment_reference?: string | null
+          payment_status?: string
           photo_identification?: Json | null
           po_total_cents?: number
           po_type?: string | null
@@ -17035,6 +17051,10 @@ export type Database = {
         Update: {
           ai_suggested_pm_kit?: boolean | null
           ai_suggestion_reason?: string | null
+          charge_authorization_note?: string | null
+          charge_authorization_status?: string
+          charge_authorized_at?: string | null
+          charge_authorized_by?: string | null
           created_at?: string
           created_by?: string | null
           crm_company_id?: string | null
@@ -17048,6 +17068,10 @@ export type Database = {
           line_items?: Json
           notes?: string | null
           order_source?: string
+          payment_classification?: string
+          payment_received_at?: string | null
+          payment_reference?: string | null
+          payment_status?: string
           photo_identification?: Json | null
           po_total_cents?: number
           po_type?: string | null
@@ -51527,4 +51551,3 @@ export const Constants = {
 } as const
 
 export type UserRole = Database["public"]["Enums"]["user_role"]
-

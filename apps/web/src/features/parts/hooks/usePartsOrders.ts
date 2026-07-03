@@ -20,6 +20,10 @@ export function usePartsOrders() {
           created_at,
           portal_customer_id,
           crm_company_id,
+          payment_classification,
+          payment_status,
+          charge_authorization_status,
+          receipt_number,
           portal_customers!parts_orders_portal_customer_id_fkey ( first_name, last_name, email ),
           crm_companies!parts_orders_crm_company_id_fkey ( id, name )
         `,
