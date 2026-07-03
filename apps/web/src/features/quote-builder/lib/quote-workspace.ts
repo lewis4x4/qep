@@ -307,6 +307,8 @@ export function computeQuoteWorkspace(
   let approvalMissingLabel = `manager approval (margin below ${marginFloorLabel})`;
   if (draft.quoteStatus === "pending_approval") {
     approvalMissingLabel = "manager approval pending";
+  } else if (draft.quoteStatus === "draft_low_margin") {
+    approvalMissingLabel = "low-margin draft saved; manager approval required before sending";
   } else if (draft.quoteStatus === "changes_requested") {
     approvalMissingLabel = "manager requested revision";
   } else if (draft.quoteStatus === "rejected") {

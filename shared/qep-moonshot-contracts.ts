@@ -282,6 +282,7 @@ export interface QuoteWorkspaceDraft {
    *  review screen can unlock sending only after approval. */
   quoteStatus?:
     | "draft"
+    | "draft_low_margin"
     | "pending_approval"
     | "approved"
     | "approved_with_conditions"

@@ -77,6 +77,13 @@ const PUBLIC_ACCEPT_READY_STATUSES = [
   "approved",
   "approved_with_conditions",
 ];
+const CUSTOMER_BLOCKED_QUOTE_STATUSES = new Set([
+  "draft",
+  "draft_low_margin",
+  "pending_approval",
+  "changes_requested",
+  "rejected",
+]);
 
 function extractQuoteText(value: Record<string, unknown> | null, keyA: string, keyB: string): string | null {
   const raw = (typeof value?.[keyA] === "string" ? value[keyA] : typeof value?.[keyB] === "string" ? value[keyB] : null) as string | null;
@@ -1926,6 +1933,18 @@ async function loadConfiguredMarginFloorPct(input: {
   }
 }
 
+function resolveDraftStatusAfterSave(input: {
+  saveMode: "manual" | "autosave";
+  marginPct: number | null;
+  marginFloorPct: number;
+}): "draft" | "draft_low_margin" {
+  return input.saveMode === "manual" &&
+      typeof input.marginPct === "number" &&
+      input.marginPct < input.marginFloorPct
+    ? "draft_low_margin"
+    : "draft";
+}
+
 async function assertApprovedWithConditionsSendReady(input: {
   admin: ReturnType<typeof createAdminClient>;
   quotePackageId: string;
@@ -1968,7 +1987,7 @@ async function assertQuoteCustomerShareable(input: {
   marginPct: number | null;
   quote: Record<string, unknown>;
 }): Promise<{ ok: true } | { ok: false; message: string; blockers?: Array<Record<string, unknown>> }> {
-  if (["draft", "pending_approval", "changes_requested", "rejected"].includes(input.status)) {
+  if (CUSTOMER_BLOCKED_QUOTE_STATUSES.has(input.status)) {
     return { ok: false, message: `This quote cannot be shared while status is ${input.status}.` };
   }
   if (input.status === "approved_with_conditions") {
@@ -5882,7 +5901,7 @@ Deno.serve(async (req) => {
       if (quoteErr) return safeJsonError(quoteErr.message, 500, origin);
       if (!quote) return safeJsonError("Quote package not found or not accessible", 404, origin);
       const status = String(quote.status ?? "draft");
-      if (["draft", "pending_approval", "changes_requested", "rejected"].includes(status)) {
+      if (CUSTOMER_BLOCKED_QUOTE_STATUSES.has(status)) {
         return safeJsonError(`Cannot begin customer PDF upload while quote status is ${status}.`, 409, origin);
       }
 
@@ -7166,6 +7185,7 @@ Deno.serve(async (req) => {
         }
       }
       const expectedUpdatedAt = typeof body.expected_updated_at === "string" ? body.expected_updated_at : null;
+      const saveMode = body.save_mode === "autosave" ? "autosave" : "manual";
       if (
         existingQuote?.id &&
         expectedUpdatedAt &&
@@ -7210,6 +7230,14 @@ Deno.serve(async (req) => {
         status: provisionalStatus,
       });
       const financials = provisionalArtifacts.computedMetrics as Record<string, number>;
+      const draftStatusForCurrentSave = resolveDraftStatusAfterSave({
+        saveMode,
+        marginPct: typeof financials.margin_pct === "number" ? financials.margin_pct : null,
+        marginFloorPct: await loadConfiguredMarginFloorPct({
+          admin,
+          workspaceId: userWorkspaceId,
+        }),
+      });
 
       const changedScopes = latestVersion
         ? diffQuoteVersionScopes(latestVersion.snapshot, provisionalArtifacts.snapshot)
@@ -7218,9 +7246,11 @@ Deno.serve(async (req) => {
       let nextStatus = provisionalStatus;
       let invalidationReason: string | null = null;
       if (!latestVersion) {
-        nextStatus = "draft";
+        nextStatus = draftStatusForCurrentSave;
       } else if (changedScopes.length === 0) {
-        nextStatus = provisionalStatus;
+        nextStatus = provisionalStatus === "draft" || provisionalStatus === "draft_low_margin"
+          ? draftStatusForCurrentSave
+          : provisionalStatus;
       } else if (latestApprovalCase && typeof latestApprovalCase.status === "string") {
         const caseStatus = String(latestApprovalCase.status);
         if (caseStatus === "approved_with_conditions") {
@@ -7233,17 +7263,17 @@ Deno.serve(async (req) => {
           if (disallowedScopes.length === 0) {
             nextStatus = "approved_with_conditions";
           } else {
-            nextStatus = "draft";
+            nextStatus = draftStatusForCurrentSave;
             invalidationReason = `Quote changed outside allowed conditional scopes: ${disallowedScopes.join(", ")}.`;
           }
         } else if (["pending", "approved", "changes_requested", "rejected", "escalated"].includes(caseStatus)) {
-          nextStatus = "draft";
+          nextStatus = draftStatusForCurrentSave;
           invalidationReason = `Quote changed after approval state ${caseStatus}. A new approval submission is required.`;
         } else {
-          nextStatus = "draft";
+          nextStatus = draftStatusForCurrentSave;
         }
       } else {
-        nextStatus = "draft";
+        nextStatus = draftStatusForCurrentSave;
       }
 
       const { data, error } = await supabase
@@ -8498,7 +8528,7 @@ Deno.serve(async (req) => {
       }
 
       const quoteStatus = String(pkg.status ?? "draft");
-      if (["draft", "pending_approval", "changes_requested", "rejected"].includes(quoteStatus)) {
+      if (CUSTOMER_BLOCKED_QUOTE_STATUSES.has(quoteStatus)) {
         return safeJsonError(`This quote cannot be sent while status is ${quoteStatus}.`, 409, origin);
       }
 

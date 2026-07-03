@@ -4,6 +4,7 @@ import {
   marginKeyFor,
   requiresLowMarginDraftReason,
   resolveActiveQuotePackageId,
+  resolveDraftSaveStatus,
   resolveSavedQuoteStatus,
 } from "../useQuoteBuilderSave";
 
@@ -75,6 +76,32 @@ describe("resolveSavedQuoteStatus", () => {
 
   test("defaults new unsaved quotes to draft", () => {
     expect(resolveSavedQuoteStatus(undefined, undefined)).toBe("draft");
+  });
+});
+
+describe("resolveDraftSaveStatus", () => {
+  test("marks manual low-margin saves with the additive draft status", () => {
+    expect(resolveDraftSaveStatus({
+      saveMode: "manual",
+      marginPct: 8.9,
+      marginFloorPct: 10,
+    })).toBe("draft_low_margin");
+  });
+
+  test("keeps autosave below-floor attempts as ordinary drafts", () => {
+    expect(resolveDraftSaveStatus({
+      saveMode: "autosave",
+      marginPct: 8.9,
+      marginFloorPct: 10,
+    })).toBe("draft");
+  });
+
+  test("keeps healthy manual saves as ordinary drafts", () => {
+    expect(resolveDraftSaveStatus({
+      saveMode: "manual",
+      marginPct: 12,
+      marginFloorPct: 10,
+    })).toBe("draft");
   });
 });
 
