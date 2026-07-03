@@ -32,6 +32,7 @@ import {
   STATUS_FLAG_LABELS,
 } from "../lib/constants";
 import type { ServiceStage } from "../lib/constants";
+import type { TechnicianSuggestion } from "../lib/service-api-normalizers";
 import { Link } from "react-router-dom";
 import { getPublicServiceStatus } from "../lib/publicServiceStatus";
 import { shouldBlockStageTransition } from "../lib/service-wo-gates";
@@ -49,6 +50,21 @@ function normalizeServiceStage(value: unknown): ServiceStage {
   return typeof value === "string" && SERVICE_STAGE_SET.has(value as ServiceStage)
     ? value as ServiceStage
     : "request_received";
+}
+
+function formatCapacityHours(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function suggestionBadges(suggestion: TechnicianSuggestion): string[] {
+  return [
+    suggestion.branch_match ? "Branch" : null,
+    suggestion.shop_field_eligible ? "Route" : null,
+    suggestion.brand_match ? "Brand" : null,
+    suggestion.legacy_cert_match ? "Skill" : null,
+    suggestion.oem_cert_match ? "OEM" : null,
+    suggestion.in_house_completed_count > 0 ? `${suggestion.in_house_completed_count} certs` : null,
+  ].filter((item): item is string => Boolean(item));
 }
 
 export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
@@ -221,6 +237,7 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
     if (!job) return new Map<string, ReturnType<typeof shouldBlockStageTransition>>();
     return new Map(nextStages.map((next) => [next, shouldBlockStageTransition(job, next)]));
   }, [job, nextStages]);
+  const technicianSuggestions = sched.data?.suggestions ?? [];
 
   if (!jobId) return null;
 
@@ -711,13 +728,25 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                   ))}
                 </ul>
               ) : null}
-              {sched.data && typeof sched.data === "object" && sched.data !== null && "suggestions" in sched.data ? (
+              {sched.data ? (
                 <ul className="text-xs space-y-1 border rounded p-2 bg-muted/20">
-                  {(sched.data as {
-                    suggestions: Array<{ name: string; score: number; user_id: string }>;
-                  }).suggestions.map((s, i) => (
-                    <li key={i} className="flex items-center justify-between gap-2">
-                      <span>{s.name} — score {s.score}</span>
+                  {technicianSuggestions.length === 0 ? (
+                    <li className="text-muted-foreground">
+                      No eligible technician profiles were returned for this job.
+                    </li>
+                  ) : null}
+                  {technicianSuggestions.map((s, i) => (
+                    <li key={`${s.user_id}-${i}`} className="rounded border bg-background/70 p-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium text-foreground">
+                            {s.name} - score {s.score}
+                          </p>
+                          <p className="mt-0.5 text-[10px] text-muted-foreground">
+                            {formatCapacityHours(s.capacity_remaining_hours)}h capacity left on{" "}
+                            {s.availability_date ?? "selected date"} - {s.active_workload} active jobs
+                          </p>
+                        </div>
                       <button
                         type="button"
                         className="shrink-0 rounded bg-primary/15 px-2 py-0.5 text-[10px]"
@@ -726,6 +755,21 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                       >
                         Assign
                       </button>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {suggestionBadges(s).map((badge) => (
+                          <span key={badge} className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
+                            {badge}
+                          </span>
+                        ))}
+                      </div>
+                      {s.reasons.length > 0 ? (
+                        <p className="mt-1 text-[10px] text-muted-foreground">
+                          {s.reasons.slice(0, 3).map((reason) => (
+                            reason.detail ? `${reason.label}: ${reason.detail}` : reason.label
+                          )).join(" | ")}
+                        </p>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
