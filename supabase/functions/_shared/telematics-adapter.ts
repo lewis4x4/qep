@@ -27,6 +27,7 @@ export interface NormalizedTelematicsReading {
   /** Optional provider-visible serial for diagnostics or mapping workflows. */
   deviceSerial?: string | null;
   hours: number | null;
+  odometerMiles?: number | null;
   lat: number | null;
   lng: number | null;
   readingAt: string;

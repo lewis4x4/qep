@@ -16,6 +16,11 @@ import {
 } from "../_shared/safe-cors.ts";
 import { notifyAfterStageChange } from "../_shared/service-lifecycle-notify.ts";
 import {
+  normalizeMileageMiles,
+  normalizeServiceMileageSource,
+  serviceMileageSourceLabel,
+} from "../_shared/service-mileage-source.ts";
+import {
   deriveWorkOrderStatus,
   evaluateLaborMargin,
   type LaborMarginEvaluation,
@@ -52,6 +57,10 @@ interface QuoteRequest {
   premium_code?: string;
   customer_group_label?: string;
   equipment_class_code?: string;
+  field_mileage_miles?: number;
+  field_mileage_source?: string;
+  field_mileage_provider_trip_id?: string;
+  field_mileage_metadata?: Record<string, unknown>;
 }
 
 type LaborCostContext = {
@@ -91,6 +100,55 @@ function formatHaulMiles(value: unknown): string | null {
   const miles = nonNegativeNumericValue(value);
   if (miles == null || miles === 0) return null;
   return `${Math.round(miles * 100) / 100} round-trip mi`;
+}
+
+function resolveFieldMileage(input: {
+  body: QuoteRequest;
+  job: Record<string, unknown>;
+}): {
+  miles: number | null;
+  source: ReturnType<typeof normalizeServiceMileageSource>;
+  sourceFrom: "request" | "job" | "none";
+  providerTripId: string | null;
+  metadata: Record<string, unknown>;
+} {
+  const requestMiles = normalizeMileageMiles(input.body.field_mileage_miles);
+  const jobMiles = normalizeMileageMiles(input.job.field_mileage_miles);
+  const miles = requestMiles ?? jobMiles;
+  const sourceFrom = requestMiles != null ? "request" : jobMiles != null
+    ? "job"
+    : "none";
+  const source = normalizeServiceMileageSource(
+    requestMiles != null
+      ? input.body.field_mileage_source
+      : input.job.field_mileage_source,
+    "manual",
+  );
+  const requestMetadata = typeof input.body.field_mileage_metadata ===
+      "object" && input.body.field_mileage_metadata !== null
+    ? input.body.field_mileage_metadata
+    : {};
+  const jobMetadata = typeof input.job.field_mileage_metadata === "object" &&
+      input.job.field_mileage_metadata !== null
+    ? input.job.field_mileage_metadata as Record<string, unknown>
+    : {};
+
+  return {
+    miles,
+    source: miles == null ? "none" : source,
+    sourceFrom,
+    providerTripId: typeof input.body.field_mileage_provider_trip_id ===
+        "string" && input.body.field_mileage_provider_trip_id.trim()
+      ? input.body.field_mileage_provider_trip_id.trim()
+      : typeof input.job.field_mileage_provider_trip_id === "string" &&
+          input.job.field_mileage_provider_trip_id.trim()
+      ? input.job.field_mileage_provider_trip_id.trim()
+      : null,
+    metadata: {
+      ...jobMetadata,
+      ...requestMetadata,
+    },
+  };
 }
 
 function statusRank(status: MarginSummary["status"]): number {
@@ -359,7 +417,7 @@ async function handleGenerate(
   const { data: job } = await supabase
     .from("service_jobs")
     .select(
-      "id, workspace_id, haul_required, traffic_ticket_id, selected_job_code_id, branch_id, customer_id, status_flags, machine_id, shop_or_field, technician_id, estimate_authorization_required, estimate_authorization_status, approved_estimate_amount, estimate_reauth_threshold_pct",
+      "id, workspace_id, haul_required, traffic_ticket_id, selected_job_code_id, branch_id, customer_id, status_flags, machine_id, shop_or_field, technician_id, estimate_authorization_required, estimate_authorization_status, approved_estimate_amount, estimate_reauth_threshold_pct, hour_meter_reading, odometer_miles, field_mileage_miles, field_mileage_source, field_mileage_provider_trip_id, field_mileage_metadata",
     )
     .eq("id", body.job_id)
     .single();
@@ -484,6 +542,42 @@ async function handleGenerate(
     });
   }
 
+  const fieldMileage = resolveFieldMileage({
+    body,
+    job: job as Record<string, unknown>,
+  });
+  const fieldMileageRate = Number(selectedRule?.field_mileage_rate ?? 0);
+  const isFieldService = (job.shop_or_field as string | null) === "field" ||
+    laborTypeCode === "field";
+  if (
+    isFieldService && fieldMileage.miles != null && fieldMileageRate > 0
+  ) {
+    const extendedPrice = Math.round(
+      fieldMileage.miles * fieldMileageRate * 100,
+    ) / 100;
+    const sourceLabel = serviceMileageSourceLabel(fieldMileage.source);
+    lines.push({
+      workspace_id: job.workspace_id,
+      line_type: "optional",
+      description: `Field Mileage - ${sourceLabel}`,
+      quantity: fieldMileage.miles,
+      unit_price: fieldMileageRate,
+      extended_price: extendedPrice,
+      margin_metadata: {
+        ...fieldMileage.metadata,
+        h15_gate: "reveal_gps_manual_fallback",
+        mileage_source: fieldMileage.source,
+        mileage_source_from: fieldMileage.sourceFrom,
+        manual_fallback: fieldMileage.source === "manual",
+        provider_trip_id: fieldMileage.providerTripId,
+        odometer_miles: job.odometer_miles ?? null,
+        hour_meter_reading: job.hour_meter_reading ?? null,
+        field_mileage_rate: fieldMileageRate,
+      },
+      sort_order: sortOrder++,
+    });
+  }
+
   // Parts lines
   for (const part of (parts ?? [])) {
     const unitCost = part.unit_cost ?? 0;
@@ -567,9 +661,15 @@ async function handleGenerate(
   const haulTotal = lines
     .filter((l) => l.line_type === "haul")
     .reduce((s, l) => s + (l.extended_price as number), 0);
+  const optionalTotal = lines
+    .filter((l) => l.line_type === "optional")
+    .reduce((s, l) => s + (l.extended_price as number), 0);
   const shopSupplies = Math.round(partsTotal * shopSuppliesRate * 100) / 100;
   const total =
-    Math.round((laborTotal + partsTotal + haulTotal + shopSupplies) * 100) /
+    Math.round(
+      (laborTotal + partsTotal + haulTotal + optionalTotal + shopSupplies) *
+        100,
+    ) /
     100;
 
   // Shop supplies line
@@ -651,6 +751,8 @@ async function handleGenerate(
       labor_cost_rate: laborCost.rate,
       labor_cost_source: laborCost.source,
       equipment_class_code: equipmentClass.equipmentClassCode,
+      field_mileage_miles: fieldMileage.miles,
+      field_mileage_source: fieldMileage.source,
       field_mileage_rate: Number(selectedRule?.field_mileage_rate ?? 0),
       margin_guardrail: marginSummary,
     },
@@ -680,7 +782,7 @@ async function handleUpdate(
   const { data: job } = await supabase
     .from("service_jobs")
     .select(
-      "id, workspace_id, branch_id, customer_id, status_flags, machine_id, shop_or_field, technician_id, estimate_authorization_required, estimate_authorization_status, approved_estimate_amount, estimate_reauth_threshold_pct",
+      "id, workspace_id, branch_id, customer_id, status_flags, machine_id, shop_or_field, technician_id, estimate_authorization_required, estimate_authorization_status, approved_estimate_amount, estimate_reauth_threshold_pct, hour_meter_reading, odometer_miles, field_mileage_miles, field_mileage_source, field_mileage_provider_trip_id, field_mileage_metadata",
     )
     .eq("id", quoteHeader.job_id)
     .maybeSingle();

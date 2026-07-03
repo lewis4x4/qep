@@ -15,6 +15,7 @@ import {
 } from "../_shared/safe-cors.ts";
 import { calculateServiceHaulPricing } from "../_shared/service-haul-pricing.ts";
 import { notifyAfterStageChange } from "../_shared/service-lifecycle-notify.ts";
+import { normalizeServiceMileageSource } from "../_shared/service-mileage-source.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 interface HaulRequest {
@@ -23,6 +24,10 @@ interface HaulRequest {
   traffic_ticket_id?: string;
   truck_class?: string;
   mileage_one_way?: number;
+  mileage_source?: string;
+  mileage_provider?: string;
+  mileage_provider_trip_id?: string;
+  mileage_metadata?: Record<string, unknown>;
   rate_type?: "customer" | "internal";
   from_location?: string;
   to_location?: string;
@@ -223,6 +228,11 @@ async function handleCreateHaul(
   const truckClass = textValue(body.truck_class, "standard").toLowerCase();
   const rateType = normalizeRateType(body.rate_type);
   const oneWayMiles = nonNegativeNumber(body.mileage_one_way);
+  const mileageSource = normalizeServiceMileageSource(body.mileage_source);
+  const mileageMetadata = typeof body.mileage_metadata === "object" &&
+      body.mileage_metadata !== null
+    ? body.mileage_metadata
+    : {};
   const pricing = await calculateHaulCharge(supabase, {
     workspaceId: job.workspace_id,
     truckClass,
@@ -278,6 +288,19 @@ async function handleCreateHaul(
       truck_class: pricing.truck_class,
       mileage_one_way: pricing.one_way_miles,
       round_trip_miles: pricing.round_trip_miles,
+      mileage_source: mileageSource,
+      mileage_provider: body.mileage_provider ?? null,
+      mileage_provider_trip_id: body.mileage_provider_trip_id ?? null,
+      mileage_metadata: {
+        ...mileageMetadata,
+        h15_gate: "reveal_gps_manual_fallback",
+        mileage_source: mileageSource,
+        manual_fallback: mileageSource === "manual",
+        provider: body.mileage_provider ?? null,
+        provider_trip_id: body.mileage_provider_trip_id ?? null,
+        one_way_miles: pricing.one_way_miles,
+        round_trip_miles: pricing.round_trip_miles,
+      },
       rate_type: pricing.rate_type,
       haul_rate_sheet_id: pricing.rate_sheet_id,
       haul_total_cents: pricing.total_cents,
@@ -285,6 +308,11 @@ async function handleCreateHaul(
       rate_calc: {
         ...pricing.calculation,
         h7_gate: "hauling_transport_dispatch",
+        h15_gate: "reveal_gps_manual_fallback",
+        mileage_source: mileageSource,
+        manual_fallback: mileageSource === "manual",
+        mileage_provider: body.mileage_provider ?? null,
+        mileage_provider_trip_id: body.mileage_provider_trip_id ?? null,
         customer_total_cents: pricing.total_cents,
         internal_cost_cents: internalPricing.total_cents,
         internal_rate_source: internalPricing.rate_source,
@@ -314,6 +342,9 @@ async function handleCreateHaul(
       rate_type: pricing.rate_type,
       mileage_one_way: pricing.one_way_miles,
       round_trip_miles: pricing.round_trip_miles,
+      mileage_source: mileageSource,
+      mileage_provider: body.mileage_provider ?? null,
+      mileage_provider_trip_id: body.mileage_provider_trip_id ?? null,
       haul_total_cents: pricing.total_cents,
       haul_cost_cents: internalPricing.total_cents,
       scheduled_start_at: body.scheduled_start_at ?? null,

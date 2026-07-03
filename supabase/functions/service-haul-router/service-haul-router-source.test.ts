@@ -8,10 +8,13 @@ Deno.test("service-haul-router prices H7.1 hauls through the rate-sheet RPC", ()
       "truck_class",
       "mileage_one_way",
       "round_trip_miles",
+      "mileage_source",
+      "mileage_provider_trip_id",
       "haul_total_cents",
       "haul_cost_cents",
       "rate_calc",
       "edge_fallback_legacy_minimum",
+      "reveal_gps_manual_fallback",
     ]
   ) {
     if (!source.includes(expected)) {
