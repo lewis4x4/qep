@@ -19,6 +19,43 @@ import { requireServiceUser } from "../_shared/service-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+const TRADE_VALUATION_SAFE_SELECT = [
+  "id",
+  "workspace_id",
+  "deal_id",
+  "make",
+  "model",
+  "year",
+  "serial_number",
+  "hours",
+  "photos",
+  "video_url",
+  "operational_status",
+  "last_full_service",
+  "needed_repairs",
+  "attachments_included",
+  "ai_condition_score",
+  "ai_condition_notes",
+  "ai_detected_damage",
+  "market_comps",
+  "auction_value",
+  "discount_percentage",
+  "discounted_value",
+  "reconditioning_estimate",
+  "preliminary_value",
+  "final_value",
+  "target_resale_margin_min",
+  "target_resale_margin_max",
+  "suggested_resale_price",
+  "status",
+  "over_allowance",
+  "approved_by",
+  "approval_notes",
+  "conditional_language",
+  "created_at",
+  "updated_at",
+  "created_by",
+].join(", ");
 
 const DGE_VARIABLES = [
   { name: "Base Price", unit: "usd" },
@@ -314,13 +351,17 @@ Deno.serve(async (req) => {
         .limit(1)
         .maybeSingle();
 
-      const { data: tradeIn } = await supabase
+      const { data: tradeIn, error: tradeInError } = await supabase
         .from("trade_valuations")
-        .select("*")
+        .select(TRADE_VALUATION_SAFE_SELECT)
         .eq("deal_id", dealId)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+      if (tradeInError) {
+        console.error("dge-optimizer: trade valuation query failed:", tradeInError.message);
+        return safeJsonError("Failed to load trade-in context", 500, origin);
+      }
 
       const { data: incentives } = await supabaseAdmin
         .from("manufacturer_incentives")
@@ -332,12 +373,16 @@ Deno.serve(async (req) => {
         .select("*")
         .eq("is_active", true);
 
-      const context: DealContext = {
-        deal,
-        equipment: null,
-        assessment,
-        customer: null,
-        tradeIn,
+	      const safeTradeIn = tradeIn && typeof tradeIn === "object" && !("error" in tradeIn)
+	        ? tradeIn as Record<string, unknown>
+	        : null;
+
+	      const context: DealContext = {
+	        deal,
+	        equipment: null,
+	        assessment,
+	        customer: null,
+	        tradeIn: safeTradeIn,
         marketComps: [],
         incentives: incentives || [],
         financing: financing || [],
