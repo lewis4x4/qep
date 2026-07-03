@@ -15,9 +15,9 @@ import {
 import {
   assertCounterReleaseAllowed,
   CounterPosRuleError,
-  normalizeCounterTenderInput,
   type CounterTenderPatch,
   type CounterTenderState,
+  normalizeCounterTenderInput,
 } from "./counter-pos-rules.ts";
 
 type Action =
@@ -29,7 +29,8 @@ type Action =
   | "pick_order_line"
   | "reserve_interbranch_transfer"
   | "create_parts_quote"
-  | "convert_parts_quote_to_order";
+  | "convert_parts_quote_to_order"
+  | "decide_line_discount";
 
 interface Body {
   action: Action;
@@ -64,7 +65,30 @@ interface Body {
   freight_estimate_cents?: number;
   freight_estimate_source?: string;
   parts_quote_id?: string;
+  line_type?: string;
+  line_id?: string;
+  discount_decision?: string;
+  discount_reason?: string | null;
 }
+
+type ResolvedPricedLine = {
+  part_catalog_id: string | null;
+  part_id: string | null;
+  part_number: string;
+  description: string | null;
+  price_source: string;
+  price_source_id: string | null;
+  pricing_rule_id: string | null;
+  list_unit_price_cents: number;
+  base_unit_price_cents: number;
+  final_unit_price_cents: number;
+  requested_discount_pct: number;
+  applied_discount_pct: number;
+  discount_authority: string;
+  discount_approval_status: string;
+  margin_floor_applied: boolean;
+  pricing_metadata: Record<string, unknown>;
+};
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   draft: ["cancelled"],
@@ -116,19 +140,34 @@ function sanitizeLineItems(raw: unknown): Array<Record<string, unknown>> {
   for (const row of raw) {
     if (!row || typeof row !== "object") continue;
     const o = row as Record<string, unknown>;
-    const part_number =
-      typeof o.part_number === "string" ? o.part_number.trim().slice(0, 120) : "";
+    const part_number = typeof o.part_number === "string"
+      ? o.part_number.trim().slice(0, 120)
+      : "";
     if (!part_number) continue;
-    const quantity = Math.max(1, Math.min(99_999, Math.floor(num(o.quantity) ?? 1)));
-    const description =
-      typeof o.description === "string" ? o.description.trim().slice(0, 500) : null;
+    const quantity = Math.max(
+      1,
+      Math.min(99_999, Math.floor(num(o.quantity) ?? 1)),
+    );
+    const description = typeof o.description === "string"
+      ? o.description.trim().slice(0, 500)
+      : null;
     const unit_price = num(o.unit_price);
+    const discount_pct = num(o.discount_pct) ?? num(o.requested_discount_pct);
     const line: Record<string, unknown> = {
       part_number,
       quantity,
       description,
       is_ai_suggested: false,
     };
+    if (typeof o.part_catalog_id === "string" && o.part_catalog_id.trim()) {
+      line.part_catalog_id = o.part_catalog_id.trim();
+    }
+    if (discount_pct != null && discount_pct >= 0) {
+      line.requested_discount_pct = Math.min(
+        100,
+        Math.round(discount_pct * 100) / 100,
+      );
+    }
     if (unit_price != null && unit_price >= 0) {
       line.unit_price = Math.round(unit_price * 10000) / 10000;
     }
@@ -137,20 +176,10 @@ function sanitizeLineItems(raw: unknown): Array<Record<string, unknown>> {
   return out.slice(0, 200);
 }
 
-function totalsFromLines(lines: Array<Record<string, unknown>>): {
-  subtotal: number;
-  total: number;
-} {
-  let subtotal = 0;
-  for (const line of lines) {
-    const q = Number(line.quantity) || 1;
-    const up = num(line.unit_price);
-    if (up != null) subtotal += up * q;
-  }
-  return { subtotal, total: subtotal };
-}
-
-function counterPosErrorResponse(error: unknown, origin: string | null): Response | null {
+function counterPosErrorResponse(
+  error: unknown,
+  origin: string | null,
+): Response | null {
   if (error instanceof CounterPosRuleError) {
     return safeJsonError(error.message, error.status, origin);
   }
@@ -187,26 +216,221 @@ function sanitizeQuoteLines(raw: unknown): Array<Record<string, unknown>> {
   for (const row of raw) {
     if (!row || typeof row !== "object") continue;
     const o = row as Record<string, unknown>;
-    const partNumber =
-      typeof o.part_number === "string" ? o.part_number.trim().slice(0, 120) : "";
+    const partNumber = typeof o.part_number === "string"
+      ? o.part_number.trim().slice(0, 120)
+      : "";
     if (!partNumber) continue;
-    const quantity = Math.max(1, Math.min(99_999, Math.floor(num(o.quantity) ?? 1)));
-    const unitPriceCents = moneyCents(o.unit_price);
-    if (unitPriceCents == null) continue;
-    const description =
-      typeof o.description === "string" ? o.description.trim().slice(0, 500) : null;
-    const extendedPriceCents = unitPriceCents * quantity;
+    const quantity = Math.max(
+      1,
+      Math.min(99_999, Math.floor(num(o.quantity) ?? 1)),
+    );
+    const description = typeof o.description === "string"
+      ? o.description.trim().slice(0, 500)
+      : null;
+    const requestedDiscountPct = num(o.discount_pct) ??
+      num(o.requested_discount_pct) ?? 0;
     out.push({
       part_number: partNumber,
       quantity,
       description,
-      unit_price_cents: unitPriceCents,
-      extended_price_cents: extendedPriceCents,
-      discount_pct: num(o.discount_pct),
-      part_catalog_id: typeof o.part_catalog_id === "string" ? o.part_catalog_id : null,
+      discount_pct: Math.min(
+        100,
+        Math.max(0, Math.round(requestedDiscountPct * 100) / 100),
+      ),
+      part_catalog_id: typeof o.part_catalog_id === "string"
+        ? o.part_catalog_id
+        : null,
     });
   }
   return out.slice(0, 200);
+}
+
+class PricingResolverError extends Error {
+  status: number;
+
+  constructor(message: string, status = 400) {
+    super(message);
+    this.name = "PricingResolverError";
+    this.status = status;
+  }
+}
+
+function centsToDollars(cents: number): number {
+  return Math.round((cents / 100) * 10000) / 10000;
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
+function pricingErrorResponse(
+  error: unknown,
+  origin: string | null,
+): Response | null {
+  if (error instanceof PricingResolverError) {
+    return safeJsonError(error.message, error.status, origin);
+  }
+  return null;
+}
+
+async function resolvePricedLine(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  line: Record<string, unknown>,
+  context: { crmCompanyId?: string | null; qrmCompanyId?: string | null },
+): Promise<ResolvedPricedLine> {
+  const partNumber = typeof line.part_number === "string"
+    ? line.part_number
+    : "";
+  const partCatalogId =
+    typeof line.part_catalog_id === "string" && line.part_catalog_id.trim()
+      ? line.part_catalog_id.trim()
+      : null;
+  const quantity = Number(line.quantity) || 1;
+  const requestedDiscountPct = num(line.requested_discount_pct) ??
+    num(line.discount_pct) ?? 0;
+
+  const { data, error } = await supabase
+    .rpc("parts_resolve_priced_line", {
+      p_part_number: partNumber,
+      p_part_catalog_id: partCatalogId,
+      p_qrm_company_id: context.qrmCompanyId ?? null,
+      p_crm_company_id: context.crmCompanyId ?? null,
+      p_quantity: quantity,
+      p_requested_discount_pct: requestedDiscountPct,
+    })
+    .single();
+
+  if (error || !data) {
+    console.error("parts-order-manager pricing resolver:", error);
+    throw new PricingResolverError(
+      `Failed to price part ${partNumber || partCatalogId || "(unknown)"}`,
+      400,
+    );
+  }
+
+  const row = data as Record<string, unknown>;
+  return {
+    part_catalog_id: typeof row.part_catalog_id === "string"
+      ? row.part_catalog_id
+      : null,
+    part_id: typeof row.part_id === "string" ? row.part_id : null,
+    part_number: String(row.part_number ?? partNumber),
+    description: typeof row.description === "string" ? row.description : null,
+    price_source: String(row.price_source ?? "list_price"),
+    price_source_id: typeof row.price_source_id === "string"
+      ? row.price_source_id
+      : null,
+    pricing_rule_id: typeof row.pricing_rule_id === "string"
+      ? row.pricing_rule_id
+      : null,
+    list_unit_price_cents: Number(row.list_unit_price_cents) || 0,
+    base_unit_price_cents: Number(row.base_unit_price_cents) || 0,
+    final_unit_price_cents: Number(row.final_unit_price_cents) || 0,
+    requested_discount_pct: Number(row.requested_discount_pct) || 0,
+    applied_discount_pct: Number(row.applied_discount_pct) || 0,
+    discount_authority: String(row.discount_authority ?? "none"),
+    discount_approval_status: String(
+      row.discount_approval_status ?? "not_required",
+    ),
+    margin_floor_applied: Boolean(row.margin_floor_applied),
+    pricing_metadata: objectValue(row.pricing_metadata),
+  };
+}
+
+async function resolveOrderLineRows(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  lineItems: Array<Record<string, unknown>>,
+  crmCompanyId: string,
+): Promise<Array<Record<string, unknown>>> {
+  const out: Array<Record<string, unknown>> = [];
+  for (const [idx, line] of lineItems.entries()) {
+    const priced = await resolvePricedLine(supabase, line, { crmCompanyId });
+    const quantity = Number(line.quantity) || 1;
+    const unitPrice = centsToDollars(priced.final_unit_price_cents);
+    out.push({
+      catalog_item_id: priced.part_catalog_id,
+      part_id: priced.part_id,
+      part_number: priced.part_number,
+      description: line.description != null
+        ? String(line.description)
+        : priced.description,
+      quantity,
+      unit_price: unitPrice,
+      line_total: Math.round(unitPrice * quantity * 10000) / 10000,
+      sort_order: idx,
+      price_source: priced.price_source,
+      price_source_id: priced.price_source_id,
+      pricing_rule_id: priced.pricing_rule_id,
+      requested_discount_pct: priced.requested_discount_pct,
+      applied_discount_pct: priced.applied_discount_pct,
+      discount_authority: priced.discount_authority,
+      discount_approval_status: priced.discount_approval_status,
+      list_unit_price: centsToDollars(priced.list_unit_price_cents),
+      base_unit_price: centsToDollars(priced.base_unit_price_cents),
+      final_unit_price: unitPrice,
+      margin_floor_applied: priced.margin_floor_applied,
+      pricing_metadata: priced.pricing_metadata,
+    });
+  }
+  return out;
+}
+
+async function resolveQuoteLineRows(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  lineItems: Array<Record<string, unknown>>,
+  qrmCompanyId: string,
+): Promise<Array<Record<string, unknown>>> {
+  const out: Array<Record<string, unknown>> = [];
+  for (const [idx, line] of lineItems.entries()) {
+    const priced = await resolvePricedLine(supabase, line, { qrmCompanyId });
+    const quantity = Number(line.quantity) || 1;
+    out.push({
+      sort_order: idx,
+      part_catalog_id: priced.part_catalog_id,
+      part_id: priced.part_id,
+      part_number: priced.part_number,
+      description: line.description != null
+        ? String(line.description)
+        : priced.description,
+      qty: quantity,
+      unit_price_cents: priced.final_unit_price_cents,
+      discount_pct: priced.requested_discount_pct,
+      extended_price_cents: priced.final_unit_price_cents * quantity,
+      price_source: priced.price_source,
+      price_source_id: priced.price_source_id,
+      pricing_rule_id: priced.pricing_rule_id,
+      requested_discount_pct: priced.requested_discount_pct,
+      applied_discount_pct: priced.applied_discount_pct,
+      discount_authority: priced.discount_authority,
+      discount_approval_status: priced.discount_approval_status,
+      list_unit_price_cents: priced.list_unit_price_cents,
+      base_unit_price_cents: priced.base_unit_price_cents,
+      final_unit_price_cents: priced.final_unit_price_cents,
+      margin_floor_applied: priced.margin_floor_applied,
+      pricing_metadata: priced.pricing_metadata,
+    });
+  }
+  return out;
+}
+
+function totalsFromOrderLineRows(lines: Array<Record<string, unknown>>): {
+  subtotal: number;
+  total: number;
+} {
+  const subtotal = lines.reduce(
+    (sum, line) => sum + (Number(line.line_total) || 0),
+    0,
+  );
+  return {
+    subtotal: Math.round(subtotal * 10000) / 10000,
+    total: Math.round(subtotal * 10000) / 10000,
+  };
 }
 
 function completeTenderPatch(
@@ -225,7 +449,9 @@ function completeTenderPatch(
   }
   if (
     patch.payment_classification === "charge" &&
-    ["approved_credit", "exec_approved"].includes(patch.charge_authorization_status) &&
+    ["approved_credit", "exec_approved"].includes(
+      patch.charge_authorization_status,
+    ) &&
     current?.charge_authorization_status !== patch.charge_authorization_status
   ) {
     out.charge_authorized_by = actorId;
@@ -251,6 +477,7 @@ Deno.serve(async (req) => {
 
   const supabase = auth.supabase;
   const userId = auth.userId;
+  const userRole = auth.role;
   const workspaceId = auth.workspaceId;
 
   let body: Body;
@@ -264,20 +491,28 @@ Deno.serve(async (req) => {
 
   // ── CREATE ──────────────────────────────────────────────────────────
   if (action === "create_internal_order") {
-    const crmCompanyId =
-      typeof body.crm_company_id === "string" ? body.crm_company_id.trim() : "";
+    const crmCompanyId = typeof body.crm_company_id === "string"
+      ? body.crm_company_id.trim()
+      : "";
     if (!crmCompanyId) {
       return safeJsonError("crm_company_id is required", 400, origin);
     }
     const lineItems = sanitizeLineItems(body.line_items);
     if (lineItems.length === 0) {
-      return safeJsonError("line_items must contain at least one part line", 400, origin);
+      return safeJsonError(
+        "line_items must contain at least one part line",
+        400,
+        origin,
+      );
     }
 
-    const srcRaw = typeof body.order_source === "string" ? body.order_source.trim() : "counter";
-    const orderSource = ["counter", "phone", "email", "online", "transfer"].includes(srcRaw)
-      ? srcRaw
+    const srcRaw = typeof body.order_source === "string"
+      ? body.order_source.trim()
       : "counter";
+    const orderSource =
+      ["counter", "phone", "email", "online", "transfer"].includes(srcRaw)
+        ? srcRaw
+        : "counter";
 
     const { data: wsRow, error: wsErr } = await supabase
       .from("crm_companies")
@@ -288,17 +523,32 @@ Deno.serve(async (req) => {
       return safeJsonError("Company not found", 404, origin);
     }
 
-    const { subtotal, total } = totalsFromLines(lineItems);
-    const notes =
-      typeof body.notes === "string" ? body.notes.trim().slice(0, 4000) : null;
-    const fleetId =
-      typeof body.fleet_id === "string" && body.fleet_id.trim()
-        ? body.fleet_id.trim()
-        : null;
+    let pricedLineRows: Array<Record<string, unknown>>;
+    try {
+      pricedLineRows = await resolveOrderLineRows(
+        supabase,
+        lineItems,
+        crmCompanyId,
+      );
+    } catch (e) {
+      const response = pricingErrorResponse(e, origin);
+      if (response) return response;
+      throw e;
+    }
+    const { subtotal, total } = totalsFromOrderLineRows(pricedLineRows);
+    const notes = typeof body.notes === "string"
+      ? body.notes.trim().slice(0, 4000)
+      : null;
+    const fleetId = typeof body.fleet_id === "string" && body.fleet_id.trim()
+      ? body.fleet_id.trim()
+      : null;
     let tenderPatch: Record<string, unknown>;
     try {
       tenderPatch = completeTenderPatch(
-        normalizeCounterTenderInput(body as unknown as Record<string, unknown>, null),
+        normalizeCounterTenderInput(
+          body as unknown as Record<string, unknown>,
+          null,
+        ),
         null,
         userId,
       );
@@ -316,7 +566,7 @@ Deno.serve(async (req) => {
       order_source: orderSource,
       created_by: userId,
       notes,
-      line_items: lineItems,
+      line_items: pricedLineRows,
       fleet_id: fleetId,
       shipping_address: body.shipping_address ?? null,
       subtotal,
@@ -338,20 +588,14 @@ Deno.serve(async (req) => {
     }
 
     const orderId = order?.id as string;
-    const lineRows = lineItems.map((line, idx) => ({
+    const lineRows = pricedLineRows.map((line) => ({
       parts_order_id: orderId,
-      part_number: String(line.part_number),
-      description: line.description != null ? String(line.description) : null,
-      quantity: Number(line.quantity) || 1,
-      unit_price: line.unit_price != null ? Number(line.unit_price) : null,
-      line_total:
-        line.unit_price != null
-          ? Number(line.unit_price) * (Number(line.quantity) || 1)
-          : null,
-      sort_order: idx,
+      ...line,
     }));
 
-    const { error: lineErr } = await supabase.from("parts_order_lines").insert(lineRows);
+    const { error: lineErr } = await supabase.from("parts_order_lines").insert(
+      lineRows,
+    );
     if (lineErr) {
       console.error("parts-order-manager lines:", lineErr);
       await supabase.from("parts_orders").delete().eq("id", orderId);
@@ -378,8 +622,9 @@ Deno.serve(async (req) => {
 
   // ── SUBMIT ──────────────────────────────────────────────────────────
   if (action === "submit_internal_order") {
-    const orderId =
-      typeof body.parts_order_id === "string" ? body.parts_order_id.trim() : "";
+    const orderId = typeof body.parts_order_id === "string"
+      ? body.parts_order_id.trim()
+      : "";
     if (!orderId) {
       return safeJsonError("parts_order_id is required", 400, origin);
     }
@@ -399,7 +644,11 @@ Deno.serve(async (req) => {
       return safeJsonError("Only draft orders can be submitted", 400, origin);
     }
     if (!row.crm_company_id) {
-      return safeJsonError("Internal submit requires crm_company_id on order", 400, origin);
+      return safeJsonError(
+        "Internal submit requires crm_company_id on order",
+        400,
+        origin,
+      );
     }
     try {
       assertCounterReleaseAllowed({ ...row, status: "submitted" });
@@ -433,19 +682,21 @@ Deno.serve(async (req) => {
       return safeJsonError("Failed to submit order", 500, origin);
     }
 
-    const { error: evErr } = await supabase.from("parts_fulfillment_events").insert({
-      workspace_id: row.workspace_id,
-      fulfillment_run_id: run.id,
-      event_type: "internal_order_submitted",
-      payload: {
-        parts_order_id: orderId,
-        order_source: row.order_source ?? "counter",
-        payment_classification: row.payment_classification ?? "cash",
-        payment_status: row.payment_status ?? "unpaid",
-        charge_authorization_status: row.charge_authorization_status ?? "not_applicable",
-        audit_channel: "shop",
-      },
-    });
+    const { error: evErr } = await supabase.from("parts_fulfillment_events")
+      .insert({
+        workspace_id: row.workspace_id,
+        fulfillment_run_id: run.id,
+        event_type: "internal_order_submitted",
+        payload: {
+          parts_order_id: orderId,
+          order_source: row.order_source ?? "counter",
+          payment_classification: row.payment_classification ?? "cash",
+          payment_status: row.payment_status ?? "unpaid",
+          charge_authorization_status: row.charge_authorization_status ??
+            "not_applicable",
+          audit_channel: "shop",
+        },
+      });
     if (evErr) {
       console.warn("parts-order-manager event:", evErr);
     }
@@ -461,7 +712,8 @@ Deno.serve(async (req) => {
         fulfillment_run_id: run.id,
         payment_classification: row.payment_classification ?? "cash",
         payment_status: row.payment_status ?? "unpaid",
-        charge_authorization_status: row.charge_authorization_status ?? "not_applicable",
+        charge_authorization_status: row.charge_authorization_status ??
+          "not_applicable",
       },
     });
 
@@ -470,8 +722,9 @@ Deno.serve(async (req) => {
 
   // ── UPDATE ORDER FIELDS ─────────────────────────────────────────────
   if (action === "update_internal_order") {
-    const orderId =
-      typeof body.parts_order_id === "string" ? body.parts_order_id.trim() : "";
+    const orderId = typeof body.parts_order_id === "string"
+      ? body.parts_order_id.trim()
+      : "";
     if (!orderId) {
       return safeJsonError("parts_order_id is required", 400, origin);
     }
@@ -492,7 +745,9 @@ Deno.serve(async (req) => {
     }
 
     const patch: Record<string, unknown> = {};
-    if (typeof body.notes === "string") patch.notes = body.notes.trim().slice(0, 4000);
+    if (typeof body.notes === "string") {
+      patch.notes = body.notes.trim().slice(0, 4000);
+    }
     if (typeof body.order_source === "string") {
       const src = body.order_source.trim();
       if (["counter", "phone", "email", "online", "transfer"].includes(src)) {
@@ -507,7 +762,10 @@ Deno.serve(async (req) => {
         Object.assign(
           patch,
           completeTenderPatch(
-            normalizeCounterTenderInput(body as unknown as Record<string, unknown>, row),
+            normalizeCounterTenderInput(
+              body as unknown as Record<string, unknown>,
+              row,
+            ),
             row,
             userId,
           ),
@@ -536,7 +794,9 @@ Deno.serve(async (req) => {
     }
 
     await emitOrderEvent(supabase, {
-      workspaceId: (updated as Record<string, unknown>)?.workspace_id as string ?? "default",
+      workspaceId:
+        (updated as Record<string, unknown>)?.workspace_id as string ??
+          "default",
       orderId,
       eventType: "fields_updated",
       actorId: userId,
@@ -548,8 +808,9 @@ Deno.serve(async (req) => {
 
   // ── UPDATE ORDER LINES ──────────────────────────────────────────────
   if (action === "update_order_lines") {
-    const orderId =
-      typeof body.parts_order_id === "string" ? body.parts_order_id.trim() : "";
+    const orderId = typeof body.parts_order_id === "string"
+      ? body.parts_order_id.trim()
+      : "";
     if (!orderId) {
       return safeJsonError("parts_order_id is required", 400, origin);
     }
@@ -557,7 +818,7 @@ Deno.serve(async (req) => {
     const { data: row, error: fetchErr } = await supabase
       .from("parts_orders")
       .select(
-        "id, status, workspace_id, order_source, payment_classification, payment_status, charge_authorization_status",
+        "id, status, workspace_id, crm_company_id, order_source, payment_classification, payment_status, charge_authorization_status",
       )
       .eq("id", orderId)
       .maybeSingle();
@@ -566,17 +827,45 @@ Deno.serve(async (req) => {
       return safeJsonError("Order not found", 404, origin);
     }
     if (row.status !== "draft") {
-      return safeJsonError("Lines can only be updated on draft orders", 400, origin);
+      return safeJsonError(
+        "Lines can only be updated on draft orders",
+        400,
+        origin,
+      );
     }
 
     const lineItems = sanitizeLineItems(body.line_items);
     if (lineItems.length === 0) {
-      return safeJsonError("line_items must contain at least one part line", 400, origin);
+      return safeJsonError(
+        "line_items must contain at least one part line",
+        400,
+        origin,
+      );
+    }
+    if (!row.crm_company_id) {
+      return safeJsonError(
+        "Order lines require crm_company_id for parts pricing",
+        400,
+        origin,
+      );
+    }
+
+    let pricedLineRows: Array<Record<string, unknown>>;
+    try {
+      pricedLineRows = await resolveOrderLineRows(
+        supabase,
+        lineItems,
+        String(row.crm_company_id),
+      );
+    } catch (e) {
+      const response = pricingErrorResponse(e, origin);
+      if (response) return response;
+      throw e;
     }
 
     const { data: existingLines, error: existingErr } = await supabase
       .from("parts_order_lines")
-      .select("part_number, description, quantity, unit_price, line_total, sort_order")
+      .select("*")
       .eq("parts_order_id", orderId)
       .order("sort_order");
     if (existingErr) {
@@ -593,20 +882,14 @@ Deno.serve(async (req) => {
       return safeJsonError("Failed to clear existing lines", 500, origin);
     }
 
-    const lineRows = lineItems.map((line, idx) => ({
+    const lineRows = pricedLineRows.map((line) => ({
       parts_order_id: orderId,
-      part_number: String(line.part_number),
-      description: line.description != null ? String(line.description) : null,
-      quantity: Number(line.quantity) || 1,
-      unit_price: line.unit_price != null ? Number(line.unit_price) : null,
-      line_total:
-        line.unit_price != null
-          ? Number(line.unit_price) * (Number(line.quantity) || 1)
-          : null,
-      sort_order: idx,
+      ...line,
     }));
 
-    const { error: insErr } = await supabase.from("parts_order_lines").insert(lineRows);
+    const { error: insErr } = await supabase.from("parts_order_lines").insert(
+      lineRows,
+    );
     if (insErr) {
       console.error("parts-order-manager insert lines:", insErr);
       if ((existingLines ?? []).length > 0) {
@@ -620,14 +903,17 @@ Deno.serve(async (req) => {
       return safeJsonError("Failed to insert new lines", 500, origin);
     }
 
-    const { subtotal, total } = totalsFromLines(lineItems);
+    const { subtotal, total } = totalsFromOrderLineRows(pricedLineRows);
     const { error: upErr } = await supabase
       .from("parts_orders")
-      .update({ line_items: lineItems, subtotal, total })
+      .update({ line_items: pricedLineRows, subtotal, total })
       .eq("id", orderId);
     if (upErr) {
       console.error("parts-order-manager sync totals:", upErr);
-      await supabase.from("parts_order_lines").delete().eq("parts_order_id", orderId);
+      await supabase.from("parts_order_lines").delete().eq(
+        "parts_order_id",
+        orderId,
+      );
       if ((existingLines ?? []).length > 0) {
         await supabase.from("parts_order_lines").insert(
           (existingLines ?? []).map((line) => ({
@@ -652,10 +938,12 @@ Deno.serve(async (req) => {
 
   // ── ADVANCE STATUS ──────────────────────────────────────────────────
   if (action === "advance_status") {
-    const orderId =
-      typeof body.parts_order_id === "string" ? body.parts_order_id.trim() : "";
-    const newStatus =
-      typeof body.new_status === "string" ? body.new_status.trim() : "";
+    const orderId = typeof body.parts_order_id === "string"
+      ? body.parts_order_id.trim()
+      : "";
+    const newStatus = typeof body.new_status === "string"
+      ? body.new_status.trim()
+      : "";
 
     if (!orderId) {
       return safeJsonError("parts_order_id is required", 400, origin);
@@ -699,10 +987,15 @@ Deno.serve(async (req) => {
 
     const patch: Record<string, unknown> = { status: newStatus };
     if (newStatus === "shipped") {
-      if (typeof body.tracking_number === "string" && body.tracking_number.trim()) {
+      if (
+        typeof body.tracking_number === "string" && body.tracking_number.trim()
+      ) {
         patch.tracking_number = body.tracking_number.trim();
       }
-      if (typeof body.estimated_delivery === "string" && body.estimated_delivery.trim()) {
+      if (
+        typeof body.estimated_delivery === "string" &&
+        body.estimated_delivery.trim()
+      ) {
         patch.estimated_delivery = body.estimated_delivery.trim();
       }
     }
@@ -734,12 +1027,15 @@ Deno.serve(async (req) => {
 
   // ── PICK ORDER LINE ─────────────────────────────────────────────────
   if (action === "pick_order_line") {
-    const orderId =
-      typeof body.parts_order_id === "string" ? body.parts_order_id.trim() : "";
-    const lineId =
-      typeof body.parts_order_line_id === "string" ? body.parts_order_line_id.trim() : "";
-    const branchId =
-      typeof body.branch_id === "string" ? body.branch_id.trim() : "";
+    const orderId = typeof body.parts_order_id === "string"
+      ? body.parts_order_id.trim()
+      : "";
+    const lineId = typeof body.parts_order_line_id === "string"
+      ? body.parts_order_line_id.trim()
+      : "";
+    const branchId = typeof body.branch_id === "string"
+      ? body.branch_id.trim()
+      : "";
 
     if (!orderId || !lineId || !branchId) {
       return safeJsonError(
@@ -786,15 +1082,22 @@ Deno.serve(async (req) => {
       return safeJsonError("Order line not found", 404, origin);
     }
     if (!Number.isInteger(Number(line.quantity))) {
-      return safeJsonError("Pick requires whole-number quantities", 400, origin);
+      return safeJsonError(
+        "Pick requires whole-number quantities",
+        400,
+        origin,
+      );
     }
 
-    const { error: rpcErr } = await supabase.rpc("adjust_parts_inventory_delta_strict", {
-      p_workspace_id: order.workspace_id,
-      p_branch_id: branchId,
-      p_part_number: line.part_number,
-      p_delta: -line.quantity,
-    });
+    const { error: rpcErr } = await supabase.rpc(
+      "adjust_parts_inventory_delta_strict",
+      {
+        p_workspace_id: order.workspace_id,
+        p_branch_id: branchId,
+        p_part_number: line.part_number,
+        p_delta: -line.quantity,
+      },
+    );
 
     if (rpcErr) {
       console.error("parts-order-manager pick rpc:", rpcErr);
@@ -806,7 +1109,10 @@ Deno.serve(async (req) => {
     }
 
     if (order.status === "confirmed") {
-      await supabase.from("parts_orders").update({ status: "processing" }).eq("id", orderId);
+      await supabase.from("parts_orders").update({ status: "processing" }).eq(
+        "id",
+        orderId,
+      );
     }
 
     const { data: run } = await supabase
@@ -816,19 +1122,20 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (run?.fulfillment_run_id) {
-      const { error: evErr } = await supabase.from("parts_fulfillment_events").insert({
-        workspace_id: order.workspace_id,
-        fulfillment_run_id: run.fulfillment_run_id,
-        event_type: "counter_order_picked",
-        payload: {
-          parts_order_id: orderId,
-          parts_order_line_id: lineId,
-          part_number: line.part_number,
-          quantity: line.quantity,
-          branch_id: branchId,
-          picked_by: userId,
-        },
-      });
+      const { error: evErr } = await supabase.from("parts_fulfillment_events")
+        .insert({
+          workspace_id: order.workspace_id,
+          fulfillment_run_id: run.fulfillment_run_id,
+          event_type: "counter_order_picked",
+          payload: {
+            parts_order_id: orderId,
+            parts_order_line_id: lineId,
+            part_number: line.part_number,
+            quantity: line.quantity,
+            branch_id: branchId,
+            picked_by: userId,
+          },
+        });
       if (evErr) {
         console.warn("parts-order-manager pick event:", evErr);
       }
@@ -848,17 +1155,24 @@ Deno.serve(async (req) => {
     });
 
     return safeJsonOk({
-      picked: { line_id: lineId, part_number: line.part_number, quantity: line.quantity, branch_id: branchId },
+      picked: {
+        line_id: lineId,
+        part_number: line.part_number,
+        quantity: line.quantity,
+        branch_id: branchId,
+      },
     }, origin);
   }
 
   // ── RESERVE INTER-BRANCH TRANSFER ───────────────────────────────────
   if (action === "reserve_interbranch_transfer") {
     const partId = typeof body.part_id === "string" ? body.part_id.trim() : "";
-    const fromLocationId =
-      typeof body.from_location_id === "string" ? body.from_location_id.trim() : "";
-    const toLocationId =
-      typeof body.to_location_id === "string" ? body.to_location_id.trim() : "";
+    const fromLocationId = typeof body.from_location_id === "string"
+      ? body.from_location_id.trim()
+      : "";
+    const toLocationId = typeof body.to_location_id === "string"
+      ? body.to_location_id.trim()
+      : "";
     const orderId =
       typeof body.parts_order_id === "string" && body.parts_order_id.trim()
         ? body.parts_order_id.trim()
@@ -888,7 +1202,11 @@ Deno.serve(async (req) => {
       return safeJsonError("quantity must be greater than zero", 400, origin);
     }
     if (!["transfer", "oem_order"].includes(customerChoice)) {
-      return safeJsonError("customer_choice must be transfer or oem_order", 400, origin);
+      return safeJsonError(
+        "customer_choice must be transfer or oem_order",
+        400,
+        origin,
+      );
     }
 
     const { data: reservation, error: reserveErr } = await supabase.rpc(
@@ -936,25 +1254,29 @@ Deno.serve(async (req) => {
 
   // ── CREATE PARTS QUOTE ──────────────────────────────────────────────
   if (action === "create_parts_quote") {
-    const customerId = typeof body.customer_id === "string" ? body.customer_id.trim() : "";
+    const customerId = typeof body.customer_id === "string"
+      ? body.customer_id.trim()
+      : "";
     const contactId =
       typeof body.contact_id === "string" && body.contact_id.trim()
         ? body.contact_id.trim()
         : null;
-    const quoteSourceRaw =
-      typeof body.quote_source === "string" ? body.quote_source.trim() : "phone";
+    const quoteSourceRaw = typeof body.quote_source === "string"
+      ? body.quote_source.trim()
+      : "phone";
     const quoteSource =
-      ["counter", "phone", "email", "walkin", "service", "online"].includes(quoteSourceRaw)
+      ["counter", "phone", "email", "walkin", "service", "online"].includes(
+          quoteSourceRaw,
+        )
         ? quoteSourceRaw
         : "phone";
     const freightEstimateCents = Math.max(
       0,
       Math.floor(num(body.freight_estimate_cents) ?? 0),
     );
-    const freightSourceRaw =
-      typeof body.freight_estimate_source === "string"
-        ? body.freight_estimate_source.trim()
-        : "unknown";
+    const freightSourceRaw = typeof body.freight_estimate_source === "string"
+      ? body.freight_estimate_source.trim()
+      : "unknown";
     const freightEstimateSource = [
         "vendor_estimate",
         "staff_estimate",
@@ -967,9 +1289,12 @@ Deno.serve(async (req) => {
       typeof body.expires_at === "string" && body.expires_at.trim()
         ? body.expires_at.trim()
         : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    const notes = typeof body.notes === "string" ? body.notes.trim().slice(0, 4000) : null;
-    const description =
-      typeof body.notes === "string" ? body.notes.trim().slice(0, 500) : null;
+    const notes = typeof body.notes === "string"
+      ? body.notes.trim().slice(0, 4000)
+      : null;
+    const description = typeof body.notes === "string"
+      ? body.notes.trim().slice(0, 500)
+      : null;
     const quoteLines = sanitizeQuoteLines(body.line_items);
 
     if (!customerId) {
@@ -983,7 +1308,20 @@ Deno.serve(async (req) => {
       );
     }
 
-    const subtotalCents = quoteLines.reduce(
+    let pricedQuoteLines: Array<Record<string, unknown>>;
+    try {
+      pricedQuoteLines = await resolveQuoteLineRows(
+        supabase,
+        quoteLines,
+        customerId,
+      );
+    } catch (e) {
+      const response = pricingErrorResponse(e, origin);
+      if (response) return response;
+      throw e;
+    }
+
+    const subtotalCents = pricedQuoteLines.reduce(
       (sum, line) => sum + Number(line.extended_price_cents),
       0,
     );
@@ -1024,20 +1362,15 @@ Deno.serve(async (req) => {
       return safeJsonError("Failed to create parts quote", 400, origin);
     }
 
-    const lineRows = quoteLines.map((line, idx) => ({
+    const lineRows = pricedQuoteLines.map((line) => ({
       workspace_id: workspaceId,
       parts_quote_id: quote.id,
-      sort_order: idx,
-      part_catalog_id: line.part_catalog_id,
-      part_number: line.part_number,
-      description: line.description,
-      qty: line.quantity,
-      unit_price_cents: line.unit_price_cents,
-      discount_pct: line.discount_pct,
-      extended_price_cents: line.extended_price_cents,
+      ...line,
     }));
 
-    const { error: linesErr } = await supabase.from("parts_quote_lines").insert(lineRows);
+    const { error: linesErr } = await supabase.from("parts_quote_lines").insert(
+      lineRows,
+    );
     if (linesErr) {
       console.error("parts-order-manager quote lines:", linesErr);
       await supabase.from("parts_quotes").delete().eq("id", quote.id);
@@ -1049,16 +1382,19 @@ Deno.serve(async (req) => {
 
   // ── CONVERT PARTS QUOTE TO ORDER ────────────────────────────────────
   if (action === "convert_parts_quote_to_order") {
-    const quoteId =
-      typeof body.parts_quote_id === "string" ? body.parts_quote_id.trim() : "";
-    const crmCompanyId =
-      typeof body.crm_company_id === "string" ? body.crm_company_id.trim() : "";
+    const quoteId = typeof body.parts_quote_id === "string"
+      ? body.parts_quote_id.trim()
+      : "";
+    const crmCompanyId = typeof body.crm_company_id === "string"
+      ? body.crm_company_id.trim()
+      : "";
     const orderSource =
       typeof body.order_source === "string" && body.order_source.trim()
         ? body.order_source.trim()
         : null;
     const paymentClassification =
-      typeof body.payment_classification === "string" && body.payment_classification.trim()
+      typeof body.payment_classification === "string" &&
+        body.payment_classification.trim()
         ? body.payment_classification.trim()
         : "cash";
 
@@ -1078,7 +1414,6 @@ Deno.serve(async (req) => {
         p_order_source: orderSource,
         p_payment_classification: paymentClassification,
         p_created_by: userId,
-        p_workspace_id: workspaceId,
       },
     );
 
@@ -1092,6 +1427,53 @@ Deno.serve(async (req) => {
     }
 
     return safeJsonOk({ conversion }, origin, 201);
+  }
+
+  // ── DECIDE OVER-CAP LINE DISCOUNT ──────────────────────────────────
+  if (action === "decide_line_discount") {
+    if (!["admin", "manager", "owner"].includes(userRole)) {
+      return safeJsonError("Parts Manager approval role required", 403, origin);
+    }
+
+    const lineType = typeof body.line_type === "string"
+      ? body.line_type.trim()
+      : "";
+    const lineId = typeof body.line_id === "string" ? body.line_id.trim() : "";
+    const decision = typeof body.discount_decision === "string"
+      ? body.discount_decision.trim()
+      : "";
+    const reason = typeof body.discount_reason === "string"
+      ? body.discount_reason.trim().slice(0, 500)
+      : null;
+
+    if (!lineType || !lineId || !decision) {
+      return safeJsonError(
+        "line_type, line_id, and discount_decision are required",
+        400,
+        origin,
+      );
+    }
+
+    const { data: result, error: decideErr } = await supabase.rpc(
+      "parts_decide_line_discount",
+      {
+        p_line_type: lineType,
+        p_line_id: lineId,
+        p_decision: decision,
+        p_reason: reason,
+      },
+    );
+
+    if (decideErr) {
+      console.error("parts-order-manager decide discount:", decideErr);
+      return safeJsonError(
+        decideErr.message ?? "Failed to decide line discount",
+        400,
+        origin,
+      );
+    }
+
+    return safeJsonOk({ result }, origin);
   }
 
   return safeJsonError(`Unknown action: ${String(action)}`, 400, origin);
