@@ -5,6 +5,8 @@ import {
   grappleProductionDashboardIsEmpty,
   normalizeGrappleGtbInspectionRows,
   normalizeGrappleAccessoryInstallRows,
+  normalizeGrapplePartsSheetLineRows,
+  normalizeGrapplePartsSheetRows,
   normalizeGrapplePipelineRows,
   normalizeGrappleProgressSheetRows,
   normalizeGrappleStageSummaryRows,
@@ -157,6 +159,72 @@ describe("grapple production api normalizers", () => {
     }));
   });
 
+  it("normalizes build parts sheet headers and consumed lines tied to a grapple build", () => {
+    const sheets = normalizeGrapplePartsSheetRows([
+      {
+        id: "sheet-1",
+        build_id: "build-1",
+        build_number: "GTB-1001",
+        sheet_number: "1",
+        status: "locked",
+        title: "Build Parts Sheet",
+        issued_by_name: "Parts Lead",
+        issued_at: "2026-06-01T12:00:00Z",
+        locked_by_name: "Build Lead",
+        locked_at: "2026-06-01T14:00:00Z",
+        line_count: "2",
+        total_quantity: "5",
+        total_cost: "812.75",
+      },
+    ]);
+    const lines = normalizeGrapplePartsSheetLineRows([
+      {
+        id: "line-1",
+        build_id: "build-1",
+        build_number: "GTB-1001",
+        parts_sheet_id: "sheet-1",
+        sheet_number: "1",
+        catalog_part_number: "CAT-123",
+        part_number: "PIN-123",
+        description: "Grapple cylinder pin",
+        quantity: "2",
+        uom: "EA",
+        unit_cost: "100.25",
+        extended_cost: "200.50",
+        consumed_from_branch_id: "BR-1",
+        consumption_status: "consumed",
+        consumed_by_name: "Builder One",
+        consumed_at: "2026-06-01T13:00:00Z",
+        sort_order: "3",
+      },
+    ]);
+
+    expect(sheets[0]).toEqual(expect.objectContaining({
+      id: "sheet-1",
+      buildId: "build-1",
+      buildNumber: "GTB-1001",
+      sheetNumber: 1,
+      status: "locked",
+      lineCount: 2,
+      totalQuantity: 5,
+      totalCost: 812.75,
+      lockedByName: "Build Lead",
+    }));
+    expect(lines[0]).toEqual(expect.objectContaining({
+      id: "line-1",
+      buildId: "build-1",
+      partsSheetId: "sheet-1",
+      partNumber: "PIN-123",
+      quantity: 2,
+      unitCost: 100.25,
+      extendedCost: 200.5,
+      consumedFromBranchId: "BR-1",
+      consumptionStatus: "consumed",
+      consumedByName: "Builder One",
+      sortOrder: 3,
+    }));
+  });
+
   it("coerces stage summary counts and formats labels", () => {
     const rows = normalizeGrappleStageSummaryRows([
       {
@@ -187,7 +255,9 @@ describe("grapple production api normalizers", () => {
       gtbInspections: [],
       accessoryInstalls: [],
       partsSheets: [],
+      partsSheetLines: [],
       finalQcChecklists: [],
+      finalQcItems: [],
     };
 
     expect(grappleProductionDashboardIsEmpty(empty)).toBe(true);

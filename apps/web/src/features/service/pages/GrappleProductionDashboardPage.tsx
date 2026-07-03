@@ -25,17 +25,20 @@ import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { ServiceSubNav } from "../components/ServiceSubNav";
 import {
+  addGrapplePartsSheetLine,
   completeGrappleAccessoryInstall,
   completeGrappleGtbInspection,
   completeGrappleFinalQcChecklist,
   createGrappleBuild,
   createGrappleFinalQcChecklist,
   createGrappleGtbInspection,
+  createGrapplePartsSheet,
   ensureGrappleAccessoryInstallSteps,
   fetchGrappleProductionDashboard,
   formatGrappleLabel,
   grappleProductionDashboardIsEmpty,
   GRAPPLE_PRODUCTION_STAGES,
+  lockGrapplePartsSheet,
   signGrappleBuildFinalQc,
   transitionGrappleBuildStage,
   updateGrappleFinalQcItem,
@@ -47,6 +50,7 @@ import {
   type GrappleFinalQcItemResult,
   type GrappleGtbInspection,
   type GrapplePartsSheet,
+  type GrapplePartsSheetLine,
   type GrapplePipelineBuild,
   type GrappleProductionDashboardData,
   type GrappleProgressSheet,
@@ -618,6 +622,7 @@ function BuildDetailPanel({
   const inspections = data.gtbInspections.filter((item) => item.buildId === build?.id);
   const accessories = data.accessoryInstalls.filter((item) => item.buildId === build?.id);
   const partsSheets = data.partsSheets.filter((item) => item.buildId === build?.id);
+  const partsSheetLines = data.partsSheetLines.filter((item) => item.buildId === build?.id);
   const finalQc = data.finalQcChecklists.filter((item) => item.buildId === build?.id);
   const finalQcItems = data.finalQcItems.filter((item) => item.buildId === build?.id);
   const events = data.dashboardTimeline.filter((event) => event.buildId === build?.id).slice(0, 4);
@@ -685,6 +690,8 @@ function BuildDetailPanel({
             progress={progress}
             gtbInspectionRows={inspections}
             accessoryRows={accessories}
+            partsSheetRows={partsSheets}
+            partsSheetLineRows={partsSheetLines}
             finalQcRows={finalQc}
             finalQcItems={finalQcItems}
             currentUserId={currentUserId}
@@ -697,7 +704,7 @@ function BuildDetailPanel({
         <div className="grid gap-4 xl:grid-cols-2">
           <GtbInspectionPanel rows={inspections} />
           <AccessoryPanel rows={accessories} />
-          <PartsSheetPanel rows={partsSheets} />
+          <PartsSheetPanel rows={partsSheets} lines={partsSheetLines} />
           <FinalQcPanel rows={finalQc} items={finalQcItems} progress={progress} />
         </div>
 
@@ -769,6 +776,8 @@ function GrappleBuildMutationPanel({
   progress,
   gtbInspectionRows,
   accessoryRows,
+  partsSheetRows,
+  partsSheetLineRows,
   finalQcRows,
   finalQcItems,
   currentUserId,
@@ -778,6 +787,8 @@ function GrappleBuildMutationPanel({
   progress: GrappleProgressSheet | null;
   gtbInspectionRows: GrappleGtbInspection[];
   accessoryRows: GrappleAccessoryInstall[];
+  partsSheetRows: GrapplePartsSheet[];
+  partsSheetLineRows: GrapplePartsSheetLine[];
   finalQcRows: GrappleFinalQcChecklist[];
   finalQcItems: GrappleFinalQcItem[];
   currentUserId: string | null;
@@ -788,9 +799,20 @@ function GrappleBuildMutationPanel({
   const [transitionNote, setTransitionNote] = useState("");
   const [gtbNotes, setGtbNotes] = useState("");
   const [accessoryNotes, setAccessoryNotes] = useState("");
+  const [partsSheetNotes, setPartsSheetNotes] = useState("");
+  const [partsLinePartNumber, setPartsLinePartNumber] = useState("");
+  const [partsLineDescription, setPartsLineDescription] = useState("");
+  const [partsLineQuantity, setPartsLineQuantity] = useState("1");
+  const [partsLineUom, setPartsLineUom] = useState("EA");
+  const [partsLineUnitCost, setPartsLineUnitCost] = useState("0");
+  const [partsLineBranchId, setPartsLineBranchId] = useState("");
   const [qcNotes, setQcNotes] = useState("");
   const [signatureName, setSignatureName] = useState(currentUserName);
   const latestGtbInspection = gtbInspectionRows[0] ?? null;
+  const latestPartsSheet = partsSheetRows[0] ?? null;
+  const latestPartsSheetLines = latestPartsSheet
+    ? partsSheetLineRows.filter((line) => line.partsSheetId === latestPartsSheet.id).sort((a, b) => a.sortOrder - b.sortOrder)
+    : [];
   const latestFinalQc = finalQcRows[0] ?? null;
   const latestItems = latestFinalQc
     ? finalQcItems.filter((item) => item.checklistId === latestFinalQc.id).sort((a, b) => a.displayOrder - b.displayOrder)
@@ -801,6 +823,13 @@ function GrappleBuildMutationPanel({
     setTransitionNote("");
     setGtbNotes("");
     setAccessoryNotes("");
+    setPartsSheetNotes("");
+    setPartsLinePartNumber("");
+    setPartsLineDescription("");
+    setPartsLineQuantity("1");
+    setPartsLineUom("EA");
+    setPartsLineUnitCost("0");
+    setPartsLineBranchId("");
     setQcNotes("");
   }, [build.id, build.productionStage]);
 
@@ -833,6 +862,26 @@ function GrappleBuildMutationPanel({
     mutationFn: completeGrappleAccessoryInstall,
     onSuccess: invalidateDashboard,
   });
+  const createPartsSheetMutation = useMutation({
+    mutationFn: createGrapplePartsSheet,
+    onSuccess: invalidateDashboard,
+  });
+  const addPartsLineMutation = useMutation({
+    mutationFn: addGrapplePartsSheetLine,
+    onSuccess: () => {
+      setPartsLinePartNumber("");
+      setPartsLineDescription("");
+      setPartsLineQuantity("1");
+      setPartsLineUom("EA");
+      setPartsLineUnitCost("0");
+      setPartsLineBranchId("");
+      invalidateDashboard();
+    },
+  });
+  const lockPartsSheetMutation = useMutation({
+    mutationFn: lockGrapplePartsSheet,
+    onSuccess: invalidateDashboard,
+  });
   const updateItemMutation = useMutation({
     mutationFn: updateGrappleFinalQcItem,
     onSuccess: invalidateDashboard,
@@ -861,17 +910,34 @@ function GrappleBuildMutationPanel({
   const nextGtbInspectionNumber = Math.max(0, ...gtbInspectionRows.map((row) => row.inspectionNumber)) + 1;
   const latestGtbCanSign = Boolean(latestGtbInspection && latestGtbInspection.status !== "signed" && signatureName.trim());
   const incompleteAccessories = accessoryRows.filter((row) => row.status !== "completed" && row.status !== "waived");
+  const nextPartsSheetNumber = Math.max(0, ...partsSheetRows.map((row) => row.sheetNumber)) + 1;
+  const partsLineQuantityNumber = Number(partsLineQuantity);
+  const partsLineUnitCostNumber = Number(partsLineUnitCost);
+  const partsLineValid = Boolean(
+    latestPartsSheet &&
+    latestPartsSheet.status !== "locked" &&
+    latestPartsSheet.status !== "void" &&
+    partsLinePartNumber.trim() &&
+    Number.isFinite(partsLineQuantityNumber) &&
+    partsLineQuantityNumber > 0 &&
+    Number.isFinite(partsLineUnitCostNumber) &&
+    partsLineUnitCostNumber >= 0,
+  );
+  const latestPartsSheetCanLock = Boolean(latestPartsSheet && latestPartsSheet.status !== "locked" && latestPartsSheet.status !== "void" && latestPartsSheet.lineCount > 0);
   const nextChecklistNumber = Math.max(0, ...finalQcRows.map((row) => row.checklistNumber)) + 1;
   const releaseCleanItems = latestItems.length > 0 && latestItems.every((item) => (item.result === "pass" || item.result === "not_applicable") && !item.reworkRequired);
   const latestCanComplete = Boolean(latestFinalQc && latestFinalQc.status !== "signed" && releaseCleanItems);
   const leadCanSign = canSignFinalQc(build, currentUserId);
   const latestCanSign = Boolean(latestFinalQc && latestFinalQc.status !== "signed" && latestFinalQc.overallResult === "pass" && signatureName.trim());
-  const busy = transitionMutation.isPending || createGtbMutation.isPending || completeGtbMutation.isPending || ensureAccessoryMutation.isPending || completeAccessoryMutation.isPending || createQcMutation.isPending || updateItemMutation.isPending || markOpenPassMutation.isPending || completeQcMutation.isPending || signQcMutation.isPending;
+  const busy = transitionMutation.isPending || createGtbMutation.isPending || completeGtbMutation.isPending || ensureAccessoryMutation.isPending || completeAccessoryMutation.isPending || createPartsSheetMutation.isPending || addPartsLineMutation.isPending || lockPartsSheetMutation.isPending || createQcMutation.isPending || updateItemMutation.isPending || markOpenPassMutation.isPending || completeQcMutation.isPending || signQcMutation.isPending;
   const error = mutationErrorMessage(transitionMutation.error)
     ?? mutationErrorMessage(createGtbMutation.error)
     ?? mutationErrorMessage(completeGtbMutation.error)
     ?? mutationErrorMessage(ensureAccessoryMutation.error)
     ?? mutationErrorMessage(completeAccessoryMutation.error)
+    ?? mutationErrorMessage(createPartsSheetMutation.error)
+    ?? mutationErrorMessage(addPartsLineMutation.error)
+    ?? mutationErrorMessage(lockPartsSheetMutation.error)
     ?? mutationErrorMessage(createQcMutation.error)
     ?? mutationErrorMessage(updateItemMutation.error)
     ?? mutationErrorMessage(markOpenPassMutation.error)
@@ -997,6 +1063,111 @@ function GrappleBuildMutationPanel({
               </>
             )}
           </div>
+        </div>
+
+        <div className="rounded-2xl border bg-muted/10 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Package className="h-4 w-4 text-qep-orange" aria-hidden />
+            <h4 className="font-semibold text-foreground">Build parts sheet</h4>
+          </div>
+          {!latestPartsSheet ? (
+            <div className="grid gap-3">
+              <p className="rounded-xl border border-dashed p-3 text-sm text-muted-foreground">No consumed-parts sheet exists for this grapple build yet.</p>
+              <LabeledTextarea label="Sheet notes" value={partsSheetNotes} onChange={setPartsSheetNotes} placeholder="Production parts context or source notes" />
+              <Button
+                type="button"
+                disabled={busy}
+                onClick={() => createPartsSheetMutation.mutate({
+                  buildId: build.id,
+                  sheetNumber: nextPartsSheetNumber,
+                  userId: currentUserId,
+                  notes: partsSheetNotes,
+                })}
+              >
+                {createPartsSheetMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Package className="h-4 w-4" aria-hidden />}
+                Create parts sheet
+              </Button>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusPill value={latestPartsSheet.status} />
+                <Pill tone={latestPartsSheet.lineCount > 0 ? "green" : "amber"}>{formatCount(latestPartsSheet.lineCount)} lines</Pill>
+                <Pill tone="amber">{formatMoney(latestPartsSheet.totalCost)}</Pill>
+              </div>
+              <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
+                {latestPartsSheetLines.length === 0 ? (
+                  <p className="rounded-xl border border-dashed p-3 text-sm text-muted-foreground">No consumed parts are recorded on sheet #{latestPartsSheet.sheetNumber} yet.</p>
+                ) : latestPartsSheetLines.slice(0, 5).map((line) => (
+                  <div key={line.id} className="rounded-xl border bg-background/70 p-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{line.partNumber}</p>
+                        <p className="text-xs text-muted-foreground">{line.description ?? "No description"} · {formatCount(line.quantity)} {line.uom}</p>
+                      </div>
+                      <StatusPill value={line.consumptionStatus} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {latestPartsSheet.status === "locked" ? (
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+                  Sheet #{latestPartsSheet.sheetNumber} is locked to this build.
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <LabeledInput label="Part number" value={partsLinePartNumber} onChange={setPartsLinePartNumber} placeholder="PN-12345" />
+                    <LabeledInput label="Description" value={partsLineDescription} onChange={setPartsLineDescription} placeholder="Cylinder pin kit" />
+                    <LabeledInput label="Quantity" value={partsLineQuantity} onChange={setPartsLineQuantity} placeholder="1" />
+                    <LabeledInput label="UOM" value={partsLineUom} onChange={setPartsLineUom} placeholder="EA" />
+                    <LabeledInput label="Unit cost" value={partsLineUnitCost} onChange={setPartsLineUnitCost} placeholder="0" />
+                    <LabeledInput label="Source branch" value={partsLineBranchId} onChange={setPartsLineBranchId} placeholder="Optional branch id" />
+                  </div>
+                  <LabeledTextarea label="Sheet notes" value={partsSheetNotes} onChange={setPartsSheetNotes} placeholder="Consumed-part notes or source context" />
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={busy || !partsLineValid}
+                      onClick={() => {
+                        if (!latestPartsSheet) return;
+                        addPartsLineMutation.mutate({
+                          partsSheetId: latestPartsSheet.id,
+                          partNumber: partsLinePartNumber,
+                          description: partsLineDescription,
+                          quantity: partsLineQuantityNumber,
+                          uom: partsLineUom,
+                          unitCost: partsLineUnitCostNumber,
+                          consumedFromBranchId: partsLineBranchId,
+                          userId: currentUserId,
+                          notes: partsSheetNotes,
+                        });
+                      }}
+                    >
+                      {addPartsLineMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <PlusCircle className="h-4 w-4" aria-hidden />}
+                      Add consumed part
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={busy || !latestPartsSheetCanLock}
+                      onClick={() => {
+                        if (!latestPartsSheet) return;
+                        lockPartsSheetMutation.mutate({
+                          partsSheetId: latestPartsSheet.id,
+                          userId: currentUserId,
+                          notes: partsSheetNotes,
+                        });
+                      }}
+                    >
+                      {lockPartsSheetMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Lock className="h-4 w-4" aria-hidden />}
+                      Lock sheet
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="rounded-2xl border bg-muted/10 p-4">
@@ -1161,7 +1332,7 @@ function ReadOnlyMutationNotice() {
         <Lock className="mt-0.5 h-4 w-4 text-muted-foreground" aria-hidden />
         <div>
           <p className="font-semibold text-foreground">Read-only production view</p>
-          <p className="mt-1">Mutation controls are hidden for sales/service readers. Assigned build Leads and manager/elevated roles can create builds, move stages, complete GTB/accessory checks, complete final QC, and sign release.</p>
+          <p className="mt-1">Mutation controls are hidden for sales/service readers. Assigned build Leads and manager/elevated roles can create builds, move stages, complete GTB/accessory checks, capture build parts sheets, complete final QC, and sign release.</p>
         </div>
       </div>
     </div>
@@ -1225,8 +1396,11 @@ function AccessoryPanel({ rows }: { rows: GrappleAccessoryInstall[] }) {
   );
 }
 
-function PartsSheetPanel({ rows }: { rows: GrapplePartsSheet[] }) {
+function PartsSheetPanel({ rows, lines }: { rows: GrapplePartsSheet[]; lines: GrapplePartsSheetLine[] }) {
   const latest = rows[0];
+  const latestLines = latest
+    ? lines.filter((line) => line.partsSheetId === latest.id).sort((a, b) => a.sortOrder - b.sortOrder)
+    : [];
   return (
     <DetailSection icon={Package} title="Build parts sheet" empty={!latest} emptyLabel="No build parts sheet yet.">
       {latest && (
@@ -1243,6 +1417,16 @@ function PartsSheetPanel({ rows }: { rows: GrapplePartsSheet[] }) {
             <MetricBox label="Qty" value={formatCount(latest.totalQuantity)} />
             <MetricBox label="Cost" value={formatMoney(latest.totalCost)} />
           </div>
+          {latestLines.length > 0 && (
+            <div className="mt-3 space-y-1.5">
+              {latestLines.slice(0, 4).map((line) => (
+                <div key={line.id} className="flex items-center justify-between gap-3 rounded-lg border bg-background/70 px-3 py-2 text-xs">
+                  <span className="truncate font-medium text-foreground">{line.partNumber}</span>
+                  <span className="shrink-0 text-muted-foreground">{formatCount(line.quantity)} {line.uom} · {formatMoney(line.extendedCost)}</span>
+                </div>
+              ))}
+            </div>
+          )}
           <p className="mt-3 text-xs text-muted-foreground">Locked: {latest.lockedByName ?? "not locked"} · {formatDateTime(latest.lockedAt)}</p>
         </>
       )}

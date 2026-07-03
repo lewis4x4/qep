@@ -214,6 +214,29 @@ export interface GrapplePartsSheet {
   updatedAt: string | null;
 }
 
+export interface GrapplePartsSheetLine {
+  id: string;
+  buildId: string;
+  buildNumber: string;
+  partsSheetId: string;
+  sheetNumber: number;
+  catalogItemId: string | null;
+  catalogPartNumber: string | null;
+  partNumber: string;
+  description: string | null;
+  quantity: number;
+  uom: string;
+  unitCost: number;
+  extendedCost: number;
+  consumedFromBranchId: string | null;
+  consumptionStatus: string;
+  consumedByName: string | null;
+  consumedAt: string | null;
+  notes: string | null;
+  sortOrder: number;
+  updatedAt: string | null;
+}
+
 export interface GrappleFinalQcChecklist {
   id: string;
   buildId: string;
@@ -273,6 +296,7 @@ export interface GrappleProductionDashboardData {
   gtbInspections: GrappleGtbInspection[];
   accessoryInstalls: GrappleAccessoryInstall[];
   partsSheets: GrapplePartsSheet[];
+  partsSheetLines: GrapplePartsSheetLine[];
   finalQcChecklists: GrappleFinalQcChecklist[];
   finalQcItems: GrappleFinalQcItem[];
 }
@@ -565,6 +589,34 @@ export function normalizeGrapplePartsSheetRows(rows: unknown[]): GrapplePartsShe
   });
 }
 
+export function normalizeGrapplePartsSheetLineRows(rows: unknown[]): GrapplePartsSheetLine[] {
+  return rows.map((row) => {
+    const source = row as Record<string, unknown>;
+    return {
+      id: stringValue(source.id),
+      buildId: stringValue(source.build_id),
+      buildNumber: stringValue(source.build_number, "Unnumbered build"),
+      partsSheetId: stringValue(source.parts_sheet_id),
+      sheetNumber: numberValue(source.sheet_number, 1),
+      catalogItemId: nullableString(source.catalog_item_id),
+      catalogPartNumber: nullableString(source.catalog_part_number),
+      partNumber: stringValue(source.part_number),
+      description: nullableString(source.description),
+      quantity: numberValue(source.quantity),
+      uom: stringValue(source.uom, "EA"),
+      unitCost: numberValue(source.unit_cost),
+      extendedCost: numberValue(source.extended_cost),
+      consumedFromBranchId: nullableString(source.consumed_from_branch_id),
+      consumptionStatus: stringValue(source.consumption_status, "consumed"),
+      consumedByName: nullableString(source.consumed_by_name),
+      consumedAt: nullableString(source.consumed_at),
+      notes: nullableString(source.notes),
+      sortOrder: numberValue(source.sort_order),
+      updatedAt: nullableString(source.updated_at),
+    };
+  });
+}
+
 export function normalizeGrappleFinalQcRows(rows: unknown[]): GrappleFinalQcChecklist[] {
   return rows.map((row) => {
     const source = row as Record<string, unknown>;
@@ -633,6 +685,7 @@ export function grappleProductionDashboardIsEmpty(data: GrappleProductionDashboa
     data.gtbInspections.length === 0 &&
     data.accessoryInstalls.length === 0 &&
     data.partsSheets.length === 0 &&
+    data.partsSheetLines.length === 0 &&
     data.finalQcChecklists.length === 0 &&
     (data.finalQcItems?.length ?? 0) === 0
   );
@@ -656,6 +709,7 @@ export async function fetchGrappleProductionDashboard(): Promise<GrappleProducti
     gtbRows,
     accessoryRows,
     partsSheetRows,
+    partsSheetLineRows,
     finalQcRows,
     finalQcItemRows,
   ] = await Promise.all([
@@ -667,6 +721,7 @@ export async function fetchGrappleProductionDashboard(): Promise<GrappleProducti
     loadViewRows("v_grapple_build_gtb_inspections", "updated_at"),
     loadViewRows("v_grapple_build_accessory_installs", "updated_at"),
     loadViewRows("v_grapple_build_parts_sheets", "updated_at"),
+    loadViewRows("v_grapple_build_parts_sheet_lines", "sort_order", true),
     loadViewRows("v_grapple_build_final_qc_checklists", "updated_at"),
     loadViewRows("v_grapple_build_final_qc_items", "display_order", true),
   ]);
@@ -680,6 +735,7 @@ export async function fetchGrappleProductionDashboard(): Promise<GrappleProducti
     gtbInspections: normalizeGrappleGtbInspectionRows(gtbRows),
     accessoryInstalls: normalizeGrappleAccessoryInstallRows(accessoryRows),
     partsSheets: normalizeGrapplePartsSheetRows(partsSheetRows),
+    partsSheetLines: normalizeGrapplePartsSheetLineRows(partsSheetLineRows),
     finalQcChecklists: normalizeGrappleFinalQcRows(finalQcRows),
     finalQcItems: normalizeGrappleFinalQcItemRows(finalQcItemRows),
   };
@@ -890,6 +946,93 @@ export async function completeGrappleAccessoryInstall(input: {
 
   if (error) throw new Error(error.message || "Failed to complete accessory install");
   return normalizeGrappleAccessoryInstallRows([data])[0];
+}
+
+export async function createGrapplePartsSheet(input: {
+  buildId: string;
+  sheetNumber: number;
+  userId?: string | null;
+  notes?: string | null;
+}): Promise<GrapplePartsSheet> {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("grapple_build_parts_sheets")
+    .insert({
+      build_id: input.buildId,
+      sheet_number: input.sheetNumber,
+      status: "issued",
+      title: "Build Parts Sheet",
+      issued_by: input.userId ?? null,
+      issued_at: now,
+      notes: input.notes?.trim() || null,
+    })
+    .select("*")
+    .single();
+
+  if (error) throw new Error(error.message || "Failed to create build parts sheet");
+  return normalizeGrapplePartsSheetRows([data])[0];
+}
+
+export async function addGrapplePartsSheetLine(input: {
+  partsSheetId: string;
+  partNumber: string;
+  description?: string | null;
+  quantity: number;
+  uom?: string | null;
+  unitCost?: number | null;
+  consumedFromBranchId?: string | null;
+  userId?: string | null;
+  notes?: string | null;
+}): Promise<GrapplePartsSheetLine> {
+  const partNumber = input.partNumber.trim();
+  if (!partNumber) throw new Error("Part number is required to add a build parts line.");
+  if (!Number.isFinite(input.quantity) || input.quantity <= 0) {
+    throw new Error("Quantity must be greater than zero.");
+  }
+
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("grapple_build_parts_sheet_lines")
+    .insert({
+      parts_sheet_id: input.partsSheetId,
+      part_number: partNumber,
+      description: input.description?.trim() || null,
+      quantity: input.quantity,
+      uom: input.uom?.trim() || "EA",
+      unit_cost: input.unitCost ?? 0,
+      consumed_from_branch_id: input.consumedFromBranchId?.trim() || null,
+      consumption_status: "consumed",
+      consumed_by: input.userId ?? null,
+      consumed_at: now,
+      notes: input.notes?.trim() || null,
+    })
+    .select("*")
+    .single();
+
+  if (error) throw new Error(error.message || "Failed to add build parts line");
+  return normalizeGrapplePartsSheetLineRows([data])[0];
+}
+
+export async function lockGrapplePartsSheet(input: {
+  partsSheetId: string;
+  userId?: string | null;
+  notes?: string | null;
+}): Promise<GrapplePartsSheet> {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("grapple_build_parts_sheets")
+    .update({
+      status: "locked",
+      locked_by: input.userId ?? null,
+      locked_at: now,
+      notes: input.notes?.trim() || null,
+    })
+    .eq("id", input.partsSheetId)
+    .select("*")
+    .single();
+
+  if (error) throw new Error(error.message || "Failed to lock build parts sheet");
+  return normalizeGrapplePartsSheetRows([data])[0];
 }
 
 export async function signGrappleBuildFinalQc(input: {
