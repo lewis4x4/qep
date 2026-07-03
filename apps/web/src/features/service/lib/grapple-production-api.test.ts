@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import {
+  DEFAULT_GRAPPLE_GTB_INSPECTION_ITEMS,
   formatGrappleLabel,
   grappleProductionDashboardIsEmpty,
+  normalizeGrappleGtbInspectionRows,
   normalizeGrapplePipelineRows,
   normalizeGrappleProgressSheetRows,
   normalizeGrappleStageSummaryRows,
@@ -82,6 +84,46 @@ describe("grapple production api normalizers", () => {
       durationSeconds: 86400,
       durationHours: 24,
     });
+  });
+
+  it("normalizes GTB inspection headers and keeps the standard inspection prompts", () => {
+    const rows = normalizeGrappleGtbInspectionRows([
+      {
+        id: "inspection-1",
+        build_id: "build-1",
+        build_number: "GTB-1001",
+        inspection_number: "2",
+        status: "signed",
+        overall_result: "pass",
+        inspected_by_name: "Inspector One",
+        inspected_at: "2026-06-01T13:00:00Z",
+        signed_by_name: "Lead One",
+        signed_at: "2026-06-01T14:00:00Z",
+        item_count: "4",
+        failed_item_count: "0",
+        rework_required_count: "0",
+      },
+    ]);
+
+    expect(rows[0]).toEqual(expect.objectContaining({
+      id: "inspection-1",
+      buildId: "build-1",
+      buildNumber: "GTB-1001",
+      inspectionNumber: 2,
+      status: "signed",
+      overallResult: "pass",
+      inspectedByName: "Inspector One",
+      signedByName: "Lead One",
+      itemCount: 4,
+      failedItemCount: 0,
+      reworkRequiredCount: 0,
+    }));
+    expect(DEFAULT_GRAPPLE_GTB_INSPECTION_ITEMS.map((item) => item.itemKey)).toEqual([
+      "mounting_frame_and_welds",
+      "hydraulic_routing_and_pressure",
+      "controls_safety_and_labels",
+      "paint_photos_and_build_packet",
+    ]);
   });
 
   it("coerces stage summary counts and formats labels", () => {

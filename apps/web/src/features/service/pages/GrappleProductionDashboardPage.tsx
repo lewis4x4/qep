@@ -25,9 +25,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { ServiceSubNav } from "../components/ServiceSubNav";
 import {
+  completeGrappleGtbInspection,
   completeGrappleFinalQcChecklist,
   createGrappleBuild,
   createGrappleFinalQcChecklist,
+  createGrappleGtbInspection,
   fetchGrappleProductionDashboard,
   formatGrappleLabel,
   grappleProductionDashboardIsEmpty,
@@ -679,6 +681,7 @@ function BuildDetailPanel({
           <GrappleBuildMutationPanel
             build={build}
             progress={progress}
+            gtbInspectionRows={inspections}
             finalQcRows={finalQc}
             finalQcItems={finalQcItems}
             currentUserId={currentUserId}
@@ -761,6 +764,7 @@ function ReleaseGatePanel({
 function GrappleBuildMutationPanel({
   build,
   progress,
+  gtbInspectionRows,
   finalQcRows,
   finalQcItems,
   currentUserId,
@@ -768,6 +772,7 @@ function GrappleBuildMutationPanel({
 }: {
   build: GrapplePipelineBuild;
   progress: GrappleProgressSheet | null;
+  gtbInspectionRows: GrappleGtbInspection[];
   finalQcRows: GrappleFinalQcChecklist[];
   finalQcItems: GrappleFinalQcItem[];
   currentUserId: string | null;
@@ -776,8 +781,10 @@ function GrappleBuildMutationPanel({
   const queryClient = useQueryClient();
   const [nextStage, setNextStage] = useState<GrappleProductionStage | "">(() => nextProductionStage(build.productionStage) ?? "");
   const [transitionNote, setTransitionNote] = useState("");
+  const [gtbNotes, setGtbNotes] = useState("");
   const [qcNotes, setQcNotes] = useState("");
   const [signatureName, setSignatureName] = useState(currentUserName);
+  const latestGtbInspection = gtbInspectionRows[0] ?? null;
   const latestFinalQc = finalQcRows[0] ?? null;
   const latestItems = latestFinalQc
     ? finalQcItems.filter((item) => item.checklistId === latestFinalQc.id).sort((a, b) => a.displayOrder - b.displayOrder)
@@ -786,6 +793,7 @@ function GrappleBuildMutationPanel({
   useEffect(() => {
     setNextStage(nextProductionStage(build.productionStage) ?? "");
     setTransitionNote("");
+    setGtbNotes("");
     setQcNotes("");
   }, [build.id, build.productionStage]);
 
@@ -800,6 +808,14 @@ function GrappleBuildMutationPanel({
   });
   const createQcMutation = useMutation({
     mutationFn: createGrappleFinalQcChecklist,
+    onSuccess: invalidateDashboard,
+  });
+  const createGtbMutation = useMutation({
+    mutationFn: createGrappleGtbInspection,
+    onSuccess: invalidateDashboard,
+  });
+  const completeGtbMutation = useMutation({
+    mutationFn: completeGrappleGtbInspection,
     onSuccess: invalidateDashboard,
   });
   const updateItemMutation = useMutation({
@@ -827,13 +843,17 @@ function GrappleBuildMutationPanel({
 
   const transitionBlockedByGate = nextStage === "production_complete" && !progress?.finalQcReleaseReady;
   const hasForwardStage = Boolean(nextStage);
+  const nextGtbInspectionNumber = Math.max(0, ...gtbInspectionRows.map((row) => row.inspectionNumber)) + 1;
+  const latestGtbCanSign = Boolean(latestGtbInspection && latestGtbInspection.status !== "signed" && signatureName.trim());
   const nextChecklistNumber = Math.max(0, ...finalQcRows.map((row) => row.checklistNumber)) + 1;
   const releaseCleanItems = latestItems.length > 0 && latestItems.every((item) => (item.result === "pass" || item.result === "not_applicable") && !item.reworkRequired);
   const latestCanComplete = Boolean(latestFinalQc && latestFinalQc.status !== "signed" && releaseCleanItems);
   const leadCanSign = canSignFinalQc(build, currentUserId);
   const latestCanSign = Boolean(latestFinalQc && latestFinalQc.status !== "signed" && latestFinalQc.overallResult === "pass" && signatureName.trim());
-  const busy = transitionMutation.isPending || createQcMutation.isPending || updateItemMutation.isPending || markOpenPassMutation.isPending || completeQcMutation.isPending || signQcMutation.isPending;
+  const busy = transitionMutation.isPending || createGtbMutation.isPending || completeGtbMutation.isPending || createQcMutation.isPending || updateItemMutation.isPending || markOpenPassMutation.isPending || completeQcMutation.isPending || signQcMutation.isPending;
   const error = mutationErrorMessage(transitionMutation.error)
+    ?? mutationErrorMessage(createGtbMutation.error)
+    ?? mutationErrorMessage(completeGtbMutation.error)
     ?? mutationErrorMessage(createQcMutation.error)
     ?? mutationErrorMessage(updateItemMutation.error)
     ?? mutationErrorMessage(markOpenPassMutation.error)
@@ -862,7 +882,7 @@ function GrappleBuildMutationPanel({
         <Pill tone="green">Write enabled</Pill>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-3">
         <div className="rounded-2xl border bg-muted/10 p-4">
           <div className="mb-3 flex items-center gap-2">
             <GitBranch className="h-4 w-4 text-qep-orange" aria-hidden />
@@ -900,6 +920,60 @@ function GrappleBuildMutationPanel({
               Move stage
             </Button>
           </div>
+        </div>
+
+        <div className="rounded-2xl border bg-muted/10 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <ClipboardCheck className="h-4 w-4 text-qep-orange" aria-hidden />
+            <h4 className="font-semibold text-foreground">GTB inspection</h4>
+          </div>
+          {!latestGtbInspection ? (
+            <div className="grid gap-3">
+              <p className="rounded-xl border border-dashed p-3 text-sm text-muted-foreground">No GTB inspection form exists for this build yet.</p>
+              <LabeledTextarea label="Inspection notes" value={gtbNotes} onChange={setGtbNotes} placeholder="Mounting, hydraulics, controls, finish notes" />
+              <Button
+                type="button"
+                disabled={busy}
+                onClick={() => createGtbMutation.mutate({
+                  buildId: build.id,
+                  inspectionNumber: nextGtbInspectionNumber,
+                  userId: currentUserId,
+                  notes: gtbNotes,
+                })}
+              >
+                {createGtbMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <ClipboardCheck className="h-4 w-4" aria-hidden />}
+                Open GTB inspection
+              </Button>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusPill value={latestGtbInspection.status} />
+                <StatusPill value={latestGtbInspection.overallResult ?? "inspection_open"} />
+                <Pill tone={latestGtbInspection.reworkRequiredCount > 0 ? "amber" : "green"}>
+                  {formatCount(latestGtbInspection.itemCount)} checks
+                </Pill>
+              </div>
+              <p className="rounded-xl border bg-background/70 p-3 text-sm text-muted-foreground">
+                Inspection #{latestGtbInspection.inspectionNumber} is attached to {latestGtbInspection.buildNumber}. Opening a new form is disabled until the current form is complete.
+              </p>
+              <LabeledTextarea label="Inspection notes" value={gtbNotes} onChange={setGtbNotes} placeholder="Completion notes or rework context" />
+              <LabeledInput label="Signature name" value={signatureName} onChange={setSignatureName} placeholder="Inspector name" disabled={latestGtbInspection.status === "signed"} />
+              <Button
+                type="button"
+                disabled={busy || !latestGtbCanSign}
+                onClick={() => completeGtbMutation.mutate({
+                  inspectionId: latestGtbInspection.id,
+                  signatureName: signatureName.trim(),
+                  userId: currentUserId,
+                  notes: gtbNotes,
+                })}
+              >
+                {completeGtbMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <PenLine className="h-4 w-4" aria-hidden />}
+                Pass and sign GTB
+              </Button>
+            </div>
+          )}
         </div>
 
         <div className="rounded-2xl border bg-muted/10 p-4">

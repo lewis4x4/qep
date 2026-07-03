@@ -173,6 +173,12 @@ export interface GrappleGtbInspection {
   updatedAt: string | null;
 }
 
+export interface DefaultGrappleInspectionItem {
+  sectionKey: string;
+  itemKey: string;
+  prompt: string;
+}
+
 export interface GrappleAccessoryInstall {
   id: string;
   buildId: string;
@@ -734,6 +740,126 @@ export async function transitionGrappleBuildStage(input: {
     p_metadata: input.metadata ?? {},
   });
   return normalizeGrapplePipelineRows([data])[0];
+}
+
+export const DEFAULT_GRAPPLE_GTB_INSPECTION_ITEMS: ReadonlyArray<DefaultGrappleInspectionItem> = [
+  {
+    sectionKey: "structure",
+    itemKey: "mounting_frame_and_welds",
+    prompt: "Mounting frame, welds, pins, and fasteners pass GTB structural inspection.",
+  },
+  {
+    sectionKey: "hydraulics",
+    itemKey: "hydraulic_routing_and_pressure",
+    prompt: "Hydraulic routing, clamps, pressure behavior, and leak check pass under load.",
+  },
+  {
+    sectionKey: "controls",
+    itemKey: "controls_safety_and_labels",
+    prompt: "Controls, safety interlocks, labels, and operator handoff points are verified.",
+  },
+  {
+    sectionKey: "finish",
+    itemKey: "paint_photos_and_build_packet",
+    prompt: "Paint, photos, serial references, and build packet are ready for downstream QC.",
+  },
+] as const;
+
+export async function createGrappleGtbInspection(input: {
+  buildId: string;
+  inspectionNumber: number;
+  userId?: string | null;
+  notes?: string | null;
+}): Promise<GrappleGtbInspection> {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("grapple_build_gtb_inspections")
+    .insert({
+      build_id: input.buildId,
+      inspection_number: input.inspectionNumber,
+      status: "in_progress",
+      inspected_by: input.userId ?? null,
+      inspected_at: now,
+      notes: input.notes?.trim() || null,
+    })
+    .select("*")
+    .single();
+
+  if (error) throw new Error(error.message || "Failed to create GTB inspection");
+  const inspection = normalizeGrappleGtbInspectionRows([data])[0];
+
+  const itemRows = DEFAULT_GRAPPLE_GTB_INSPECTION_ITEMS.map((item, index) => ({
+    build_id: input.buildId,
+    inspection_id: inspection.id,
+    section_key: item.sectionKey,
+    item_key: item.itemKey,
+    display_order: index + 1,
+    prompt: item.prompt,
+  }));
+  const { error: itemError } = await supabase.from("grapple_build_gtb_inspection_items").insert(itemRows);
+  if (itemError) {
+    await supabase.from("grapple_build_gtb_inspections").delete().eq("id", inspection.id);
+    throw new Error(itemError.message || "Failed to seed GTB inspection items");
+  }
+
+  return inspection;
+}
+
+export async function completeGrappleGtbInspection(input: {
+  inspectionId: string;
+  signatureName: string;
+  userId?: string | null;
+  notes?: string | null;
+}): Promise<GrappleGtbInspection> {
+  const signatureName = input.signatureName.trim();
+  if (!signatureName) throw new Error("Signature name is required to complete GTB inspection.");
+
+  const now = new Date().toISOString();
+  const { data: itemRows, error: itemReadError } = await supabase
+    .from("grapple_build_gtb_inspection_items")
+    .select("id,result,rework_required")
+    .eq("inspection_id", input.inspectionId)
+    .is("deleted_at", null);
+  if (itemReadError) throw new Error(itemReadError.message || "Failed to validate GTB inspection items");
+
+  const openItemIds = (itemRows ?? [])
+    .filter((item) => item.result !== "pass" && item.result !== "not_applicable")
+    .map((item) => item.id)
+    .filter((id): id is string => typeof id === "string" && Boolean(id));
+
+  if (openItemIds.length > 0) {
+    const { error: itemUpdateError } = await supabase
+      .from("grapple_build_gtb_inspection_items")
+      .update({
+        result: "pass",
+        defect_severity: null,
+        rework_required: false,
+        checked_by: input.userId ?? null,
+        checked_at: now,
+      })
+      .in("id", openItemIds);
+    if (itemUpdateError) throw new Error(itemUpdateError.message || "Failed to pass GTB inspection items");
+  }
+
+  const { data, error } = await supabase
+    .from("grapple_build_gtb_inspections")
+    .update({
+      status: "signed",
+      overall_result: "pass",
+      inspected_by: input.userId ?? null,
+      inspected_at: now,
+      signed_by: input.userId ?? null,
+      signed_at: now,
+      signature_name: signatureName,
+      signature_statement: "I certify that this GTB inspection passed and is attached to the grapple build record.",
+      notes: input.notes?.trim() || null,
+    })
+    .eq("id", input.inspectionId)
+    .select("*")
+    .single();
+
+  if (error) throw new Error(error.message || "Failed to complete GTB inspection");
+  return normalizeGrappleGtbInspectionRows([data])[0];
 }
 
 export async function signGrappleBuildFinalQc(input: {
