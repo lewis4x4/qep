@@ -109,7 +109,7 @@ export function resolveIncentiveStack(
   const skipped: SkippedIncentive[] = [];
 
   for (const [, group] of byManufacturer) {
-    const cashAlternatives = group.filter((item) => item.stack_kind === "cash_alt" || !item.stackable);
+    const cashAlternatives = group.filter((item) => item.stack_kind === "cash_alt");
     const additive = group.filter((item) => !cashAlternatives.includes(item));
     for (const incentive of additive) {
       applied.push({ incentive, amount: computeAmount(incentive, quote) });

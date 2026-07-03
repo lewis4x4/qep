@@ -6,6 +6,30 @@ import type { BookValueRange, BookValueSourceKind } from "@/features/quote-build
 const TRADE_VALUATION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trade-valuation`;
 const BOOK_VALUE_RANGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trade-book-value-range`;
 const PHOTO_BUCKET = "equipment-photos";
+const TRADE_VALUATION_SAFE_SELECT = [
+  "id",
+  "deal_id",
+  "make",
+  "model",
+  "year",
+  "serial_number",
+  "hours",
+  "photos",
+  "video_url",
+  "operational_status",
+  "last_full_service",
+  "needed_repairs",
+  "attachments_included",
+  "ai_condition_score",
+  "ai_condition_notes",
+  "ai_detected_damage",
+  "market_comps",
+  "auction_value",
+  "preliminary_value",
+  "final_value",
+  "conditional_language",
+  "created_at",
+].join(", ");
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const session = (await supabase.auth.getSession()).data.session;
@@ -206,15 +230,15 @@ async function bestEffortEnrichTradeMarketContext(result: TradeValuationResponse
     const range = normalizeBookValueRangePayload(await response.json().catch(() => ({})));
     if (range.midCents <= 0 && range.sources.length === 0) return result;
 
-    const { data, error } = await supabase
-      .from("trade_valuations")
-      .update({
-        auction_value: range.midCents / 100,
-        market_comps: buildTradeMarketCompsFromBookValueRange(range),
-      })
-      .eq("id", valuation.id)
-      .select("*")
-      .maybeSingle();
+	    const { data, error } = await supabase
+	      .from("trade_valuations")
+	      .update({
+	        auction_value: range.midCents / 100,
+	        market_comps: buildTradeMarketCompsFromBookValueRange(range),
+	      })
+	      .eq("id", valuation.id)
+	      .select(TRADE_VALUATION_SAFE_SELECT)
+	      .maybeSingle();
     if (error || !data) return result;
     return { ...result, valuation: mapTradeValuation(data) };
   } catch {
@@ -234,10 +258,10 @@ export function normalizeTradeValuationResponse(payload: unknown): TradeValuatio
 }
 
 export async function getTradeValuation(dealId: string): Promise<TradeValuationRecord | null> {
-  const { data, error } = await supabase
-    .from("trade_valuations")
-    .select("*")
-    .eq("deal_id", dealId)
+	  const { data, error } = await supabase
+	    .from("trade_valuations")
+	    .select(TRADE_VALUATION_SAFE_SELECT)
+	    .eq("deal_id", dealId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

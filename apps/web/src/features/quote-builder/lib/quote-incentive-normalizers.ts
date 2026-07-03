@@ -46,11 +46,11 @@ function booleanOrFalse(value: unknown): boolean {
   return typeof value === "boolean" ? value : false;
 }
 
-function normalizeStackKind(value: unknown): "cash_alt" | "finance_addon" | "always_on" {
+function normalizeStackKind(value: unknown, stackable: boolean): "cash_alt" | "finance_addon" | "always_on" {
   if (value === "cash_alt" || value === "finance_addon" || value === "always_on") {
     return value;
   }
-  return "always_on";
+  return stackable ? "always_on" : "cash_alt";
 }
 
 function normalizeManufacturerIncentive(value: unknown): AppliedIncentive["manufacturer_incentives"] {
@@ -59,13 +59,14 @@ function normalizeManufacturerIncentive(value: unknown): AppliedIncentive["manuf
   const programName = requiredString(record.program_name);
   const discountType = requiredString(record.discount_type);
   if (!programName || !discountType) return null;
+  const stackable = booleanOrFalse(record.stackable);
   return {
     program_name: programName,
     manufacturer: requiredString(record.manufacturer) ?? "Unknown manufacturer",
     discount_type: discountType,
-    stack_kind: normalizeStackKind(record.stack_kind),
     requires_approval: booleanOrFalse(record.requires_approval),
-    stackable: booleanOrFalse(record.stackable),
+    stackable,
+    stack_kind: normalizeStackKind(record.stack_kind, stackable),
   };
 }
 

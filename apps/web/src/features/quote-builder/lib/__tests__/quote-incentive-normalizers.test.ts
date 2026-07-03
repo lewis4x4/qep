@@ -16,7 +16,7 @@ describe("quote incentive normalizers", () => {
           discount_type: "cash_back",
           stack_kind: "finance_addon",
           requires_approval: false,
-          stackable: true,
+          stackable: false,
         },
       },
       {
@@ -48,7 +48,7 @@ describe("quote incentive normalizers", () => {
           discount_type: "cash_back",
           stack_kind: "finance_addon",
           requires_approval: false,
-          stackable: true,
+          stackable: false,
         },
       },
       {
@@ -73,5 +73,33 @@ describe("quote incentive normalizers", () => {
     expect(normalizeAppliedIncentives(null)).toEqual([]);
     expect(normalizeAppliedIncentives({ id: "app-1" })).toEqual([]);
     expect(normalizeAppliedIncentives([{ id: "app-1", applied_amount: 100 }])).toEqual([]);
+  });
+
+  test("falls back from legacy stackable only when stack_kind is missing", () => {
+    expect(normalizeAppliedIncentives([
+      {
+        id: "app-legacy-cash",
+        incentive_id: "inc-legacy-cash",
+        applied_amount: 1000,
+        manufacturer_incentives: {
+          program_name: "Legacy cash rebate",
+          discount_type: "cash_back",
+          stackable: false,
+        },
+      },
+      {
+        id: "app-legacy-stack",
+        incentive_id: "inc-legacy-stack",
+        applied_amount: 500,
+        manufacturer_incentives: {
+          program_name: "Legacy stackable rebate",
+          discount_type: "cash_back",
+          stackable: true,
+        },
+      },
+    ]).map((item) => item.manufacturer_incentives?.stack_kind)).toEqual([
+      "cash_alt",
+      "always_on",
+    ]);
   });
 });

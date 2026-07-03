@@ -18,6 +18,43 @@ import { requireServiceUser } from "../_shared/service-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+const TRADE_VALUATION_SAFE_SELECT = [
+  "id",
+  "workspace_id",
+  "deal_id",
+  "make",
+  "model",
+  "year",
+  "serial_number",
+  "hours",
+  "photos",
+  "video_url",
+  "operational_status",
+  "last_full_service",
+  "needed_repairs",
+  "attachments_included",
+  "ai_condition_score",
+  "ai_condition_notes",
+  "ai_detected_damage",
+  "market_comps",
+  "auction_value",
+  "discount_percentage",
+  "discounted_value",
+  "reconditioning_estimate",
+  "preliminary_value",
+  "final_value",
+  "target_resale_margin_min",
+  "target_resale_margin_max",
+  "suggested_resale_price",
+  "status",
+  "over_allowance",
+  "approved_by",
+  "approval_notes",
+  "conditional_language",
+  "created_at",
+  "updated_at",
+  "created_by",
+].join(", ");
 
 interface TradeValuationInput {
   deal_id?: string;
@@ -119,7 +156,7 @@ Deno.serve(async (req) => {
       const url = new URL(req.url);
       const dealId = url.searchParams.get("deal_id");
 
-      let query = supabase.from("trade_valuations").select("*").order("created_at", { ascending: false });
+      let query = supabase.from("trade_valuations").select(TRADE_VALUATION_SAFE_SELECT).order("created_at", { ascending: false });
       if (dealId) query = query.eq("deal_id", dealId);
 
       const { data, error } = await query;
@@ -164,7 +201,7 @@ Deno.serve(async (req) => {
           status: "preliminary",
           created_by: user.id,
         })
-        .select()
+        .select(TRADE_VALUATION_SAFE_SELECT)
         .single();
 
       if (valError) {
@@ -200,7 +237,7 @@ Deno.serve(async (req) => {
         .from("trade_valuations")
         .update(updates)
         .eq("id", id)
-        .select()
+        .select(TRADE_VALUATION_SAFE_SELECT)
         .single();
 
       if (error) {

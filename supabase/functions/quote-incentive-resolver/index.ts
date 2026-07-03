@@ -2,8 +2,8 @@
  * Quote Incentive Resolver Edge Function (Wave 5A.3 / Phase 2A)
  *
  * Walks the line items on a quote, queries match_quote_incentives() for
- * applicable manufacturer_incentives, resolves stackability collisions
- * (only one non-stackable per manufacturer), and persists the chosen
+ * applicable manufacturer_incentives, resolves stack_kind collisions
+ * (cash_alt picks one; finance_addon and always_on remain additive), and persists the chosen
  * applications into quote_incentive_applications.
  *
  * POST /quote-incentive-resolver
