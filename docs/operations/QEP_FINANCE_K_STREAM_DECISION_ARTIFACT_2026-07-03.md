@@ -71,7 +71,7 @@ Service sample `W07299.pdf`:
 ### Suggested QEP-221 Evidence Note
 
 ```md
-2026-07-03 repo evidence patch: Ryan + Tina finance questionnaire and Round 3 addendum confirm QEP OS as the forward accounting system of record. IntelliDealer remains the legacy transition SoR; QuickBooks Desktop is downstream check-register/CPA-reporting output only. Build-now foundation exists in migrations 655-663 for invoice numbering, quarter reopen, AR dunning, AP 3-way match, county/rental tax, equipment-reversal approvals, FET/Form 8300, margin segments, and IntelliDealer master-match dry run. Remaining open business values are config/working-session items, not blockers to the SoR decision.
+2026-07-03 repo evidence patch: Ryan + Tina finance questionnaire and Round 3 addendum confirm QEP OS as the forward accounting system of record. IntelliDealer remains the legacy transition SoR; QuickBooks Desktop is downstream check-register/CPA-reporting output only. Build-now foundation exists in migrations 662-670 for invoice numbering, quarter reopen, AR dunning, AP 3-way match, county/rental tax, equipment-reversal approvals, FET/Form 8300, margin segments, and IntelliDealer master-match dry run. Remaining open business values are config/working-session items, not blockers to the SoR decision.
 ```
 
 ### Suggested QEP-223 Evidence Note
@@ -119,15 +119,15 @@ Missing evidence package:
 
 The finance-foundation schema already has source-controlled migrations for the buildable subset:
 
-- `655_finance_foundation_invoice_numbering.sql`
-- `656_finance_foundation_quarter_close_reopen.sql`
-- `657_finance_foundation_ar_dunning_cycle.sql`
-- `658_finance_foundation_ap_three_way_match.sql`
-- `659_finance_foundation_county_tax_rentals.sql`
-- `660_finance_foundation_equipment_reversal_approvals.sql`
-- `661_finance_foundation_fet_form8300.sql`
-- `662_finance_foundation_margin_segments.sql`
-- `663_finance_foundation_intellidealer_master_match_dry_run.sql`
+- `662_finance_foundation_invoice_numbering.sql`
+- `663_finance_foundation_quarter_close_reopen.sql`
+- `664_finance_foundation_ar_dunning_cycle.sql`
+- `665_finance_foundation_ap_three_way_match.sql`
+- `666_finance_foundation_county_tax_rentals.sql`
+- `667_finance_foundation_equipment_reversal_approvals.sql`
+- `668_finance_foundation_fet_form8300.sql`
+- `669_finance_foundation_margin_segments.sql`
+- `670_finance_foundation_intellidealer_master_match_dry_run.sql`
 
 This means the artifact should unblock documentation/roadmap cleanup and evidence linking. It should not be treated as authorization to hard-code the open values above.
 

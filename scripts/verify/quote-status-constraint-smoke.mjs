@@ -17,7 +17,7 @@ const files = [
   "apps/web/src/features/quote-builder/lib/saved-quote-draft.ts",
   "supabase/functions/quote-builder-v2/index.ts",
   "supabase/migrations/378_quote_packages_status_widen.sql",
-  "supabase/migrations/712_a58_save_draft_reason_logging.sql",
+  "supabase/migrations/719_a58_save_draft_reason_logging.sql",
 ];
 
 const failures = [];
@@ -40,9 +40,9 @@ const migration = readFileSync(resolve(repoRoot, "supabase/migrations/378_quote_
 if (!/quote_packages_status_check/.test(migration)) {
   failures.push("migration 378 does not modify quote_packages_status_check");
 }
-const a58Migration = readFileSync(resolve(repoRoot, "supabase/migrations/712_a58_save_draft_reason_logging.sql"), "utf8");
+const a58Migration = readFileSync(resolve(repoRoot, "supabase/migrations/719_a58_save_draft_reason_logging.sql"), "utf8");
 if (!/quote_packages_status_check/.test(a58Migration) || !/draft_low_margin/.test(a58Migration)) {
-  failures.push("migration 712 does not widen quote_packages_status_check for draft_low_margin");
+  failures.push("migration 719 does not widen quote_packages_status_check for draft_low_margin");
 }
 
 if (failures.length > 0) {
