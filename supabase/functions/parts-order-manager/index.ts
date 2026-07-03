@@ -3,7 +3,10 @@
  * inventory pick, and fulfillment run creation.
  * Auth: user JWT (requireServiceUser).
  */
-import { requireServiceUser } from "../_shared/service-auth.ts";
+import {
+  requireServiceUser,
+  SERVICE_PARTS_ROLES,
+} from "../_shared/service-auth.ts";
 import {
   optionsResponse,
   safeJsonError,
@@ -23,7 +26,8 @@ type Action =
   | "update_internal_order"
   | "update_order_lines"
   | "advance_status"
-  | "pick_order_line";
+  | "pick_order_line"
+  | "reserve_interbranch_transfer";
 
 interface Body {
   action: Action;
@@ -44,6 +48,13 @@ interface Body {
   payment_reference?: string | null;
   charge_authorization_status?: string;
   charge_authorization_note?: string | null;
+  part_id?: string;
+  from_location_id?: string;
+  to_location_id?: string;
+  quantity?: number;
+  customer_choice?: string;
+  scheduled_at?: string | null;
+  oem_order_eta_days?: number;
 }
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -183,11 +194,16 @@ Deno.serve(async (req) => {
     return safeJsonError("Method not allowed", 405, origin);
   }
 
-  const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+  const auth = await requireServiceUser(
+    req.headers.get("Authorization"),
+    origin,
+    SERVICE_PARTS_ROLES,
+  );
   if (!auth.ok) return auth.response;
 
   const supabase = auth.supabase;
   const userId = auth.userId;
+  const workspaceId = auth.workspaceId;
 
   let body: Body;
   try {
@@ -786,6 +802,88 @@ Deno.serve(async (req) => {
     return safeJsonOk({
       picked: { line_id: lineId, part_number: line.part_number, quantity: line.quantity, branch_id: branchId },
     }, origin);
+  }
+
+  // ── RESERVE INTER-BRANCH TRANSFER ───────────────────────────────────
+  if (action === "reserve_interbranch_transfer") {
+    const partId = typeof body.part_id === "string" ? body.part_id.trim() : "";
+    const fromLocationId =
+      typeof body.from_location_id === "string" ? body.from_location_id.trim() : "";
+    const toLocationId =
+      typeof body.to_location_id === "string" ? body.to_location_id.trim() : "";
+    const orderId =
+      typeof body.parts_order_id === "string" && body.parts_order_id.trim()
+        ? body.parts_order_id.trim()
+        : null;
+    const quantity = num(body.quantity) ?? 1;
+    const customerChoice =
+      typeof body.customer_choice === "string" && body.customer_choice.trim()
+        ? body.customer_choice.trim()
+        : "transfer";
+    const scheduledAt =
+      typeof body.scheduled_at === "string" && body.scheduled_at.trim()
+        ? body.scheduled_at.trim()
+        : null;
+    const oemOrderEtaDays = Math.max(
+      0,
+      Math.floor(num(body.oem_order_eta_days) ?? 3),
+    );
+
+    if (!partId || !fromLocationId || !toLocationId) {
+      return safeJsonError(
+        "part_id, from_location_id, and to_location_id are required",
+        400,
+        origin,
+      );
+    }
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      return safeJsonError("quantity must be greater than zero", 400, origin);
+    }
+    if (!["transfer", "oem_order"].includes(customerChoice)) {
+      return safeJsonError("customer_choice must be transfer or oem_order", 400, origin);
+    }
+
+    const { data: reservation, error: reserveErr } = await supabase.rpc(
+      "parts_reserve_interbranch_transfer",
+      {
+        p_part_id: partId,
+        p_from_location_id: fromLocationId,
+        p_to_location_id: toLocationId,
+        p_quantity: quantity,
+        p_customer_choice: customerChoice,
+        p_parts_order_id: orderId,
+        p_requested_by: userId,
+        p_scheduled_at: scheduledAt,
+        p_oem_order_eta_days: oemOrderEtaDays,
+        p_workspace_id: workspaceId,
+      },
+    );
+
+    if (reserveErr) {
+      console.error("parts-order-manager transfer reservation:", reserveErr);
+      return safeJsonError(
+        reserveErr.message ?? "Transfer reservation failed",
+        400,
+        origin,
+      );
+    }
+
+    if (
+      orderId &&
+      reservation &&
+      typeof reservation === "object" &&
+      (reservation as Record<string, unknown>).status === "reserved"
+    ) {
+      await emitOrderEvent(supabase, {
+        workspaceId,
+        orderId,
+        eventType: "transfer_reserved",
+        actorId: userId,
+        metadata: reservation as Record<string, unknown>,
+      });
+    }
+
+    return safeJsonOk({ reservation }, origin, 201);
   }
 
   return safeJsonError(`Unknown action: ${String(action)}`, 400, origin);
