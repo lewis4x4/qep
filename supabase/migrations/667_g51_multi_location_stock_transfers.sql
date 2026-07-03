@@ -186,45 +186,62 @@ AS $$
     LEFT JOIN target_location tl ON true
   )
   SELECT
-    option_type,
-    part_id,
-    from_location_id,
-    from_location_code,
-    from_location_name,
-    from_branch_slug,
-    to_location_id,
-    to_branch_slug,
-    available_qty,
-    requested_qty,
-    eta_days,
-    scheduled_at,
-    customer_choice,
-    evidence
-  FROM transfer_options
+    options.option_type,
+    options.part_id,
+    options.from_location_id,
+    options.from_location_code,
+    options.from_location_name,
+    options.from_branch_slug,
+    options.to_location_id,
+    options.to_branch_slug,
+    options.available_qty,
+    options.requested_qty,
+    options.eta_days,
+    options.scheduled_at,
+    options.customer_choice,
+    options.evidence
+  FROM (
+    SELECT
+      option_type,
+      part_id,
+      from_location_id,
+      from_location_code,
+      from_location_name,
+      from_branch_slug,
+      to_location_id,
+      to_branch_slug,
+      available_qty,
+      requested_qty,
+      eta_days,
+      scheduled_at,
+      customer_choice,
+      evidence
+    FROM transfer_options
 
-  UNION ALL
+    UNION ALL
 
-  SELECT
-    option_type,
-    part_id,
-    from_location_id,
-    from_location_code,
-    from_location_name,
-    from_branch_slug,
-    to_location_id,
-    to_branch_slug,
-    available_qty,
-    requested_qty,
-    eta_days,
-    scheduled_at,
-    customer_choice,
-    evidence
-  FROM oem_order_option
+    SELECT
+      option_type,
+      part_id,
+      from_location_id,
+      from_location_code,
+      from_location_name,
+      from_branch_slug,
+      to_location_id,
+      to_branch_slug,
+      available_qty,
+      requested_qty,
+      eta_days,
+      scheduled_at,
+      customer_choice,
+      evidence
+    FROM oem_order_option
+  ) options
 
   ORDER BY
-    CASE option_type WHEN 'interbranch_transfer' THEN 0 ELSE 1 END,
-    eta_days,
-    available_qty DESC NULLS LAST;
+    CASE options.option_type WHEN 'interbranch_transfer' THEN 0 ELSE 1 END,
+    options.eta_days,
+    options.available_qty DESC NULLS LAST;
 $$;
 
 COMMENT ON FUNCTION public.parts_location_stock_options(uuid, uuid, text, numeric, text, integer) IS

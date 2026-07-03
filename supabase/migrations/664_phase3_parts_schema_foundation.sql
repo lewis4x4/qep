@@ -1514,7 +1514,7 @@ INSERT INTO public.parts_locations (
 SELECT
   b.workspace_id,
   b.slug,
-  b.name,
+  coalesce(nullif(b.display_name, ''), b.slug),
   'branch',
   b.id,
   b.slug,

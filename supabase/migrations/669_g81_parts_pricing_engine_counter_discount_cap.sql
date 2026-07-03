@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS public.parts_customer_prices (
   part_catalog_id uuid REFERENCES public.parts_catalog(id) ON DELETE SET NULL,
   part_number text NOT NULL,
   qrm_company_id uuid REFERENCES public.qrm_companies(id) ON DELETE CASCADE,
-  crm_company_id uuid REFERENCES public.crm_companies(id) ON DELETE CASCADE,
+  crm_company_id uuid REFERENCES public.qrm_companies(id) ON DELETE CASCADE,
   unit_price_cents bigint NOT NULL CHECK (unit_price_cents >= 0),
   min_margin_pct numeric(5, 2) NOT NULL DEFAULT 25.00,
   reason text,
@@ -978,6 +978,8 @@ REVOKE ALL ON FUNCTION public.parts_decide_line_discount(text, uuid, text, text)
 GRANT EXECUTE ON FUNCTION public.parts_decide_line_discount(text, uuid, text, text) TO authenticated, service_role;
 
 -- Preserve accepted quote pricing when converting to an order.
+DROP FUNCTION IF EXISTS public.parts_convert_quote_to_order(uuid, uuid, text, text, uuid, text);
+
 CREATE OR REPLACE FUNCTION public.parts_convert_quote_to_order(
   p_parts_quote_id uuid,
   p_crm_company_id uuid,

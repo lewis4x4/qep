@@ -539,15 +539,15 @@ SET
   END
 WHERE task_id = 'G4.1';
 
-INSERT INTO public.qep_roadmap_sync_events (
-  task_id,
-  event_type,
-  payload
-)
+INSERT INTO public.qep_roadmap_sync_events
+  (direction, task_id, action, changed_fields, actor)
 VALUES (
+  'reconcile',
   'G4.1',
-  'g41_parts_lookup_engine_shipped',
+  'update',
   jsonb_build_object(
+    'reason',
+    'g41_parts_lookup_engine_shipped',
     'mission_alignment',
     'pass: counter staff can start from the customer-known machine path, then land on stocked parts, kit components, or supersession alternatives without relying on tribal memory',
     'evidence',
@@ -558,7 +558,8 @@ VALUES (
     ),
     'lookup_paths',
     jsonb_build_array('part_number', 'machine_serial', 'machine_model', 'keyword', 'kit', 'supersession')
-  )
+  ),
+  'codex'
 );
 
 COMMIT;

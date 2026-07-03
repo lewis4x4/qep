@@ -87,7 +87,7 @@ END $$;
 
 CREATE INDEX IF NOT EXISTS idx_service_jobs_h10_internal_queue
   ON public.service_jobs(workspace_id, internal_cost_posting_status, service_internal_cost_destination)
-  WHERE request_type::text = 'internal'
+  WHERE request_type = 'internal'
     AND renter_fault_billable = false
     AND deleted_at IS NULL;
 
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS public.service_internal_cost_postings (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   workspace_id text NOT NULL DEFAULT 'default',
   service_job_id uuid NOT NULL REFERENCES public.service_jobs(id) ON DELETE CASCADE,
-  machine_id uuid REFERENCES public.crm_equipment(id) ON DELETE SET NULL,
+  machine_id uuid REFERENCES public.qrm_equipment(id) ON DELETE SET NULL,
   work_class text NOT NULL CHECK (work_class IN (
     'reconditioning',
     'rental_fleet_maintenance',
