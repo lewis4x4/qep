@@ -4,6 +4,7 @@ import {
   formatGrappleLabel,
   grappleProductionDashboardIsEmpty,
   normalizeGrappleGtbInspectionRows,
+  normalizeGrappleAccessoryInstallRows,
   normalizeGrapplePipelineRows,
   normalizeGrappleProgressSheetRows,
   normalizeGrappleStageSummaryRows,
@@ -124,6 +125,36 @@ describe("grapple production api normalizers", () => {
       "controls_safety_and_labels",
       "paint_photos_and_build_packet",
     ]);
+  });
+
+  it("normalizes accessory install rows for tank, cooler, and extension tracking", () => {
+    const rows = normalizeGrappleAccessoryInstallRows([
+      {
+        id: "install-1",
+        build_id: "build-1",
+        build_number: "GTB-1001",
+        accessory_type: "tank",
+        accessory_label: "tank",
+        status: "completed",
+        installer_name: "Installer One",
+        started_at: "2026-06-01T12:00:00Z",
+        installed_at: "2026-06-01T15:00:00Z",
+        verified_by_name: "Lead One",
+        verified_at: "2026-06-01T16:00:00Z",
+      },
+    ]);
+
+    expect(rows[0]).toEqual(expect.objectContaining({
+      id: "install-1",
+      buildId: "build-1",
+      buildNumber: "GTB-1001",
+      accessoryType: "tank",
+      accessoryLabel: "tank",
+      status: "completed",
+      installerName: "Installer One",
+      installedAt: "2026-06-01T15:00:00Z",
+      verifiedByName: "Lead One",
+    }));
   });
 
   it("coerces stage summary counts and formats labels", () => {

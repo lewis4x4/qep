@@ -25,11 +25,13 @@ import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { ServiceSubNav } from "../components/ServiceSubNav";
 import {
+  completeGrappleAccessoryInstall,
   completeGrappleGtbInspection,
   completeGrappleFinalQcChecklist,
   createGrappleBuild,
   createGrappleFinalQcChecklist,
   createGrappleGtbInspection,
+  ensureGrappleAccessoryInstallSteps,
   fetchGrappleProductionDashboard,
   formatGrappleLabel,
   grappleProductionDashboardIsEmpty,
@@ -682,6 +684,7 @@ function BuildDetailPanel({
             build={build}
             progress={progress}
             gtbInspectionRows={inspections}
+            accessoryRows={accessories}
             finalQcRows={finalQc}
             finalQcItems={finalQcItems}
             currentUserId={currentUserId}
@@ -765,6 +768,7 @@ function GrappleBuildMutationPanel({
   build,
   progress,
   gtbInspectionRows,
+  accessoryRows,
   finalQcRows,
   finalQcItems,
   currentUserId,
@@ -773,6 +777,7 @@ function GrappleBuildMutationPanel({
   build: GrapplePipelineBuild;
   progress: GrappleProgressSheet | null;
   gtbInspectionRows: GrappleGtbInspection[];
+  accessoryRows: GrappleAccessoryInstall[];
   finalQcRows: GrappleFinalQcChecklist[];
   finalQcItems: GrappleFinalQcItem[];
   currentUserId: string | null;
@@ -782,6 +787,7 @@ function GrappleBuildMutationPanel({
   const [nextStage, setNextStage] = useState<GrappleProductionStage | "">(() => nextProductionStage(build.productionStage) ?? "");
   const [transitionNote, setTransitionNote] = useState("");
   const [gtbNotes, setGtbNotes] = useState("");
+  const [accessoryNotes, setAccessoryNotes] = useState("");
   const [qcNotes, setQcNotes] = useState("");
   const [signatureName, setSignatureName] = useState(currentUserName);
   const latestGtbInspection = gtbInspectionRows[0] ?? null;
@@ -794,6 +800,7 @@ function GrappleBuildMutationPanel({
     setNextStage(nextProductionStage(build.productionStage) ?? "");
     setTransitionNote("");
     setGtbNotes("");
+    setAccessoryNotes("");
     setQcNotes("");
   }, [build.id, build.productionStage]);
 
@@ -816,6 +823,14 @@ function GrappleBuildMutationPanel({
   });
   const completeGtbMutation = useMutation({
     mutationFn: completeGrappleGtbInspection,
+    onSuccess: invalidateDashboard,
+  });
+  const ensureAccessoryMutation = useMutation({
+    mutationFn: ensureGrappleAccessoryInstallSteps,
+    onSuccess: invalidateDashboard,
+  });
+  const completeAccessoryMutation = useMutation({
+    mutationFn: completeGrappleAccessoryInstall,
     onSuccess: invalidateDashboard,
   });
   const updateItemMutation = useMutation({
@@ -845,15 +860,18 @@ function GrappleBuildMutationPanel({
   const hasForwardStage = Boolean(nextStage);
   const nextGtbInspectionNumber = Math.max(0, ...gtbInspectionRows.map((row) => row.inspectionNumber)) + 1;
   const latestGtbCanSign = Boolean(latestGtbInspection && latestGtbInspection.status !== "signed" && signatureName.trim());
+  const incompleteAccessories = accessoryRows.filter((row) => row.status !== "completed" && row.status !== "waived");
   const nextChecklistNumber = Math.max(0, ...finalQcRows.map((row) => row.checklistNumber)) + 1;
   const releaseCleanItems = latestItems.length > 0 && latestItems.every((item) => (item.result === "pass" || item.result === "not_applicable") && !item.reworkRequired);
   const latestCanComplete = Boolean(latestFinalQc && latestFinalQc.status !== "signed" && releaseCleanItems);
   const leadCanSign = canSignFinalQc(build, currentUserId);
   const latestCanSign = Boolean(latestFinalQc && latestFinalQc.status !== "signed" && latestFinalQc.overallResult === "pass" && signatureName.trim());
-  const busy = transitionMutation.isPending || createGtbMutation.isPending || completeGtbMutation.isPending || createQcMutation.isPending || updateItemMutation.isPending || markOpenPassMutation.isPending || completeQcMutation.isPending || signQcMutation.isPending;
+  const busy = transitionMutation.isPending || createGtbMutation.isPending || completeGtbMutation.isPending || ensureAccessoryMutation.isPending || completeAccessoryMutation.isPending || createQcMutation.isPending || updateItemMutation.isPending || markOpenPassMutation.isPending || completeQcMutation.isPending || signQcMutation.isPending;
   const error = mutationErrorMessage(transitionMutation.error)
     ?? mutationErrorMessage(createGtbMutation.error)
     ?? mutationErrorMessage(completeGtbMutation.error)
+    ?? mutationErrorMessage(ensureAccessoryMutation.error)
+    ?? mutationErrorMessage(completeAccessoryMutation.error)
     ?? mutationErrorMessage(createQcMutation.error)
     ?? mutationErrorMessage(updateItemMutation.error)
     ?? mutationErrorMessage(markOpenPassMutation.error)
@@ -882,7 +900,7 @@ function GrappleBuildMutationPanel({
         <Pill tone="green">Write enabled</Pill>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-3">
+      <div className="grid gap-4 xl:grid-cols-2">
         <div className="rounded-2xl border bg-muted/10 p-4">
           <div className="mb-3 flex items-center gap-2">
             <GitBranch className="h-4 w-4 text-qep-orange" aria-hidden />
@@ -919,6 +937,65 @@ function GrappleBuildMutationPanel({
               {transitionMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <GitBranch className="h-4 w-4" aria-hidden />}
               Move stage
             </Button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border bg-muted/10 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Package className="h-4 w-4 text-qep-orange" aria-hidden />
+            <h4 className="font-semibold text-foreground">Accessory installs</h4>
+          </div>
+          <div className="grid gap-3">
+            {accessoryRows.length === 0 ? (
+              <>
+                <p className="rounded-xl border border-dashed p-3 text-sm text-muted-foreground">No tank/cooler/extension install steps exist for this build yet.</p>
+                <Button type="button" disabled={busy} onClick={() => ensureAccessoryMutation.mutate(build.id)}>
+                  {ensureAccessoryMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Package className="h-4 w-4" aria-hidden />}
+                  Create standard install steps
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                  {accessoryRows.map((row) => (
+                    <div key={row.id} className="rounded-xl border bg-background/70 p-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{formatGrappleLabel(row.accessoryLabel || row.accessoryType)}</p>
+                          <p className="text-xs text-muted-foreground">{row.installerName ?? "Installer unassigned"} · {formatDateTime(row.installedAt)}</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <StatusPill value={row.status} />
+                          {row.status !== "completed" && row.status !== "waived" && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={busy}
+                              onClick={() => completeAccessoryMutation.mutate({
+                                installId: row.id,
+                                userId: currentUserId,
+                                notes: accessoryNotes,
+                              })}
+                            >
+                              {completeAccessoryMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCircle2 className="h-4 w-4" aria-hidden />}
+                              Complete
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      {row.blockedReason && <p className="mt-2 text-xs text-red-600 dark:text-red-300">{row.blockedReason}</p>}
+                    </div>
+                  ))}
+                </div>
+                <LabeledTextarea label="Install notes" value={accessoryNotes} onChange={setAccessoryNotes} placeholder="Install completion or verification notes" />
+                {incompleteAccessories.length === 0 && (
+                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+                    Tank, cooler, and extension install steps are complete or waived for this build.
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
 
@@ -1084,7 +1161,7 @@ function ReadOnlyMutationNotice() {
         <Lock className="mt-0.5 h-4 w-4 text-muted-foreground" aria-hidden />
         <div>
           <p className="font-semibold text-foreground">Read-only production view</p>
-          <p className="mt-1">Mutation controls are hidden for sales/service readers. Assigned build Leads and manager/elevated roles can create builds, move stages, complete final QC, and sign release.</p>
+          <p className="mt-1">Mutation controls are hidden for sales/service readers. Assigned build Leads and manager/elevated roles can create builds, move stages, complete GTB/accessory checks, complete final QC, and sign release.</p>
         </div>
       </div>
     </div>

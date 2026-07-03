@@ -862,6 +862,36 @@ export async function completeGrappleGtbInspection(input: {
   return normalizeGrappleGtbInspectionRows([data])[0];
 }
 
+export async function ensureGrappleAccessoryInstallSteps(buildId: string): Promise<number> {
+  const data = await callRpc("ensure_grapple_build_accessory_install_steps", { p_build_id: buildId });
+  return numberValue(data);
+}
+
+export async function completeGrappleAccessoryInstall(input: {
+  installId: string;
+  userId?: string | null;
+  notes?: string | null;
+}): Promise<GrappleAccessoryInstall> {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("grapple_build_accessory_installs")
+    .update({
+      status: "completed",
+      installer_id: input.userId ?? null,
+      installed_at: now,
+      verified_by: input.userId ?? null,
+      verified_at: now,
+      blocked_reason: null,
+      notes: input.notes?.trim() || null,
+    })
+    .eq("id", input.installId)
+    .select("*")
+    .single();
+
+  if (error) throw new Error(error.message || "Failed to complete accessory install");
+  return normalizeGrappleAccessoryInstallRows([data])[0];
+}
+
 export async function signGrappleBuildFinalQc(input: {
   checklistId: string;
   signatureName: string;
