@@ -162,7 +162,9 @@ export type QueryType =
   | "part_number"
   | "machine_component"
   | "natural_language"
-  | "cross_reference";
+  | "cross_reference"
+  | "kit"
+  | "supersession";
 
 export type MatchType =
   | "exact"
@@ -170,7 +172,11 @@ export type MatchType =
   | "fts"
   | "hybrid"
   | "cross_ref"
-  | "machine_compat";
+  | "machine_compat"
+  | "machine_serial"
+  | "machine_model"
+  | "kit"
+  | "supersession";
 
 export interface PartSearchResult {
   part_id: string;
@@ -189,6 +195,16 @@ export interface PartSearchResult {
   intellidealer_status: "not_connected";
   notes: string | null;
   source: "catalog" | "rag" | "cross_ref";
+  lookup_path?: string;
+  kit?: {
+    id: string | null;
+    number: string | null;
+    name: string | null;
+  };
+  stock_on_hand?: number;
+  stock_locations?: unknown[];
+  diagrams?: unknown[];
+  lookup_evidence?: Record<string, unknown> | null;
 }
 
 export interface KbEvidence {
@@ -218,6 +234,10 @@ export interface SearchResponse {
     exact: number;
     cross_ref: number;
     machine_compat: number;
+    machine_serial: number;
+    machine_model: number;
+    kit: number;
+    supersession: number;
   };
 }
 
