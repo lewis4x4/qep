@@ -31,7 +31,31 @@ describe("QEP agent work-order dispatcher contract", () => {
     expect(compactScript).toContain("## execution contract");
     expect(compactScript).toContain("read agents.md");
     expect(compactScript).toContain("verify before finishing");
+    expect(compactScript).toContain("source linear issue current");
     expect(compactScript).toContain("do not auto-merge destructive or authorize-class work");
+  });
+
+  it("posts best-effort Linear progress comments without blocking dispatcher completion", () => {
+    expect(script).toContain('const LINEAR_API_URL = "https://api.linear.app/graphql"');
+    expect(script).toContain("process.env.LINEAR_API_KEY");
+    expect(compactScript).toContain("commentcreate(input: $input)");
+    expect(compactScript).toContain("postprogresscomment(workorder, task, \"started\"");
+    expect(compactScript).toContain("postprogresscomment(workorder, task, \"runner_launched\"");
+    expect(compactScript).toContain("postprogresscomment(workorder, task, \"done\"");
+    expect(compactScript).toContain("postprogresscomment(workorder, task, \"failed\"");
+    expect(compactScript).toContain("missing_linear_api_key");
+    expect(compactScript).toContain("missing_source_issue_id");
+    expect(compactScript).toContain("linear_comment_failed");
+    expect(compactScript).toContain("progress_comments: progresscomments");
+  });
+
+  it("exposes source Linear metadata to configured runners for deeper checkpoints", () => {
+    expect(compactScript).toContain("qep_agent_linear_issue_id");
+    expect(compactScript).toContain("qep_agent_linear_issue_identifier");
+    expect(compactScript).toContain("qep_agent_source_comment_url");
+    expect(compactScript).toContain("qep_agent_progress_comments");
+    expect(compactScript).toContain("tests-green");
+    expect(compactScript).toContain("pr-opened");
   });
 
   it("exposes a scheduled and manual GitHub Actions dispatcher", () => {
@@ -40,6 +64,7 @@ describe("QEP agent work-order dispatcher contract", () => {
     expect(compactWorkflow).toContain("schedule:");
     expect(compactWorkflow).toContain("*/5 * * * *");
     expect(compactWorkflow).toContain("node ./scripts/agent-work-orders/dispatch.mjs");
+    expect(compactWorkflow).toContain("linear_api_key");
     expect(compactWorkflow).toContain("qep_agent_claude_command");
     expect(compactWorkflow).toContain("actions/upload-artifact@v4");
   });
