@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { getOfflineFieldQueue } from "../../lib/service-offline-field-mode";
 
 const transitionMutate = mock(() => undefined);
 let transitionState = {
@@ -48,6 +50,42 @@ const jobFixtures = [
     parts: [],
     quotes: [],
     latest_quote: [],
+    hour_meter_reading: 1290.2,
+    complaint: "Machine will not restart",
+    cause: null,
+    correction: null,
+    segments: [
+      {
+        id: "segment-scheduled",
+        segment_number: 1,
+        description: "No restart",
+        status: "open",
+        technician_id: "tech-1",
+        estimated_hours: 2,
+        quoted_labor_hours: 2,
+        hours_actual: null,
+        diagnostic_signoff_status: "not_submitted",
+        diagnostic_submitted_at: null,
+        diagnostic_approved_at: null,
+        repair_signoff_status: "not_started",
+        repair_signed_off_at: null,
+        labor_story: null,
+        labor_story_complaint_verification: null,
+        labor_story_diagnostic_steps: null,
+        labor_story_root_cause: null,
+        labor_story_parts_used: null,
+        labor_story_work_performed: null,
+        overrun_status: "not_evaluated",
+        overrun_flagged_at: null,
+        overrun_acknowledged_at: null,
+        lockout_tagout_required: false,
+        lockout_tagout_completed: false,
+        warranty_parts_turn_in_required: false,
+        warranty_parts_turn_in_completed: false,
+        warranty_parts_label: null,
+        photos: [],
+      },
+    ],
   },
   {
     id: "job-active",
@@ -86,8 +124,69 @@ const jobFixtures = [
     parts: [{ id: "part-1", part_number: "KIT-22", description: "Seal kit", quantity: 1, status: "staged" }],
     quotes: [],
     latest_quote: [],
+    hour_meter_reading: 883.4,
+    complaint: "Hydraulic thumb drifting",
+    cause: null,
+    correction: null,
+    segments: [
+      {
+        id: "segment-active",
+        segment_number: 1,
+        description: "Hydraulic thumb drift",
+        status: "open",
+        technician_id: "tech-1",
+        estimated_hours: 3,
+        quoted_labor_hours: 3,
+        hours_actual: 1.2,
+        diagnostic_signoff_status: "not_submitted",
+        diagnostic_submitted_at: null,
+        diagnostic_approved_at: null,
+        repair_signoff_status: "not_started",
+        repair_signed_off_at: null,
+        labor_story: null,
+        labor_story_complaint_verification: null,
+        labor_story_diagnostic_steps: null,
+        labor_story_root_cause: null,
+        labor_story_parts_used: null,
+        labor_story_work_performed: null,
+        overrun_status: "not_evaluated",
+        overrun_flagged_at: null,
+        overrun_acknowledged_at: null,
+        lockout_tagout_required: false,
+        lockout_tagout_completed: false,
+        warranty_parts_turn_in_required: false,
+        warranty_parts_turn_in_completed: false,
+        warranty_parts_label: null,
+        photos: [],
+      },
+    ],
   },
 ];
+
+function setNavigatorOnline(value: boolean) {
+  Object.defineProperty(window.navigator, "onLine", {
+    configurable: true,
+    value,
+  });
+  window.dispatchEvent(new Event(value ? "online" : "offline"));
+}
+
+function renderMobilePage() {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <ServiceTechnicianMobilePage />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
 
 mock.module("@/hooks/useAuth", () => ({
   useAuth: () => ({
@@ -126,6 +225,8 @@ const { ServiceTechnicianMobilePage } = await import("../ServiceTechnicianMobile
 describe("ServiceTechnicianMobilePage (integration)", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
+    window.localStorage.clear();
+    setNavigatorOnline(true);
     transitionMutate.mockClear();
     transitionState = {
       isPending: false,
@@ -136,11 +237,7 @@ describe("ServiceTechnicianMobilePage (integration)", () => {
   });
 
   test("renders technician queue stats and opens the selected work order", () => {
-    render(
-      <MemoryRouter>
-        <ServiceTechnicianMobilePage />
-      </MemoryRouter>,
-    );
+    renderMobilePage();
 
     expect(screen.getByText("Service Technician Workspace")).toBeTruthy();
     expect(screen.getByText("Jordan, here is your board.")).toBeTruthy();
@@ -155,11 +252,7 @@ describe("ServiceTechnicianMobilePage (integration)", () => {
   });
 
   test("fires a service transition from the technician detail sheet", () => {
-    render(
-      <MemoryRouter>
-        <ServiceTechnicianMobilePage />
-      </MemoryRouter>,
-    );
+    renderMobilePage();
 
     fireEvent.click(screen.getByText("Blue River Ag"));
     fireEvent.click(screen.getByRole("button", { name: "Block / wait" }));
@@ -178,11 +271,7 @@ describe("ServiceTechnicianMobilePage (integration)", () => {
       variables: { id: "job-active", toStage: "blocked_waiting" },
     };
 
-    render(
-      <MemoryRouter>
-        <ServiceTechnicianMobilePage />
-      </MemoryRouter>,
-    );
+    renderMobilePage();
 
     fireEvent.click(screen.getByText("Blue River Ag"));
 
@@ -203,16 +292,48 @@ describe("ServiceTechnicianMobilePage (integration)", () => {
       variables: null,
     };
 
-    render(
-      <MemoryRouter>
-        <ServiceTechnicianMobilePage />
-      </MemoryRouter>,
-    );
+    renderMobilePage();
 
     fireEvent.click(screen.getByText("Blue River Ag"));
 
     expect(screen.getByRole("alert").textContent).toContain("Update did not save");
     expect(screen.getByRole("alert").textContent).toContain("no stage transition is recorded until service confirms");
     expect(screen.getByRole("alert").textContent).toContain("Network request failed");
+  });
+
+  test("queues meter, three-C, and labor packets while offline", async () => {
+    setNavigatorOnline(false);
+
+    renderMobilePage();
+
+    fireEvent.click(screen.getByText("Blue River Ag"));
+    fireEvent.change(screen.getByLabelText("Hour meter"), { target: { value: "889.1" } });
+    fireEvent.change(screen.getByLabelText("Cause"), { target: { value: "Loose fitting" } });
+    fireEvent.change(screen.getByLabelText("Correction"), { target: { value: "Tightened fitting and checked drift" } });
+    fireEvent.change(screen.getByLabelText("Labor hours"), { target: { value: "2.4" } });
+    fireEvent.click(screen.getByRole("button", { name: /Queue Packet/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("status").textContent).toContain("queued");
+    });
+
+    const queue = await getOfflineFieldQueue();
+    expect(queue.map((action) => action.kind)).toEqual(["job_update", "segment_labor"]);
+    expect(queue[0]).toMatchObject({
+      kind: "job_update",
+      jobId: "job-active",
+      fields: {
+        hour_meter_reading: 889.1,
+        cause: "Loose fitting",
+        correction: "Tightened fitting and checked drift",
+      },
+    });
+    expect(queue[1]).toMatchObject({
+      kind: "segment_labor",
+      segmentId: "segment-active",
+      fields: {
+        hours_actual: 2.4,
+      },
+    });
   });
 });

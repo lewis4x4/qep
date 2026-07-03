@@ -355,6 +355,18 @@ export async function acknowledgeSegmentOverrun(payload: {
   return invokeServiceRouter({ action: "acknowledge_segment_overrun", ...payload });
 }
 
+export async function recordSegmentLabor(payload: {
+  segment_id: string;
+  hours_actual?: number;
+  estimated_hours?: number;
+  quoted_labor_hours?: number;
+  complaint?: string;
+  cause?: string;
+  correction?: string;
+}): Promise<unknown> {
+  return invokeServiceRouter({ action: "record_segment_labor", ...payload });
+}
+
 export async function uploadAndRecordSegmentPhoto(payload: {
   workspace_id: string;
   service_job_id: string;

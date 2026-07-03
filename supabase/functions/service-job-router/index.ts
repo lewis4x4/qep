@@ -155,6 +155,7 @@ const TECHNICIAN_EXECUTION_ACTIONS = new Set([
   "submit_segment_diagnosis",
   "sign_off_segment_repair",
   "acknowledge_segment_overrun",
+  "record_segment_labor",
   "record_segment_photo",
 ]);
 const H8_FINANCE_WARRANTY_ACTIONS = new Set([
@@ -404,6 +405,8 @@ Deno.serve(async (req) => {
           actorId,
           origin,
         );
+      case "record_segment_labor":
+        return await handleRecordSegmentLabor(supabase, body, actorId, origin);
       case "record_segment_photo":
         return await handleRecordSegmentPhoto(supabase, body, actorId, origin);
       case "review_documentation":
@@ -1978,6 +1981,92 @@ async function handleAcknowledgeSegmentOverrun(
   });
 
   return safeJsonOk({ segment: updated, overrun: current }, origin);
+}
+
+async function handleRecordSegmentLabor(
+  supabase: SupabaseClient,
+  body: RouterPayload,
+  actorId: string,
+  origin: string | null,
+) {
+  const segment_id = body.segment_id as string | undefined;
+  if (!segment_id) return safeJsonError("segment_id required", 400, origin);
+  if (!isUuidString(segment_id)) {
+    return safeJsonError("segment_id must be a valid UUID", 400, origin);
+  }
+
+  const { data: segment, error: sErr } = await fetchSegment(
+    supabase,
+    segment_id,
+  );
+  if (sErr || !segment) return safeJsonError("Segment not found", 404, origin);
+
+  const numericFields = [
+    "hours_actual",
+    "quoted_labor_hours",
+    "estimated_hours",
+    "overrun_threshold_pct",
+  ];
+  const invalidNumeric = validateOptionalNumberFields(body, numericFields);
+  if (invalidNumeric.length > 0) {
+    return safeJsonErrorWithFields(
+      "H12 labor fields must be finite numbers.",
+      422,
+      origin,
+      { invalid: invalidNumeric },
+    );
+  }
+
+  const fields: Record<string, unknown> = {};
+  copyOptionalNumberFields(body, fields, numericFields);
+  copyOptionalTextFields(body, fields, [
+    "complaint",
+    "cause",
+    "correction",
+    "labor_story_complaint_verification",
+    "labor_story_diagnostic_steps",
+    "labor_story_root_cause",
+  ]);
+
+  if (Object.keys(fields).length === 0) {
+    return safeJsonError(
+      "At least one labor, meter-adjacent, or three-C field is required.",
+      400,
+      origin,
+    );
+  }
+
+  const nowIso = new Date().toISOString();
+  fields.last_activity_at = nowIso;
+
+  const { overrun } = segmentOverrunUpdateFields(
+    segment as Record<string, unknown>,
+    fields,
+    nowIso,
+  );
+
+  const { data: updated, error } = await supabase
+    .from("service_job_segments")
+    .update(fields)
+    .eq("id", segment_id)
+    .select()
+    .single();
+  if (error) return safeJsonError(error.message, 400, origin);
+
+  await insertH5Event(supabase, {
+    workspaceId: updated.workspace_id as string,
+    jobId: updated.service_job_id as string,
+    actorId,
+    eventType: "segment_labor_recorded",
+    metadata: {
+      segment_id,
+      hours_actual: fields.hours_actual ?? null,
+      overrun,
+      source: "h12_offline_field_replay",
+    },
+  });
+
+  return safeJsonOk({ segment: updated, overrun }, origin);
 }
 
 async function handleRecordSegmentPhoto(
