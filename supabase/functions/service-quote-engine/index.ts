@@ -77,6 +77,22 @@ function numericValue(value: unknown): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+function nonNegativeNumericValue(value: unknown): number | null {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function dollarsFromCents(value: unknown): number | null {
+  const cents = nonNegativeNumericValue(value);
+  return cents == null ? null : Math.round((cents / 100) * 100) / 100;
+}
+
+function formatHaulMiles(value: unknown): string | null {
+  const miles = nonNegativeNumericValue(value);
+  if (miles == null || miles === 0) return null;
+  return `${Math.round(miles * 100) / 100} round-trip mi`;
+}
+
 function statusRank(status: MarginSummary["status"]): number {
   switch (status) {
     case "blocked_below_floor":
@@ -343,7 +359,7 @@ async function handleGenerate(
   const { data: job } = await supabase
     .from("service_jobs")
     .select(
-      "id, workspace_id, haul_required, selected_job_code_id, branch_id, customer_id, status_flags, machine_id, shop_or_field, technician_id, estimate_authorization_required, estimate_authorization_status, approved_estimate_amount, estimate_reauth_threshold_pct",
+      "id, workspace_id, haul_required, traffic_ticket_id, selected_job_code_id, branch_id, customer_id, status_flags, machine_id, shop_or_field, technician_id, estimate_authorization_required, estimate_authorization_status, approved_estimate_amount, estimate_reauth_threshold_pct",
     )
     .eq("id", body.job_id)
     .single();
@@ -487,13 +503,57 @@ async function handleGenerate(
 
   // Haul line
   if (job.haul_required) {
+    let haulTicket: Record<string, unknown> | null = null;
+    if (job.traffic_ticket_id) {
+      const { data } = await supabase
+        .from("traffic_tickets")
+        .select(
+          "id, truck_class, rate_type, mileage_one_way, round_trip_miles, haul_total_cents, haul_cost_cents, rate_calc",
+        )
+        .eq("id", job.traffic_ticket_id)
+        .maybeSingle();
+      haulTicket = (data ?? null) as Record<string, unknown> | null;
+    }
+    const ticketTotal = dollarsFromCents(haulTicket?.haul_total_cents);
+    const haulAmount = ticketTotal ?? 500;
+    const roundTripMiles = nonNegativeNumericValue(
+      haulTicket?.round_trip_miles,
+    );
+    const quantity = roundTripMiles && roundTripMiles > 0
+      ? Math.round(roundTripMiles * 100) / 100
+      : 1;
+    const unitPrice = quantity > 0
+      ? Math.round((haulAmount / quantity) * 100) / 100
+      : haulAmount;
+    const truckClass = typeof haulTicket?.truck_class === "string" &&
+        haulTicket.truck_class.trim()
+      ? haulTicket.truck_class.trim()
+      : "standard";
+    const mileageLabel = formatHaulMiles(haulTicket?.round_trip_miles);
     lines.push({
       workspace_id: job.workspace_id,
       line_type: "haul",
-      description: "Equipment Transport",
-      quantity: 1,
-      unit_price: 500,
-      extended_price: 500,
+      description: [
+        `Equipment Transport - ${truckClass}`,
+        mileageLabel,
+      ].filter(Boolean).join(", "),
+      quantity,
+      unit_price: unitPrice,
+      extended_price: haulAmount,
+      margin_metadata: {
+        h7_gate: "hauling_transport_dispatch",
+        source: ticketTotal == null
+          ? "legacy_flat_fallback"
+          : "traffic_ticket_rate_calc",
+        traffic_ticket_id: haulTicket?.id ?? null,
+        rate_type: haulTicket?.rate_type ?? null,
+        truck_class: haulTicket?.truck_class ?? null,
+        mileage_one_way: haulTicket?.mileage_one_way ?? null,
+        round_trip_miles: haulTicket?.round_trip_miles ?? null,
+        haul_total_cents: haulTicket?.haul_total_cents ?? null,
+        haul_cost_cents: haulTicket?.haul_cost_cents ?? null,
+        rate_calc: haulTicket?.rate_calc ?? null,
+      },
       sort_order: sortOrder++,
     });
   }
