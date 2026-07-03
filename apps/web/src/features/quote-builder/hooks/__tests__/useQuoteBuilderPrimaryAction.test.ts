@@ -44,6 +44,17 @@ describe("useQuoteBuilderPrimaryAction", () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
+  test("does not treat packet readiness alone as approval to send", () => {
+    const { onSave, onSubmitApproval, setStep } = runPrimaryAction({
+      approvalCaseCanSend: false,
+      sendReady: true,
+      canSubmitForApproval: false,
+    });
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSubmitApproval).not.toHaveBeenCalled();
+    expect(setStep).not.toHaveBeenCalled();
+  });
+
   test("submits approval when eligible from Review without a required low-margin reason", () => {
     const { onSave, onSubmitApproval } = runPrimaryAction({ canSubmitForApproval: true, currentStep: "review" });
     expect(onSubmitApproval).toHaveBeenCalledTimes(1);
