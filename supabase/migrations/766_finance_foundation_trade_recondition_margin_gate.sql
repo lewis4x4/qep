@@ -302,8 +302,24 @@ comment on column public.qb_trade_ins.reconditioning_approval_status is
   'Part 10 approval lifecycle for keep-and-recondition trades: not_required, pending, approved, stale, or rejected.';
 
 do $$
+declare
+  v_has_trade_valuation_fk boolean;
 begin
-  if not public.qep_column_has_fk('public.qb_trade_ins'::regclass, 'trade_valuation_id') then
+  -- Migration 497 intentionally drops the temporary qep_column_has_fk helper
+  -- after use, so keep this guard self-contained for production replays.
+  select exists (
+    select 1
+    from pg_constraint c
+    join pg_attribute a
+      on a.attrelid = c.conrelid
+     and a.attnum = any(c.conkey)
+    where c.conrelid = 'public.qb_trade_ins'::regclass
+      and c.contype = 'f'
+      and a.attname = 'trade_valuation_id'
+  )
+    into v_has_trade_valuation_fk;
+
+  if not v_has_trade_valuation_fk then
     alter table public.qb_trade_ins
       add constraint qb_trade_ins_trade_valuation_id_fkey
       foreign key (trade_valuation_id) references public.trade_valuations(id) on delete set null not valid;
