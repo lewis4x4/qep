@@ -282,24 +282,6 @@ create table public.qb_trade_ins (
   disposition text
 );
 
-create or replace function public.qep_column_has_fk(p_table regclass, p_column text)
-returns boolean
-language sql
-stable
-set search_path = ''
-as $$
-  select exists (
-    select 1
-    from pg_constraint c
-    join pg_attribute a
-      on a.attrelid = c.conrelid
-     and a.attnum = any(c.conkey)
-    where c.contype = 'f'
-      and c.conrelid = p_table
-      and a.attname = p_column
-  );
-$$;
-
 insert into public.qb_brands (workspace_id, code, name)
 values ('default', 'ASV', 'ASV'), ('default', 'OTHER', 'Other');
 
@@ -334,6 +316,13 @@ describe("766_finance_foundation_trade_recondition_margin_gate.sql contract", ()
     expect(compactSql).toContain("create policy \"trade_recondition_approval_audit_finance_read\"");
     expect(compactSql).toContain("public.qep_finance_can_read()");
     expect(compactSql).toContain("create trigger trade_recondition_approval_audit_append_only");
+  });
+
+  it("is self-contained for foreign-key guards and does not depend on dropped migration helpers", () => {
+    expect(compactSql).not.toContain("public.qep_column_has_fk(");
+    expect(compactSql).not.toContain("function public.qep_column_has_fk");
+    expect(compactSql).toContain("from pg_constraint c join pg_attribute a");
+    expect(compactSql).toContain("a.attname = 'trade_valuation_id'");
   });
 
   it("computes expected margin, syncs trade/valuation state, and exposes manager approval rpc", () => {
