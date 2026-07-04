@@ -221,9 +221,15 @@ $$;
 
 create table public.profiles (
   id uuid primary key default gen_random_uuid(),
-  workspace_id text not null default 'default',
+  active_workspace_id text not null default 'default',
   role text not null default 'rep',
   iron_role text
+);
+
+create table public.profile_workspaces (
+  profile_id uuid not null references public.profiles(id) on delete cascade,
+  workspace_id text not null,
+  primary key (profile_id, workspace_id)
 );
 
 create table public.qb_deals (
@@ -334,7 +340,8 @@ describe("766_finance_foundation_trade_recondition_margin_gate.sql contract", ()
 
     expect(calcFn).toContain("p_expected_sale_price - coalesce(p_trade_cost, 0) - coalesce(p_reconditioning_estimate, 0)");
     expect(approverFn).toContain("p.iron_role = 'iron_manager'");
-    expect(approverFn).toContain("p.workspace_id = (select public.get_my_workspace())");
+    expect(approverFn).toContain("p.active_workspace_id = (select public.get_my_workspace())");
+    expect(approverFn).toContain("from public.profile_workspaces pw");
     expect(materialChangeFn).toContain("p_previous_reconditioning_estimate is null or p_current_reconditioning_estimate is null");
     expect(syncFn).toContain("validation_trade_recondition_workspace_scope_required");
     expect(syncFn).toContain("v_expected_margin_pct < v_floor_pct");
@@ -385,16 +392,24 @@ postgresBehavior("766 finance trade recondition behavior on scratch Postgres", (
         set request.jwt.claim.qep_role = 'owner';
         set request.jwt.claim.workspace_id = 'default';
 
-        insert into public.profiles (id, workspace_id, role, iron_role) values
+        insert into public.profiles (id, active_workspace_id, role, iron_role) values
           ('00000000-0000-0000-0000-0000000000a1', 'default', 'owner', 'iron_manager'),
           ('00000000-0000-0000-0000-0000000000b1', 'default', 'manager', 'iron_manager'),
           ('00000000-0000-0000-0000-0000000000c1', 'default', 'rep', 'iron_advisor');
 
+        insert into public.profile_workspaces (profile_id, workspace_id) values
+          ('00000000-0000-0000-0000-0000000000a1', 'default'),
+          ('00000000-0000-0000-0000-0000000000b1', 'default'),
+          ('00000000-0000-0000-0000-0000000000c1', 'default');
+
         set request.jwt.claim.role = 'service_role';
         set request.jwt.claim.workspace_id = 'other';
 
-        insert into public.profiles (id, workspace_id, role, iron_role) values
+        insert into public.profiles (id, active_workspace_id, role, iron_role) values
           ('00000000-0000-0000-0000-0000000000d1', 'other', 'manager', 'iron_manager');
+
+        insert into public.profile_workspaces (profile_id, workspace_id) values
+          ('00000000-0000-0000-0000-0000000000d1', 'other');
 
         insert into public.qb_deals (id, workspace_id)
         values ('10000000-0000-0000-0000-000000000004', 'other');

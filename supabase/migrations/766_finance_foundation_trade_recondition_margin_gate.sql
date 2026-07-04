@@ -677,7 +677,13 @@ as $$
 	    where p.id = p_profile_id
 	      and (
 	        (select auth.role()) = 'service_role'
-	        or p.workspace_id = (select public.get_my_workspace())
+	        or p.active_workspace_id = (select public.get_my_workspace())
+          or exists (
+            select 1
+            from public.profile_workspaces pw
+            where pw.profile_id = p.id
+              and pw.workspace_id = (select public.get_my_workspace())
+          )
 	      )
 	      and (
 	        p.role::text = 'manager'
@@ -1097,7 +1103,15 @@ begin
     select 1
     from public.profiles p
     where p.id = p_approved_by
-      and p.workspace_id = v_workspace_id
+      and (
+        p.active_workspace_id = v_workspace_id
+        or exists (
+          select 1
+          from public.profile_workspaces pw
+          where pw.profile_id = p.id
+            and pw.workspace_id = v_workspace_id
+        )
+      )
   ) then
     raise exception 'VALIDATION_SALES_MANAGER_APPROVER_WORKSPACE_REQUIRED'
       using errcode = '42501';
@@ -1136,7 +1150,15 @@ begin
     into v_approver_role
   from public.profiles p
   where p.id = p_approved_by
-    and p.workspace_id = v_workspace_id;
+    and (
+      p.active_workspace_id = v_workspace_id
+      or exists (
+        select 1
+        from public.profile_workspaces pw
+        where pw.profile_id = p.id
+          and pw.workspace_id = v_workspace_id
+      )
+    );
 
   v_snapshot := public.qep_trade_sync_recondition_state(v_trade.id);
 
