@@ -34,6 +34,19 @@ export function buildPendingLinearSyncQuery({ taskIds = [], linearIssueIdentifie
   return params.toString();
 }
 
+export function hasLinearSyncScope({ taskIds = [], linearIssueIdentifiers = [] } = {}) {
+  return uniqueNonEmpty(taskIds).length > 0 || uniqueNonEmpty(linearIssueIdentifiers).length > 0;
+}
+
+export function buildTargetedRoadmapTasksQuery({ taskIds = [], linearIssueIdentifiers = [] } = {}) {
+  const params = new URLSearchParams();
+  params.set('select', '*');
+  setInFilter(params, 'task_id', taskIds);
+  setInFilter(params, 'linear_issue_identifier', linearIssueIdentifiers);
+  params.set('order', 'updated_at.asc,task_id.asc');
+  return params.toString();
+}
+
 export class SupabaseClient {
   constructor({ url, serviceRoleKey }) {
     if (!url) throw new Error('SUPABASE_URL required');
@@ -98,6 +111,16 @@ export class SupabaseClient {
   async listPendingLinearSync(limit = 250, filters = {}) {
     return this.select('v_qep_roadmap_tasks_pending_linear_sync', {
       query: buildPendingLinearSyncQuery(filters),
+      limit,
+    });
+  }
+
+  async listTargetedRoadmapTasksForLinearSync(limit = 250, filters = {}) {
+    if (!hasLinearSyncScope(filters)) {
+      throw new Error('Forced Linear sync requires --task-ids or --linear-issue-identifiers.');
+    }
+    return this.select('qep_roadmap_tasks', {
+      query: buildTargetedRoadmapTasksQuery(filters),
       limit,
     });
   }

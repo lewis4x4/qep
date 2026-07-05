@@ -9,9 +9,10 @@
 //
 // Flags:
 //   --dry-run                         Print actions without mutating.
+//   --force                           Sync explicitly scoped rows even if not pending.
 //   --batch N                         Max rows to process per run (default 100).
-//   --task-ids A1.1,B2.2              Only sync pending rows with these task IDs.
-//   --linear-issue-identifiers QEP-1  Only sync pending rows with these Linear IDs.
+//   --task-ids A1.1,B2.2              Only sync matching rows with these task IDs.
+//   --linear-issue-identifiers QEP-1  Only sync matching rows with these Linear IDs.
 
 import { LinearClient } from './lib/linear.mjs';
 import { SupabaseClient } from './lib/supabase.mjs';
@@ -20,6 +21,7 @@ import { buildIssueBody, buildIssueTitle } from './lib/task-utils.mjs';
 
 const args = process.argv.slice(2);
 const DRY_RUN = args.includes('--dry-run');
+const FORCE = args.includes('--force');
 const batchIdx = args.indexOf('--batch');
 const BATCH = batchIdx >= 0 ? parseInt(args[batchIdx + 1], 10) : 100;
 const TASK_IDS = parseListFlags('--task-id', '--task-ids');
@@ -37,6 +39,10 @@ for (const [k, v] of Object.entries({ LINEAR_API_KEY, SUPABASE_URL, SUPABASE_SER
     console.error(`Missing env var: ${k}`);
     process.exit(2);
   }
+}
+if (FORCE && TASK_IDS.length === 0 && LINEAR_ISSUE_IDENTIFIERS.length === 0) {
+  console.error('Refusing --force without --task-ids or --linear-issue-identifiers.');
+  process.exit(2);
 }
 
 const log = (...a) => console.log('[sync]', ...a);
@@ -60,6 +66,7 @@ function parseListFlags(...names) {
 
 function scopeDescription() {
   const parts = [];
+  if (FORCE) parts.push('force=true');
   if (TASK_IDS.length > 0) parts.push(`task_ids=${TASK_IDS.join(',')}`);
   if (LINEAR_ISSUE_IDENTIFIERS.length > 0) parts.push(`linear_issue_identifiers=${LINEAR_ISSUE_IDENTIFIERS.join(',')}`);
   return parts.length > 0 ? ` scope(${parts.join(' ')})` : '';
@@ -92,11 +99,14 @@ async function main() {
     return created;
   }
 
-  const pending = await supa.listPendingLinearSync(BATCH, {
+  const filters = {
     taskIds: TASK_IDS,
     linearIssueIdentifiers: LINEAR_ISSUE_IDENTIFIERS,
-  });
-  log(`${pending.length} task(s) need sync (batch limit ${BATCH})${scopeDescription()}`);
+  };
+  const pending = FORCE
+    ? await supa.listTargetedRoadmapTasksForLinearSync(BATCH, filters)
+    : await supa.listPendingLinearSync(BATCH, filters);
+  log(`${pending.length} task(s) ${FORCE ? 'selected for forced sync' : 'need sync'} (batch limit ${BATCH})${scopeDescription()}`);
 
   let updated = 0;
   let createdMissing = 0;
