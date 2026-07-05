@@ -7,6 +7,7 @@ import { EquipmentReversalPanel } from "../components/EquipmentReversalPanel";
 import { Form8300Panel } from "../components/Form8300Panel";
 import { FetScaffoldPanel } from "../components/FetScaffoldPanel";
 import { ApThreeWayMatchPanel } from "../components/ApThreeWayMatchPanel";
+import { FinanceFoundationStatusPanel } from "../components/FinanceFoundationStatusPanel";
 
 interface FinanceEnforcementPageProps {
   userRole: string;
@@ -15,7 +16,7 @@ interface FinanceEnforcementPageProps {
 
 /**
  * Operator console for the finance-enforcement surfaces shipped in migrations
- * 655-661. Each panel wires a role-gated RPC / edge function and renders its own
+ * 655-670 plus 766. Each panel wires a role-gated RPC / edge function and renders its own
  * loading / error / empty states.
  *
  * Queries filter on the canonical QEP tenant workspace ("default"); the real
@@ -30,10 +31,15 @@ export function FinanceEnforcementPage({ userRole, userId }: FinanceEnforcementP
       <header className="mb-6">
         <h1 className="text-xl font-semibold tracking-tight">Finance Enforcement</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Branch invoice numbering, county tax sourcing, credit holds, margin, equipment-sale
-          reversals, Form 8300 / FET, and AP 3-way match — with the guardrails enforced server-side.
+          K1.1 finance source-of-record status, branch invoice numbering, county tax sourcing,
+          credit holds, margin, trade-reconditioning approval, equipment-sale reversals, Form
+          8300 / FET, and AP 3-way match with the guardrails enforced server-side.
         </p>
       </header>
+
+      <div className="mb-6">
+        <FinanceFoundationStatusPanel workspaceId={workspaceId} />
+      </div>
 
       <Tabs defaultValue="invoicing" className="w-full">
         <TabsList className="flex w-full flex-wrap justify-start gap-1">

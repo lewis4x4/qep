@@ -122,6 +122,96 @@ describe("finance-enforcement-api contract", () => {
     expect(await api.evaluateForm8300("inv-1")).toBe("rep-1");
   });
 
+  test("foundation status proves QuickBooks Desktop is downstream output only", () => {
+    const status = api.buildFinanceFoundationStatus([]);
+    const quickBooks = status.systemBoundary.find((row) => row.system === "QuickBooks Desktop");
+    expect(quickBooks?.role).toBe("downstream_output_only");
+    expect(quickBooks?.isLedgerOfRecord).toBe(false);
+    expect(quickBooks?.evidence.toLowerCase()).toContain("not the ledger");
+  });
+
+  test("foundation status represents migration 766 as QEP OS-owned finance logic", () => {
+    const status = api.buildFinanceFoundationStatus([]);
+    const tradeGate = status.capabilities.find((row) => row.migration === "766");
+    expect(tradeGate).toMatchObject({
+      ownerSystem: "qep_os",
+      status: "shipped",
+    });
+    expect(tradeGate?.label).toContain("15% expected gross-margin");
+    expect(tradeGate?.evidence).toContain("qep_trade_expected_margin_pct");
+    expect(tradeGate?.evidence).toContain("qb_margin_thresholds 15% floor");
+    expect(tradeGate?.evidence).toContain("trade_recondition_approval_audit");
+  });
+
+  test("foundation status exposes safe defaults as config-required nulls", () => {
+    const status = api.buildFinanceFoundationStatus([
+      {
+        config_key: "invoice_pad_width",
+        config_value: { digits: 6 },
+        safe_default: { digits: 6 },
+        authorizing_question: "Round 3 open item: invoice width",
+        note: "Safe default is six digits.",
+        is_active: true,
+      },
+      {
+        config_key: "reconditioning_soft_cap_threshold",
+        config_value: { threshold_cents: null },
+        safe_default: { threshold_cents: null },
+        authorizing_question: "Round 3 open item: trade-in reconditioning soft-cap",
+        note: "No default dollar figure.",
+        is_active: true,
+      },
+      {
+        config_key: "trade_recondition_material_change_threshold",
+        config_value: { percent_delta: 0.1, amount_delta: 2500, basis: "either" },
+        safe_default: { amount_delta: 2500, basis: "either", percent_delta: 0.1 },
+        authorizing_question: "Round 3 open item: material recon change threshold",
+        note: "Safe default forces reapproval.",
+        is_active: true,
+      },
+    ]);
+
+    const invoiceWidth = status.requiredConfig.find((row) => row.config_key === "invoice_pad_width");
+    expect(invoiceWidth?.status).toBe("config_required");
+    expect(invoiceWidth?.effective_value).toBeNull();
+    expect(invoiceWidth?.parked_default).toEqual({ digits: 6 });
+
+    const reconThreshold = status.requiredConfig.find((row) => row.config_key === "reconditioning_soft_cap_threshold");
+    expect(reconThreshold?.status).toBe("config_required");
+    expect(reconThreshold?.effective_value).toBeNull();
+
+    const reconReapproval = status.requiredConfig.find((row) => row.config_key === "trade_recondition_material_change_threshold");
+    expect(reconReapproval?.status).toBe("config_required");
+    expect(reconReapproval?.effective_value).toBeNull();
+    expect(reconReapproval?.parked_default).toEqual({ amount_delta: 2500, basis: "either", percent_delta: 0.1 });
+    expect(reconReapproval?.note).toContain("Safe default forces reapproval.");
+
+    const bankAccounts = status.requiredConfig.find((row) => row.config_key === "bank_account_list");
+    expect(bankAccounts?.status).toBe("config_required");
+    expect(bankAccounts?.effective_value).toBeNull();
+  });
+
+  test("foundation status reads finance_foundation_config and preserves owner-reviewed values", async () => {
+    nextResult = {
+      data: [{
+        config_key: "invoice_pad_width",
+        config_value: { digits: 5 },
+        safe_default: { digits: 6 },
+        authorizing_question: "Round 3 open item: invoice width",
+        note: "Owner-reviewed value.",
+        is_active: true,
+      }],
+      error: null,
+    };
+
+    const status = await api.getFinanceFoundationStatus("default");
+    const invoiceWidth = status.requiredConfig.find((row) => row.config_key === "invoice_pad_width");
+    expect(invoiceWidth?.status).toBe("owner_reviewed");
+    expect(invoiceWidth?.effective_value).toEqual({ digits: 5 });
+    expect(status.configSummary.ownerReviewed).toBe(1);
+    expect(calls).toContainEqual({ method: "from", args: ["finance_foundation_config"] });
+  });
+
   test("reads target the right tables/views", async () => {
     await api.listInvoiceSequences("default");
     await api.getMarginMatrix("default");

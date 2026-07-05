@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "../lib/finance-enforcement-api";
 
 const keys = {
+  foundationStatus: (ws: string) => ["fin", "foundation-status", ws] as const,
   invoiceSequences: (ws: string) => ["fin", "invoice-sequences", ws] as const,
   heldAccounts: (ws: string) => ["fin", "held-accounts", ws] as const,
   marginMatrix: (ws: string) => ["fin", "margin-matrix", ws] as const,
@@ -15,6 +16,15 @@ const keys = {
   fetCategories: (ws: string) => ["fin", "fet-categories", ws] as const,
   vendorInvoices: (ws: string) => ["fin", "vendor-invoices", ws] as const,
 };
+
+// K1.1 foundation / system-of-record status
+export function useFinanceFoundationStatus(workspaceId: string) {
+  return useQuery({
+    queryKey: keys.foundationStatus(workspaceId),
+    queryFn: () => api.getFinanceFoundationStatus(workspaceId),
+    enabled: Boolean(workspaceId),
+  });
+}
 
 // 1. Invoice numbering
 export function useInvoiceSequences(workspaceId: string) {
