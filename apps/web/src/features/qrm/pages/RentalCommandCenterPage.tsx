@@ -298,6 +298,8 @@ export function RentalCommandCenterPage() {
   const [counterResult, setCounterResult] = useState<string | null>(null);
   const [exchangeUnits, setExchangeUnits] = useState<Record<string, string>>({});
   const [exchangeContinuity, setExchangeContinuity] = useState<Record<string, boolean>>({});
+  const [checkoutHours, setCheckoutHours] = useState<Record<string, string>>({});
+  const [checkoutUnitPick, setCheckoutUnitPick] = useState<Record<string, string>>({});
   const [opsError, setOpsError] = useState<string | null>(null);
 
   const commandQuery = useQuery({
@@ -514,8 +516,8 @@ export function RentalCommandCenterPage() {
     queryFn: async () => {
       const { data: contracts, error: contractsError } = await supabase
         .from("rental_contracts")
-        .select("id, contract_number, lifecycle_state, contract_type, approved_end_date, requested_end_date")
-        .in("lifecycle_state", ["on_rent", "off_rent"])
+        .select("id, contract_number, lifecycle_state, contract_type, approved_end_date, requested_end_date, equipment_id, assignment_status, checkout_inspection_required")
+        .in("lifecycle_state", ["reserved", "on_rent", "off_rent"])
         .is("deleted_at", null)
         .order("approved_end_date", { ascending: true })
         .limit(100);
@@ -546,7 +548,20 @@ export function RentalCommandCenterPage() {
           [unit.year, unit.make, unit.model].filter(Boolean).join(" ") || unit.name || unit.id,
         ]),
       );
-      return { contracts: contracts ?? [], lines: lines ?? [], unitName };
+
+      const reservedIds = (contracts ?? [])
+        .filter((row) => row.lifecycle_state === "reserved")
+        .map((row) => row.id);
+      const { data: inspections, error: inspectionsError } = reservedIds.length
+        ? await supabase
+            .from("inspection_runs")
+            .select("id, rental_contract_id, inspection_number, started_at, completed_at, machine_hours")
+            .in("rental_contract_id", reservedIds)
+            .order("started_at", { ascending: false })
+        : { data: [], error: null };
+      if (inspectionsError) throw new Error(inspectionsError.message);
+
+      return { contracts: contracts ?? [], lines: lines ?? [], unitName, inspections: inspections ?? [] };
     },
     staleTime: 30_000,
   });
@@ -579,6 +594,23 @@ export function RentalCommandCenterPage() {
       setExchangeUnits((current) => ({ ...current, [variables.line_id]: "" }));
       await invalidateRentalOps();
     },
+    onError: onOpsError,
+  });
+  const startInspectionMutation = useMutation({
+    mutationFn: (data: { contract_id: string }) => rentalOpsApi.startCheckoutInspection(data),
+    onSuccess: invalidateRentalOps,
+    onError: onOpsError,
+  });
+  const completeInspectionMutation = useMutation({
+    mutationFn: (data: { run_id: string; machine_hours?: number | null }) =>
+      rentalOpsApi.completeCheckoutInspection(data),
+    onSuccess: invalidateRentalOps,
+    onError: onOpsError,
+  });
+  const checkOutMutation = useMutation({
+    mutationFn: (data: { contract_id: string; equipment_id?: string | null }) =>
+      rentalOpsApi.checkOutContract(data),
+    onSuccess: invalidateRentalOps,
     onError: onOpsError,
   });
 
@@ -739,11 +771,81 @@ export function RentalCommandCenterPage() {
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
                         contract.lifecycle_state === "off_rent"
                           ? "bg-cyan-500/10 text-cyan-300"
-                          : "bg-emerald-500/10 text-emerald-300"
+                          : contract.lifecycle_state === "reserved"
+                            ? "bg-amber-500/10 text-amber-300"
+                            : "bg-emerald-500/10 text-emerald-300"
                       }`}>
                         {String(contract.lifecycle_state).replace(/_/g, " ")}
                       </span>
                     </div>
+                    {contract.lifecycle_state === "reserved" ? (() => {
+                      const runs = (onRentOpsQuery.data?.inspections ?? []).filter(
+                        (run) => run.rental_contract_id === contract.id,
+                      );
+                      const completedRun = runs.find((run) => run.completed_at != null);
+                      const openRun = runs.find((run) => run.completed_at == null);
+                      return (
+                        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-2 py-1.5">
+                          <span className="text-[10px] uppercase tracking-wide text-amber-300">Check-out</span>
+                          {completedRun ? (
+                            <span className="text-xs text-emerald-300">
+                              Inspection {completedRun.inspection_number} complete
+                              {completedRun.machine_hours != null ? ` · ${completedRun.machine_hours}h` : ""}
+                            </span>
+                          ) : openRun ? (
+                            <>
+                              <Input
+                                className="h-8 w-32"
+                                inputMode="decimal"
+                                placeholder="Hour meter"
+                                value={checkoutHours[contract.id] ?? ""}
+                                onChange={(event) =>
+                                  setCheckoutHours((current) => ({ ...current, [contract.id]: event.target.value }))}
+                              />
+                              <Button size="sm" variant="outline" disabled={completeInspectionMutation.isPending}
+                                onClick={() => completeInspectionMutation.mutate({
+                                  run_id: openRun.id,
+                                  machine_hours: Number(checkoutHours[contract.id]) || null,
+                                })}>
+                                Complete inspection
+                              </Button>
+                            </>
+                          ) : (
+                            <Button size="sm" variant="outline" disabled={startInspectionMutation.isPending}
+                              onClick={() => startInspectionMutation.mutate({ contract_id: contract.id })}>
+                              Start inspection
+                            </Button>
+                          )}
+                          {contract.assignment_status !== "assigned" || !contract.equipment_id ? (
+                            <select
+                              value={checkoutUnitPick[contract.id] ?? ""}
+                              onChange={(event) =>
+                                setCheckoutUnitPick((current) => ({ ...current, [contract.id]: event.target.value }))}
+                              className="rounded border border-input bg-card px-2 py-1 text-xs"
+                            >
+                              <option value="">Assign unit…</option>
+                              {availableUnits.map((equipment) => (
+                                <option key={equipment.id} value={equipment.id}>
+                                  {[equipment.year, equipment.make, equipment.model].filter(Boolean).join(" ") || equipment.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
+                          <Button
+                            size="sm"
+                            disabled={checkOutMutation.isPending
+                              || (contract.checkout_inspection_required === true && !completedRun)
+                              || (!contract.equipment_id && !checkoutUnitPick[contract.id])}
+                            onClick={() => checkOutMutation.mutate({
+                              contract_id: contract.id,
+                              equipment_id: checkoutUnitPick[contract.id] || null,
+                            })}
+                          >
+                            {checkOutMutation.isPending ? "Checking out…" : "Check out"}
+                          </Button>
+                        </div>
+                      );
+                    })() : null}
                     <div className="mt-2 space-y-2">
                       {contractLines.map((line) => (
                         <div key={line.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-border/40 px-2 py-1.5">

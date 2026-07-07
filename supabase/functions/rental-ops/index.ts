@@ -83,6 +83,25 @@ type DisposeDamagePayload = {
   notes?: string | null;
 };
 
+type StartCheckoutInspectionPayload = {
+  action: "start_checkout_inspection";
+  contract_id?: string;
+};
+
+type CompleteCheckoutInspectionPayload = {
+  action: "complete_checkout_inspection";
+  run_id?: string;
+  machine_hours?: number | string | null;
+  damage_found?: boolean;
+  damage_description?: string | null;
+};
+
+type CheckOutContractPayload = {
+  action: "check_out_contract";
+  contract_id?: string;
+  equipment_id?: string | null;
+};
+
 type RentalOpsPayload =
   | BookingApprovalPayload
   | BookingDeclinePayload
@@ -92,7 +111,23 @@ type RentalOpsPayload =
   | ExchangeLinePayload
   | CodeLineReturnPayload
   | ReleaseHoldPayload
-  | DisposeDamagePayload;
+  | DisposeDamagePayload
+  | StartCheckoutInspectionPayload
+  | CompleteCheckoutInspectionPayload
+  | CheckOutContractPayload;
+
+const RENTAL_CHECKOUT_TEMPLATE = {
+  applies_to: "rental_checkout",
+  template_name: "Rental check-out condition inspection",
+  questions: [
+    { id: "exterior", label: "Exterior condition documented (photos)", type: "boolean" },
+    { id: "tires_tracks", label: "Tires / tracks / undercarriage condition", type: "boolean" },
+    { id: "attachments", label: "Attachments present and secured", type: "boolean" },
+    { id: "fluids", label: "Fluids topped and no visible leaks", type: "boolean" },
+    { id: "safety", label: "Safety equipment (fire ext., beacon, seat belt) present", type: "boolean" },
+    { id: "hour_meter", label: "Hour meter photographed and recorded", type: "boolean" },
+  ],
+};
 
 function toMeter(value: number | string | null | undefined): number | null {
   const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
@@ -315,6 +350,9 @@ Deno.serve(async (req) => {
           estimate_weekly_rate: weeklyRate > 0 ? weeklyRate : null,
           estimate_monthly_rate: monthlyRate > 0 ? monthlyRate : null,
           dealer_notes: typeof body.dealer_notes === "string" ? body.dealer_notes : null,
+          // L2 closeout: counter contracts require the check-out condition
+          // inspection by default now that the flow exists (owner pin, mig 773).
+          checkout_inspection_required: true,
           deposit_required: false,
           tax_exempt: false,
           coi_required: false,
@@ -500,6 +538,185 @@ Deno.serve(async (req) => {
       }
 
       return safeJsonOk({ exchanged_line_id: oldLine.id, new_line: newLine }, origin);
+    }
+
+    if (body.action === "start_checkout_inspection") {
+      // L2 closeout: check-out condition inspection (blueprint §4). Finds the
+      // workspace's rental_checkout template or creates the default one —
+      // zero-blocking: a fresh workspace can still check out.
+      if (!body.contract_id) return safeJsonError("contract_id required", 400, origin);
+
+      const { data: contract, error: contractError } = await admin
+        .from("rental_contracts")
+        .select("id, contract_number, lifecycle_state, equipment_id")
+        .eq("id", body.contract_id)
+        .eq("workspace_id", workspaceId)
+        .maybeSingle();
+      if (contractError || !contract) return safeJsonError("Rental contract not found", 404, origin);
+      if (!["reserved", "quoted", "draft"].includes(String(contract.lifecycle_state))) {
+        return safeJsonError("Check-out inspections start before the contract goes on rent", 400, origin);
+      }
+
+      let templateId: string | null = null;
+      const { data: template } = await admin
+        .from("inspection_templates")
+        .select("id")
+        .eq("workspace_id", workspaceId)
+        .eq("applies_to", RENTAL_CHECKOUT_TEMPLATE.applies_to)
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle();
+      templateId = template?.id ?? null;
+      if (!templateId) {
+        const { data: created, error: templateError } = await admin
+          .from("inspection_templates")
+          .insert({
+            workspace_id: workspaceId,
+            template_name: RENTAL_CHECKOUT_TEMPLATE.template_name,
+            applies_to: RENTAL_CHECKOUT_TEMPLATE.applies_to,
+            questions: RENTAL_CHECKOUT_TEMPLATE.questions,
+          })
+          .select("id")
+          .single();
+        if (templateError || !created) {
+          return safeJsonError(templateError?.message ?? "Failed to create the check-out template", 500, origin);
+        }
+        templateId = created.id as string;
+      }
+
+      const inspectionNumber = `RCI-${contract.contract_number ?? String(contract.id).slice(0, 8)}-${Date.now().toString(36).toUpperCase()}`;
+      const { data: run, error: runError } = await admin
+        .from("inspection_runs")
+        .insert({
+          workspace_id: workspaceId,
+          template_id: templateId,
+          inspection_number: inspectionNumber,
+          rental_contract_id: contract.id,
+          equipment_id: contract.equipment_id,
+          inspector_id: auth.userId,
+          started_at: new Date().toISOString(),
+        })
+        .select("id, inspection_number, started_at, completed_at")
+        .single();
+      if (runError || !run) return safeJsonError(runError?.message ?? "Failed to start the inspection", 500, origin);
+      return safeJsonOk({ run }, origin);
+    }
+
+    if (body.action === "complete_checkout_inspection") {
+      if (!body.run_id) return safeJsonError("run_id required", 400, origin);
+      const { data: run, error } = await admin
+        .from("inspection_runs")
+        .update({
+          completed_at: new Date().toISOString(),
+          machine_hours: toMeter(body.machine_hours),
+          damage_found: body.damage_found === true,
+          damage_description: typeof body.damage_description === "string" ? body.damage_description : null,
+        })
+        .eq("id", body.run_id)
+        .eq("workspace_id", workspaceId)
+        .not("rental_contract_id", "is", null)
+        .is("completed_at", null)
+        .select("id, rental_contract_id, completed_at, machine_hours")
+        .maybeSingle();
+      if (error) return safeJsonError(error.message ?? "Failed to complete the inspection", 500, origin);
+      if (!run) return safeJsonError("Inspection run not found (or already completed)", 400, origin);
+      return safeJsonOk({ run }, origin);
+    }
+
+    if (body.action === "check_out_contract") {
+      // The guarded check-out: the 769/770/773 gate stack enforces unit
+      // assignment, security (deposit/credit/override), COI, signature, and —
+      // when required — a completed inspection. This action just assembles the
+      // row; the database decides.
+      if (!body.contract_id) return safeJsonError("contract_id required", 400, origin);
+
+      const { data: contract, error: contractError } = await admin
+        .from("rental_contracts")
+        .select("id, lifecycle_state, equipment_id, assignment_status, requested_start_date, approved_start_date, requested_end_date, approved_end_date, estimate_daily_rate, estimate_weekly_rate, estimate_monthly_rate, agreed_daily_rate, agreed_weekly_rate, agreed_monthly_rate, workspace_id")
+        .eq("id", body.contract_id)
+        .eq("workspace_id", workspaceId)
+        .maybeSingle();
+      if (contractError || !contract) return safeJsonError("Rental contract not found", 404, origin);
+      if (contract.lifecycle_state !== "reserved") {
+        return safeJsonError("Only reserved contracts can check out (reserve it first)", 400, origin);
+      }
+
+      const equipmentId = typeof body.equipment_id === "string" && body.equipment_id.trim()
+        ? body.equipment_id.trim()
+        : (contract.equipment_id as string | null);
+      if (equipmentId && equipmentId !== contract.equipment_id) {
+        const { data: unit, error: unitError } = await admin
+          .from("crm_equipment")
+          .select("id, availability")
+          .eq("workspace_id", workspaceId)
+          .eq("id", equipmentId)
+          .eq("ownership", "rental_fleet")
+          .maybeSingle();
+        if (unitError || !unit) return safeJsonError("Rental unit not found in the rental fleet", 404, origin);
+        if (unit.availability !== "available") return safeJsonError("Rental unit is not available", 400, origin);
+      }
+
+      // Latest completed check-out inspection feeds the outbound meters.
+      const { data: inspection } = await admin
+        .from("inspection_runs")
+        .select("machine_hours")
+        .eq("rental_contract_id", contract.id)
+        .not("completed_at", "is", null)
+        .order("completed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const { data: updated, error: updateError } = await admin
+        .from("rental_contracts")
+        .update({
+          equipment_id: equipmentId,
+          assignment_status: equipmentId ? "assigned" : contract.assignment_status,
+          approved_start_date: contract.approved_start_date ?? contract.requested_start_date,
+          approved_end_date: contract.approved_end_date ?? contract.requested_end_date,
+          agreed_daily_rate: contract.agreed_daily_rate ?? contract.estimate_daily_rate,
+          agreed_weekly_rate: contract.agreed_weekly_rate ?? contract.estimate_weekly_rate,
+          agreed_monthly_rate: contract.agreed_monthly_rate ?? contract.estimate_monthly_rate,
+          lifecycle_state: "on_rent",
+        })
+        .eq("id", contract.id)
+        .eq("workspace_id", workspaceId)
+        .select("id, contract_number, lifecycle_state, on_rent_at, equipment_id")
+        .single();
+      if (updateError || !updated) {
+        return safeJsonError(updateError?.message ?? "Check-out was refused by the lifecycle guard", 400, origin);
+      }
+
+      // Activate lines (or create line 1 for a single-unit counter contract).
+      const { data: existingLines } = await admin
+        .from("rental_contract_lines")
+        .select("id, status")
+        .eq("rental_contract_id", contract.id)
+        .is("deleted_at", null);
+      if ((existingLines ?? []).length === 0 && updated.equipment_id) {
+        await admin.from("rental_contract_lines").insert({
+          workspace_id: workspaceId,
+          rental_contract_id: contract.id,
+          line_number: 1,
+          quantity: 1,
+          equipment_id: updated.equipment_id,
+          rental_start_at: new Date().toISOString(),
+          rental_end_at: contract.approved_end_date ?? contract.requested_end_date,
+          outbound_meter_hours: inspection?.machine_hours ?? null,
+          status: "active",
+        });
+      } else {
+        for (const line of existingLines ?? []) {
+          if (["quoted", "reserved"].includes(String(line.status))) {
+            await admin
+              .from("rental_contract_lines")
+              .update({ status: "active", outbound_meter_hours: inspection?.machine_hours ?? null })
+              .eq("id", line.id)
+              .eq("workspace_id", workspaceId);
+          }
+        }
+      }
+
+      return safeJsonOk({ contract: updated }, origin);
     }
 
     if (body.action === "code_line_return") {

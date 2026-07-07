@@ -128,6 +128,20 @@ export const rentalOpsApi = {
     disposition: "customer_billable" | "warranty" | "internal_wear" | "dispute";
     notes?: string | null;
   }) => rentalOpsFetch({ action: "dispose_damage", ...data }),
+  startCheckoutInspection: (data: { contract_id: string }) =>
+    rentalOpsFetch({ action: "start_checkout_inspection", ...data })
+      .then((payload) => ({ run: requireRentalOpsObjectPayload(payload, "run") })),
+  completeCheckoutInspection: (data: {
+    run_id: string;
+    machine_hours?: number | null;
+    damage_found?: boolean;
+    damage_description?: string | null;
+  }) =>
+    rentalOpsFetch({ action: "complete_checkout_inspection", ...data })
+      .then((payload) => ({ run: requireRentalOpsObjectPayload(payload, "run") })),
+  checkOutContract: (data: { contract_id: string; equipment_id?: string | null }) =>
+    rentalOpsFetch({ action: "check_out_contract", ...data })
+      .then((payload) => ({ contract: requireRentalOpsObjectPayload(payload, "contract") })),
   approveBooking: (data: {
     contract_id: string;
     equipment_id: string;

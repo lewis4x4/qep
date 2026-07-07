@@ -100,6 +100,7 @@ async function main() {
   }
 
   if (mode === "reset") {
+    await admin.from("inspection_templates").delete().eq("id", "f000000f-0000-4000-8000-000000040001");
     await admin.from("rental_returns").delete().like("id", "f000000f-0000-4000-8000-00000003%");
     await admin.from("rental_rate_rules").delete().like("id", "f000000f-0000-4000-8000-00000002%");
     await admin.from("rental_contract_lines").delete().like("id", "f000000f-0000-4000-8000-00000001%");
@@ -259,10 +260,40 @@ async function main() {
     if (error) throw new Error(`rental return failed: ${error.message}`);
   }
 
+  // 5. Check-out inspection template (rental-ops find-or-creates one on
+  //    demand; seeding keeps the demo deterministic).
+  {
+    const { data: existing } = await admin
+      .from("inspection_templates")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("applies_to", "rental_checkout")
+      .limit(1)
+      .maybeSingle();
+    if (!existing) {
+      const { error } = await admin.from("inspection_templates").insert({
+        id: "f000000f-0000-4000-8000-000000040001",
+        workspace_id: workspaceId,
+        template_name: "Rental check-out condition inspection",
+        applies_to: "rental_checkout",
+        questions: [
+          { id: "exterior", label: "Exterior condition documented (photos)", type: "boolean" },
+          { id: "tires_tracks", label: "Tires / tracks / undercarriage condition", type: "boolean" },
+          { id: "attachments", label: "Attachments present and secured", type: "boolean" },
+          { id: "fluids", label: "Fluids topped and no visible leaks", type: "boolean" },
+          { id: "safety", label: "Safety equipment (fire ext., beacon, seat belt) present", type: "boolean" },
+          { id: "hour_meter", label: "Hour meter photographed and recorded", type: "boolean" },
+        ],
+      });
+      if (error) throw new Error(`checkout template failed: ${error.message}`);
+    }
+  }
+
   console.log(
     `[seed] rental demo ready: ${units.length} fleet units, ${rateRules.length} rate rules, ` +
     `${contracts.length} contracts (draft/quoted/reserved/on_rent/off_rent/returned/closed, ` +
-    `types rental/reservation/rpo/demo/loaner), 1 return in flight, 1 overdue on-rent.`,
+    `types rental/reservation/rpo/demo/loaner), 1 return in flight, 1 overdue on-rent, ` +
+    `1 check-out inspection template.`,
   );
 }
 
