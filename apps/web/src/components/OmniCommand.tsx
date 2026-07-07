@@ -29,7 +29,19 @@ import {
   type DocumentSearchResultItem,
 } from "@/features/documents/router";
 
-type OmniRole = "rep" | "admin" | "manager" | "owner" | "client_stakeholder";
+// Accepts every user_role value; jump entries gate on the roles they name and
+// the H13 department roles simply see the ungated entries.
+type OmniRole =
+  | "rep"
+  | "admin"
+  | "manager"
+  | "owner"
+  | "client_stakeholder"
+  | "service_writer"
+  | "technician"
+  | "parts_counter"
+  | "dispatch"
+  | "finance_admin";
 
 interface JumpEntry {
   id: string;

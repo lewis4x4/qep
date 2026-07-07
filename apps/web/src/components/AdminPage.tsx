@@ -527,6 +527,12 @@ const ROLE_SUBTITLES: Record<UserRole, string> = {
   // Stakeholders don't land on the internal admin surface (audience gate
   // routes them to /brief); this entry exists to satisfy Record<UserRole>.
   client_stakeholder: "",
+  // H13 department roles don't use the admin surface either.
+  service_writer: "",
+  technician: "",
+  parts_counter: "",
+  dispatch: "",
+  finance_admin: "",
 };
 
 function getFileExtension(filename: string): string {

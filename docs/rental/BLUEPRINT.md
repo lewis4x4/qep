@@ -97,7 +97,7 @@ trigger discipline):
 |---|---|---|
 | → quoted | ≥1 line with resolved rates | stamp quote_expires_at if null (default policy param) |
 | → reserved | customer anchor; dates; availability check passes; AR gate passes (or override) | lines → `reserved`; availability hold |
-| → on_rent | equipment assigned on every line; signature valid OR manager override logged; deposit satisfied per policy; COI on file when `coi_required` | stamp `on_rent_at`; lines → `active`; outbound meters required (or explicit `meter_unavailable` reason); equipment `readiness_status='on_rent'` |
+| → on_rent | equipment assigned on every line; signature valid OR manager override logged; **security satisfied: deposit paid OR (deposit not demanded AND clean/overridden credit via `ar_credit_blocks` + `apply_ar_override`) OR audited manager security override** (mig 770 — deposit and credit are alternative instruments, charter §2.7); COI on file when `coi_required` | stamp `on_rent_at`; lines → `active`; outbound meters required (or explicit `meter_unavailable` reason); equipment `readiness_status='on_rent'` |
 | → off_rent | from on_rent only | stamp `off_rent_at` — **billing clock stops here**; emit `rental.off_rent` |
 | → returned | physical return recorded (`rental_returns` row linked, return meters in) | stamp `returned_at`; lines → `returned`; equipment → inspection-pending readiness |
 | → closed | final invoice posted (`rental_invoices.status in ('posted','sent','paid')` covering through returned_at) OR hard-close trio populated | stamp `closed_at`; release availability |
@@ -229,6 +229,13 @@ lookup to the existing tax machinery. **Client-supplied rates are never trusted*
 5. Idempotent by contract: invoice natural key `(rental_contract_id, period_start, period_end)`
    short-circuits replays; run failure → `rolled_back` with reason; partial failures dead-letter
    per contract into `exception_queue` without aborting the run.
+5a. **L5 MUST tighten the `returned → closed` guard** to require final billing complete (final
+   invoice posted covering through `returned_at`, deposit settled) — the L0 guard deliberately
+   leaves that hop open pending this engine, and nothing may close unbilled once L5 lands.
+5b. **Tax generalization gate:** the DR-15 county-surtax fields are Florida-specific — correct for
+   the Duval-County dealership, but the billing engine must treat surtax reporting as a
+   per-workspace tax-profile concern (jurisdiction plumbing already exists). No FL assumption may
+   be hard-coded into the L5 assembler/runner.
 6. Invoice numbers from a per-workspace sequence (`RENT-2026-00042` style) — **`Date.now()` numbering
    in rental-ops is replaced** in the same slice.
 7. Every run emits `rental.cycle.billed` / `rental.cycle.failed` events; the run row is the audit spine.

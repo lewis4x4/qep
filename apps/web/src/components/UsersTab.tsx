@@ -48,6 +48,12 @@ const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   // External build-hub observer (QEP USA stakeholder). Gated into /brief
   // by the audience column, not the internal Users tab.
   client_stakeholder: "Stakeholder Build Hub observer. Read-only, audience-gated.",
+  // H13 service-department roles (assigned via service admin, not this tab).
+  service_writer: "Service writer. Intake, estimates, and work-order management.",
+  technician: "Service technician. Executes assigned work-order segments.",
+  parts_counter: "Parts counter. POS tickets, lookups, and order capture.",
+  dispatch: "Dispatch. Hauling, delivery, and service scheduling boards.",
+  finance_admin: "Finance admin. AR/AP, invoicing, and close workflows.",
 };
 
 type Department = "sales" | "parts" | "service" | "rentals" | "";
@@ -94,6 +100,11 @@ const ROLE_BADGE_CLASS: Record<UserRole, string> = {
   manager: "bg-accent/20 text-accent-foreground",
   owner: "bg-accent text-accent-foreground",
   client_stakeholder: "bg-amber-100 text-amber-900",
+  service_writer: "bg-muted text-muted-foreground",
+  technician: "bg-muted text-muted-foreground",
+  parts_counter: "bg-muted text-muted-foreground",
+  dispatch: "bg-muted text-muted-foreground",
+  finance_admin: "bg-primary/10 text-primary",
 };
 
 function formatLastLogin(iso: string | null): string {
