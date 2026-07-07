@@ -47,12 +47,32 @@ type CounterContractPayload = {
   dealer_notes?: string | null;
 };
 
+type ExchangeLinePayload = {
+  action: "exchange_line";
+  contract_id?: string;
+  line_id?: string;
+  new_equipment_id?: string;
+  /** L2 pin: rate continuity is DECLARED at exchange creation, never derived
+   * at billing time. true = same rate class (continuous clock+optimization);
+   * false = class change (L5 segments at this timestamp). */
+  rate_continuous?: boolean;
+  return_meter_hours?: number | string | null;
+  outbound_meter_hours?: number | string | null;
+  substitution_reason?: string | null;
+};
+
 type RentalOpsPayload =
   | BookingApprovalPayload
   | BookingDeclinePayload
   | ExtensionApprovalPayload
   | ExtensionDeclinePayload
-  | CounterContractPayload;
+  | CounterContractPayload
+  | ExchangeLinePayload;
+
+function toMeter(value: number | string | null | undefined): number | null {
+  const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
 
 type RentalContractRow = {
   id: string;
@@ -309,6 +329,139 @@ Deno.serve(async (req) => {
       }
 
       return safeJsonOk({ contract }, origin);
+    }
+
+    if (body.action === "exchange_line") {
+      // L2: swap a unit mid-rental. The old line closes with return_code
+      // 'exchange'; the new line chains via exchange_parent_line_id and
+      // snapshots rate continuity (CHECK-required by migration 772).
+      if (!body.contract_id || !body.line_id) return safeJsonError("contract_id and line_id required", 400, origin);
+      if (!body.new_equipment_id) return safeJsonError("new_equipment_id required", 400, origin);
+      if (typeof body.rate_continuous !== "boolean") {
+        return safeJsonError("rate_continuous must be declared (true = same rate class, false = class change)", 400, origin);
+      }
+
+      const { data: contract, error: contractError } = await admin
+        .from("rental_contracts")
+        .select("id, workspace_id, equipment_id, lifecycle_state, qrm_company_id, branch_id, equipment_class, equipment_subclass")
+        .eq("id", body.contract_id)
+        .eq("workspace_id", workspaceId)
+        .maybeSingle();
+      if (contractError || !contract) return safeJsonError("Rental contract not found", 404, origin);
+      if (contract.lifecycle_state !== "on_rent") {
+        return safeJsonError("Only on-rent contracts can exchange units", 400, origin);
+      }
+
+      const { data: oldLine, error: lineError } = await admin
+        .from("rental_contract_lines")
+        .select("id, rental_contract_id, line_number, quantity, equipment_id, status, rental_end_at, daily_rate_cents, weekly_rate_cents, monthly_rate_cents, hourly_rate_cents, included_hours, overage_hourly_rate_cents, rpo_eligible, damage_waiver_accepted, damage_waiver_rate_pct")
+        .eq("id", body.line_id)
+        .eq("rental_contract_id", contract.id)
+        .eq("workspace_id", workspaceId)
+        .maybeSingle();
+      if (lineError || !oldLine) return safeJsonError("Contract line not found", 404, origin);
+      if (!["active", "held"].includes(String(oldLine.status))) {
+        return safeJsonError("Only active or held lines can be exchanged", 400, origin);
+      }
+
+      const { data: newUnit, error: unitError } = await admin
+        .from("crm_equipment")
+        .select("id, availability")
+        .eq("workspace_id", workspaceId)
+        .eq("id", body.new_equipment_id)
+        .eq("ownership", "rental_fleet")
+        .maybeSingle();
+      if (unitError || !newUnit) return safeJsonError("Replacement unit not found in the rental fleet", 404, origin);
+      if (newUnit.availability !== "available") {
+        return safeJsonError("Replacement unit is not available", 400, origin);
+      }
+
+      // Rates: continuous exchanges carry the old line's book verbatim; class
+      // changes resolve a fresh book (resolver falls back to sticker rates).
+      let rates = {
+        daily_rate_cents: oldLine.daily_rate_cents,
+        weekly_rate_cents: oldLine.weekly_rate_cents,
+        monthly_rate_cents: oldLine.monthly_rate_cents,
+        hourly_rate_cents: oldLine.hourly_rate_cents,
+      };
+      if (!body.rate_continuous) {
+        const { data: book } = await admin.rpc("rental_resolve_rates", {
+          p_workspace_id: workspaceId,
+          p_equipment_id: body.new_equipment_id,
+          p_company_id: contract.qrm_company_id,
+          p_equipment_class: contract.equipment_class,
+          p_equipment_subclass: contract.equipment_subclass,
+          p_branch_id: contract.branch_id,
+        });
+        if (book && typeof book === "object") {
+          const b = book as Record<string, unknown>;
+          rates = {
+            daily_rate_cents: typeof b.day === "number" ? b.day : null,
+            weekly_rate_cents: typeof b.week === "number" ? b.week : null,
+            monthly_rate_cents: typeof b.month === "number" ? b.month : null,
+            hourly_rate_cents: typeof b.hourly === "number" ? b.hourly : null,
+          };
+        }
+      }
+
+      const nowIso = new Date().toISOString();
+      const { error: closeError } = await admin
+        .from("rental_contract_lines")
+        .update({
+          status: "exchanged",
+          return_code: "exchange",
+          actual_returned_at: nowIso,
+          return_meter_hours: toMeter(body.return_meter_hours),
+        })
+        .eq("id", oldLine.id)
+        .eq("workspace_id", workspaceId);
+      if (closeError) return safeJsonError(closeError.message ?? "Failed to close the exchanged line", 500, origin);
+
+      const { data: maxLine } = await admin
+        .from("rental_contract_lines")
+        .select("line_number")
+        .eq("rental_contract_id", contract.id)
+        .order("line_number", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const { data: newLine, error: newLineError } = await admin
+        .from("rental_contract_lines")
+        .insert({
+          workspace_id: workspaceId,
+          rental_contract_id: contract.id,
+          line_number: (maxLine?.line_number ?? 0) + 1,
+          quantity: oldLine.quantity,
+          equipment_id: body.new_equipment_id,
+          rental_start_at: nowIso,
+          rental_end_at: oldLine.rental_end_at,
+          outbound_meter_hours: toMeter(body.outbound_meter_hours),
+          ...rates,
+          included_hours: oldLine.included_hours,
+          overage_hourly_rate_cents: oldLine.overage_hourly_rate_cents,
+          rpo_eligible: oldLine.rpo_eligible,
+          damage_waiver_accepted: oldLine.damage_waiver_accepted,
+          damage_waiver_rate_pct: oldLine.damage_waiver_rate_pct,
+          exchange_parent_line_id: oldLine.id,
+          exchange_rate_continuous: body.rate_continuous,
+          substitution_reason: typeof body.substitution_reason === "string" ? body.substitution_reason : null,
+          status: "active",
+        })
+        .select("id, line_number, exchange_parent_line_id, exchange_rate_continuous, status")
+        .single();
+      if (newLineError || !newLine) {
+        return safeJsonError(newLineError?.message ?? "Exchanged line closed but replacement insert failed", 500, origin);
+      }
+
+      if (contract.equipment_id === oldLine.equipment_id) {
+        await admin
+          .from("rental_contracts")
+          .update({ equipment_id: body.new_equipment_id })
+          .eq("id", contract.id)
+          .eq("workspace_id", workspaceId);
+      }
+
+      return safeJsonOk({ exchanged_line_id: oldLine.id, new_line: newLine }, origin);
     }
 
     if (body.action === "approve_booking") {
