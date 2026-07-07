@@ -38,6 +38,7 @@ const STREAM_LABELS = {
   I: 'Stream I — Grapple-Truck Production',
   J: 'Stream J — Workforce',
   K: 'Stream K — Financials Re-architecture',
+  L: 'Stream L — Rental Department',
 };
 
 const byStream = new Map();

@@ -68,6 +68,7 @@ export const STREAM_PROJECT_NAMES = {
   I: 'Stream I — Grapple-Truck Production',
   J: 'Stream J — Workforce',
   K: 'Stream K — Financials Re-architecture',
+  L: 'Stream L — Rental Department',
 };
 
 // Standard label palette

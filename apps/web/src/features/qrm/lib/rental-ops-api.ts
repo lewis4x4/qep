@@ -78,6 +78,24 @@ async function rentalOpsFetch(body: Record<string, unknown>): Promise<Record<str
 }
 
 export const rentalOpsApi = {
+  createContract: (data: {
+    qrm_company_id: string;
+    qrm_contact_id?: string | null;
+    contract_type?: "reservation" | "rental" | "demo" | "loaner";
+    equipment_id?: string | null;
+    branch_id?: string | null;
+    start_date: string;
+    end_date: string;
+    daily_rate?: number | null;
+    weekly_rate?: number | null;
+    monthly_rate?: number | null;
+    delivery_mode?: "pickup" | "delivery";
+    dealer_notes?: string | null;
+  }) =>
+    rentalOpsFetch({
+      action: "create_contract",
+      ...data,
+    }).then((payload) => ({ contract: requireRentalOpsObjectPayload(payload, "contract") })),
   approveBooking: (data: {
     contract_id: string;
     equipment_id: string;

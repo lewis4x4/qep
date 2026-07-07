@@ -31,11 +31,28 @@ type ExtensionDeclinePayload = {
   dealer_response?: string | null;
 };
 
+type CounterContractPayload = {
+  action: "create_contract";
+  qrm_company_id?: string;
+  qrm_contact_id?: string | null;
+  contract_type?: string | null;
+  equipment_id?: string | null;
+  branch_id?: string | null;
+  start_date?: string;
+  end_date?: string;
+  daily_rate?: number | string | null;
+  weekly_rate?: number | string | null;
+  monthly_rate?: number | string | null;
+  delivery_mode?: string | null;
+  dealer_notes?: string | null;
+};
+
 type RentalOpsPayload =
   | BookingApprovalPayload
   | BookingDeclinePayload
   | ExtensionApprovalPayload
-  | ExtensionDeclinePayload;
+  | ExtensionDeclinePayload
+  | CounterContractPayload;
 
 type RentalContractRow = {
   id: string;
@@ -178,6 +195,121 @@ Deno.serve(async (req) => {
     if (!workspaceId) return safeJsonError("Operator workspace is not configured", 403, origin);
 
     const body = await req.json() as RentalOpsPayload;
+
+    if (body.action === "create_contract") {
+      // Counter origination (Stream L / L0): a rep opens a draft contract for
+      // a QRM company — no portal account involved. The DB trigger assigns the
+      // RC-YYYY-NNNNN number; the lifecycle guard governs every later move.
+      if (!body.qrm_company_id) return safeJsonError("qrm_company_id required", 400, origin);
+      if (!body.start_date || !body.end_date) {
+        return safeJsonError("start_date and end_date required", 400, origin);
+      }
+      if (body.end_date < body.start_date) {
+        return safeJsonError("end_date must not precede start_date", 400, origin);
+      }
+
+      const contractType = typeof body.contract_type === "string" && body.contract_type.trim()
+        ? body.contract_type.trim()
+        : "rental";
+      if (!["reservation", "rental", "demo", "loaner"].includes(contractType)) {
+        // rpo and rerent need their term/line blocks — they open via dedicated flows later in Stream L.
+        return safeJsonError("contract_type must be reservation, rental, demo, or loaner", 400, origin);
+      }
+
+      const { data: company, error: companyError } = await admin
+        .from("qrm_companies")
+        .select("id, workspace_id")
+        .eq("id", body.qrm_company_id)
+        .eq("workspace_id", workspaceId)
+        .maybeSingle();
+      if (companyError || !company) return safeJsonError("Company not found in this workspace", 404, origin);
+
+      const equipmentId = typeof body.equipment_id === "string" && body.equipment_id.trim()
+        ? body.equipment_id.trim()
+        : null;
+      if (equipmentId) {
+        const { data: unit, error: unitError } = await admin
+          .from("crm_equipment")
+          .select("id, availability")
+          .eq("workspace_id", workspaceId)
+          .eq("id", equipmentId)
+          .eq("ownership", "rental_fleet")
+          .maybeSingle();
+        if (unitError || !unit) return safeJsonError("Rental unit not found in the rental fleet", 404, origin);
+        if (unit.availability !== "available") {
+          return safeJsonError("Rental unit is not available for the requested dates", 400, origin);
+        }
+      }
+
+      const dailyRate = toCurrencyAmount(body.daily_rate);
+      const weeklyRate = toCurrencyAmount(body.weekly_rate);
+      const monthlyRate = toCurrencyAmount(body.monthly_rate);
+      const deliveryMode = body.delivery_mode === "delivery" ? "delivery" : "pickup";
+
+      const { data: contract, error: insertError } = await admin
+        .from("rental_contracts")
+        .insert({
+          workspace_id: workspaceId,
+          qrm_company_id: company.id,
+          qrm_contact_id: typeof body.qrm_contact_id === "string" && body.qrm_contact_id.trim()
+            ? body.qrm_contact_id.trim()
+            : null,
+          origination_channel: "counter",
+          originated_by: auth.userId,
+          contract_type: contractType,
+          status: "draft",
+          lifecycle_state: "draft",
+          request_type: "booking",
+          delivery_mode: deliveryMode,
+          requested_start_date: body.start_date,
+          requested_end_date: body.end_date,
+          equipment_id: equipmentId,
+          assignment_status: equipmentId ? "assigned" : "pending_assignment",
+          branch_id: typeof body.branch_id === "string" && body.branch_id.trim() ? body.branch_id.trim() : null,
+          estimate_daily_rate: dailyRate > 0 ? dailyRate : null,
+          estimate_weekly_rate: weeklyRate > 0 ? weeklyRate : null,
+          estimate_monthly_rate: monthlyRate > 0 ? monthlyRate : null,
+          dealer_notes: typeof body.dealer_notes === "string" ? body.dealer_notes : null,
+          deposit_required: false,
+          tax_exempt: false,
+          coi_required: false,
+          po_required: false,
+          rpo_eligible: false,
+          delivery_required: deliveryMode === "delivery",
+          pickup_required: false,
+          delivery_address: {},
+          pickup_address: {},
+          tax_sourcing_method: "branch_origin",
+        })
+        .select("id, contract_number, lifecycle_state, contract_type, status")
+        .single();
+      if (insertError || !contract) {
+        return safeJsonError(insertError?.message ?? "Failed to create rental contract", 500, origin);
+      }
+
+      if (equipmentId) {
+        const { error: lineError } = await admin
+          .from("rental_contract_lines")
+          .insert({
+            workspace_id: workspaceId,
+            rental_contract_id: contract.id,
+            line_number: 1,
+            quantity: 1,
+            equipment_id: equipmentId,
+            rental_start_at: body.start_date,
+            rental_end_at: body.end_date,
+            daily_rate_cents: dailyRate > 0 ? Math.round(dailyRate * 100) : null,
+            weekly_rate_cents: weeklyRate > 0 ? Math.round(weeklyRate * 100) : null,
+            monthly_rate_cents: monthlyRate > 0 ? Math.round(monthlyRate * 100) : null,
+            status: "quoted",
+          });
+        if (lineError) {
+          return safeJsonError(lineError.message ?? "Contract created but line insert failed", 500, origin);
+        }
+      }
+
+      return safeJsonOk({ contract }, origin);
+    }
 
     if (body.action === "approve_booking") {
       if (!body.contract_id) return safeJsonError("contract_id required", 400, origin);

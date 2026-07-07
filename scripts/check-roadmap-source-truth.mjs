@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const repoRoot = resolve(new URL('..', import.meta.url).pathname);
-const expectedStreams = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K'];
+const expectedStreams = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 const expectedProjectNames = {
   A: 'Stream A — Iron Quote',
   B: 'Stream B — Sales-Advisor Field Platform',
@@ -16,8 +16,10 @@ const expectedProjectNames = {
   I: 'Stream I — Grapple-Truck Production',
   J: 'Stream J — Workforce',
   K: 'Stream K — Financials Re-architecture',
+  L: 'Stream L — Rental Department',
 };
 const expectedSeedCounts = { G: 14, H: 15, I: 8, J: 2, K: 4 };
+const expectedStreamLSeedCount = 9;
 
 const failures = [];
 
@@ -71,12 +73,12 @@ for (const [stream, projectName] of Object.entries(expectedProjectNames)) {
 
 assertIncludes(
   edgeForwardSync,
-  "stream: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K';",
+  "stream: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L';",
   'edge sync QepRoadmapTask.stream type',
 );
 assertIncludes(
   roadmapPackageEdgeForwardSync,
-  "stream: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K';",
+  "stream: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L';",
   'roadmap-linear-sync package edge sync QepRoadmapTask.stream type',
 );
 
@@ -89,6 +91,16 @@ for (const [stream, count] of Object.entries(expectedSeedCounts)) {
 }
 assertIncludes(phaseOneMigration, 'BLK-FIN-WORKING-SESSION', 'migration 650 Stream K gate');
 assertIncludes(phaseOneMigration, 'PART 2', 'migration 650 safety note for gated source SQL');
+
+const streamLMigration = read('supabase/migrations/768_qep_stream_l_rental_department.sql');
+{
+  const matches = [...streamLMigration.matchAll(/\('L\d+\.1',\s*'L'/g)];
+  if (matches.length !== expectedStreamLSeedCount) {
+    fail(`migration 768 expected ${expectedStreamLSeedCount} seed rows for Stream L, found ${matches.length}`);
+  }
+}
+assertIncludes(streamLMigration, "ADD VALUE IF NOT EXISTS 'L' AFTER 'K'", 'migration 768 Stream L enum label');
+assertIncludes(streamLMigration, 'docs/rental/BLUEPRINT.md', 'migration 768 Stream L blueprint evidence link');
 
 if (failures.length > 0) {
   console.error('Roadmap source-of-truth audit failed:');

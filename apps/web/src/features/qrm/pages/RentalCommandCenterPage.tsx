@@ -287,6 +287,14 @@ export function RentalCommandCenterPage() {
   const [depositAmounts, setDepositAmounts] = useState<Record<string, string>>({});
   const [extensionResponses, setExtensionResponses] = useState<Record<string, string>>({});
   const [extensionCharges, setExtensionCharges] = useState<Record<string, string>>({});
+  const [counterCompanySearch, setCounterCompanySearch] = useState("");
+  const [counterCompanyId, setCounterCompanyId] = useState("");
+  const [counterContractType, setCounterContractType] = useState<"reservation" | "rental" | "demo" | "loaner">("rental");
+  const [counterEquipmentId, setCounterEquipmentId] = useState("");
+  const [counterStartDate, setCounterStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [counterEndDate, setCounterEndDate] = useState(() => new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10));
+  const [counterDailyRate, setCounterDailyRate] = useState("");
+  const [counterResult, setCounterResult] = useState<string | null>(null);
 
   const commandQuery = useQuery({
     queryKey: ["qrm", "rental-command"],
@@ -437,6 +445,47 @@ export function RentalCommandCenterPage() {
     },
   });
 
+  const companySearchQuery = useQuery({
+    queryKey: ["qrm", "rental-counter-companies", counterCompanySearch],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("crm_companies")
+        .select("id, name")
+        .ilike("name", `%${counterCompanySearch}%`)
+        .is("deleted_at", null)
+        .order("name")
+        .limit(20);
+      if (error) throw new Error(error.message);
+      return (data ?? []) as Array<{ id: string; name: string }>;
+    },
+    enabled: counterCompanySearch.trim().length >= 2,
+  });
+
+  const createContractMutation = useMutation({
+    mutationFn: () =>
+      rentalOpsApi.createContract({
+        qrm_company_id: counterCompanyId,
+        contract_type: counterContractType,
+        equipment_id: counterEquipmentId || null,
+        start_date: counterStartDate,
+        end_date: counterEndDate,
+        daily_rate: Number(counterDailyRate) || null,
+      }),
+    onSuccess: async ({ contract }) => {
+      const number = typeof contract.contract_number === "string" ? contract.contract_number : "created";
+      setCounterResult(`Contract ${number} opened as a draft. It moves to reserved/on-rent from the lifecycle guard.`);
+      setCounterCompanyId("");
+      setCounterCompanySearch("");
+      setCounterEquipmentId("");
+      setCounterDailyRate("");
+      await queryClient.invalidateQueries({ queryKey: ["qrm", "rental-command"] });
+      await queryClient.invalidateQueries({ queryKey: ["qrm", "rental-contract-queue"] });
+    },
+    onError: (error: unknown) => {
+      setCounterResult(error instanceof Error ? error.message : "Failed to create the contract.");
+    },
+  });
+
   const center = commandQuery.data;
 
   return (
@@ -470,6 +519,91 @@ export function RentalCommandCenterPage() {
               </Link>
             </Button>
           </div>
+
+          <DeckSurface className="p-4">
+            <h2 className="text-sm font-semibold text-foreground">New counter contract</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Open a draft rental contract for a walk-in or phone customer — no portal account needed.
+              The lifecycle guard governs every move after this (reserve, check out, off-rent, return, close).
+            </p>
+            <div className="mt-4 grid gap-2 md:grid-cols-2">
+              <div className="grid gap-2">
+                <Input
+                  value={counterCompanySearch}
+                  onChange={(event) => {
+                    setCounterCompanySearch(event.target.value);
+                    setCounterCompanyId("");
+                  }}
+                  placeholder="Search customer company (min 2 chars)…"
+                />
+                <select
+                  value={counterCompanyId}
+                  onChange={(event) => setCounterCompanyId(event.target.value)}
+                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                >
+                  <option value="">
+                    {companySearchQuery.isFetching
+                      ? "Searching…"
+                      : (companySearchQuery.data?.length ?? 0) > 0
+                        ? "Select company…"
+                        : "Type above to find a company"}
+                  </option>
+                  {(companySearchQuery.data ?? []).map((company) => (
+                    <option key={company.id} value={company.id}>{company.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={counterContractType}
+                  onChange={(event) => setCounterContractType(event.target.value as typeof counterContractType)}
+                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                >
+                  <option value="rental">Rental</option>
+                  <option value="reservation">Reservation</option>
+                  <option value="demo">Demo</option>
+                  <option value="loaner">Loaner</option>
+                </select>
+              </div>
+              <div className="grid gap-2">
+                <select
+                  value={counterEquipmentId}
+                  onChange={(event) => setCounterEquipmentId(event.target.value)}
+                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                >
+                  <option value="">Unit: assign later</option>
+                  {(contractQueueQuery.data?.equipment ?? [])
+                    .filter((equipment) => equipment.availability === "available")
+                    .map((equipment) => (
+                      <option key={equipment.id} value={equipment.id}>
+                        {[equipment.year, equipment.make, equipment.model].filter(Boolean).join(" ") || equipment.name}
+                      </option>
+                    ))}
+                </select>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input type="date" value={counterStartDate} onChange={(event) => setCounterStartDate(event.target.value)} />
+                  <Input type="date" value={counterEndDate} onChange={(event) => setCounterEndDate(event.target.value)} />
+                </div>
+                <Input
+                  value={counterDailyRate}
+                  onChange={(event) => setCounterDailyRate(event.target.value)}
+                  placeholder="Daily rate (optional, resolves from rate rules later)"
+                  inputMode="decimal"
+                />
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Button
+                size="sm"
+                onClick={() => {
+                  setCounterResult(null);
+                  createContractMutation.mutate();
+                }}
+                disabled={createContractMutation.isPending || !counterCompanyId || !counterStartDate || !counterEndDate}
+              >
+                {createContractMutation.isPending ? "Opening…" : "Open draft contract"}
+              </Button>
+              {counterResult ? <p className="text-xs text-muted-foreground">{counterResult}</p> : null}
+            </div>
+          </DeckSurface>
 
           <div className="grid gap-4 xl:grid-cols-2">
             <DeckSurface className="p-4">
