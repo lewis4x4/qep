@@ -1,0 +1,390 @@
+{
+  "$schema_note": "Shared test vectors for the L1 rental rate optimizer (blueprint \u00a72.2). APPEND-ONLY with stable ids \u2014 a changed expectation must be a loud diff, never a silent edit. Both the canonical TS implementation (shared/rental-rate-math.ts) and the SQL mirror consume this file; divergence fails the build gate. All money is integer CENTS. Formulation: minimize 28m*month + 7w*week + d*day subject to 28m+7w+d >= billable_days (COVERAGE, overshoot allowed). Tie-break: fewest segment lines, then largest blocks first. 'fired' means the optimum STRICTLY beat (> 0 cents; ties never fire) the greedy largest-block exact partition (months, then weeks, then days) \u2014 that partition is the 'beaten_alternative' a meter-style biller would have charged, and the only legal basis for a printed savings line. Duration resolution (off-rent clock, grace, minimums, calendar rules) is a SEPARATE stage with its own vector set \u2014 billable_days arrives here pre-computed.",
+  "optimize_cases": [
+    {
+      "id": "opt-007-exact-week",
+      "description": "Boundary: 7 days bills as exactly one week; nothing fired.",
+      "rate_book": {
+        "day": 10000,
+        "week": 30000,
+        "month": 90000
+      },
+      "billable_days": 7,
+      "expected": {
+        "total": 30000,
+        "segments": [
+          {
+            "unit": "week",
+            "qty": 1,
+            "unit_cents": 30000
+          }
+        ],
+        "fired": false,
+        "beaten_alternative": null
+      }
+    },
+    {
+      "id": "opt-008-week-plus-day",
+      "description": "Boundary: 8 days = week + day beats 8 day-rates and a 2-week overshoot.",
+      "rate_book": {
+        "day": 10000,
+        "week": 30000,
+        "month": 90000
+      },
+      "billable_days": 8,
+      "expected": {
+        "total": 40000,
+        "segments": [
+          {
+            "unit": "week",
+            "qty": 1,
+            "unit_cents": 30000
+          },
+          {
+            "unit": "day",
+            "qty": 1,
+            "unit_cents": 10000
+          }
+        ],
+        "fired": false,
+        "beaten_alternative": null
+      }
+    },
+    {
+      "id": "opt-026-overshoot-month",
+      "description": "Coverage beats partition: 26 days bills as ONE MONTH (overshoot), not 3wk+5d. The canonical savings-line case.",
+      "rate_book": {
+        "day": 10000,
+        "week": 30000,
+        "month": 90000
+      },
+      "billable_days": 26,
+      "expected": {
+        "total": 90000,
+        "segments": [
+          {
+            "unit": "month",
+            "qty": 1,
+            "unit_cents": 90000
+          }
+        ],
+        "fired": true,
+        "beaten_alternative": {
+          "total": 140000,
+          "segments": [
+            {
+              "unit": "week",
+              "qty": 3,
+              "unit_cents": 30000
+            },
+            {
+              "unit": "day",
+              "qty": 5,
+              "unit_cents": 10000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "opt-027-overshoot-month",
+      "description": "Boundary: 27 days also covered cheapest by one month.",
+      "rate_book": {
+        "day": 10000,
+        "week": 30000,
+        "month": 90000
+      },
+      "billable_days": 27,
+      "expected": {
+        "total": 90000,
+        "segments": [
+          {
+            "unit": "month",
+            "qty": 1,
+            "unit_cents": 90000
+          }
+        ],
+        "fired": true,
+        "beaten_alternative": {
+          "total": 150000,
+          "segments": [
+            {
+              "unit": "week",
+              "qty": 3,
+              "unit_cents": 30000
+            },
+            {
+              "unit": "day",
+              "qty": 6,
+              "unit_cents": 10000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "opt-028-exact-month",
+      "description": "Boundary: 28 days = exactly one month; nothing fired.",
+      "rate_book": {
+        "day": 10000,
+        "week": 30000,
+        "month": 90000
+      },
+      "billable_days": 28,
+      "expected": {
+        "total": 90000,
+        "segments": [
+          {
+            "unit": "month",
+            "qty": 1,
+            "unit_cents": 90000
+          }
+        ],
+        "fired": false,
+        "beaten_alternative": null
+      }
+    },
+    {
+      "id": "opt-029-month-plus-day",
+      "description": "Boundary: 29 days = month + day; greedy partition is already optimal.",
+      "rate_book": {
+        "day": 10000,
+        "week": 30000,
+        "month": 90000
+      },
+      "billable_days": 29,
+      "expected": {
+        "total": 100000,
+        "segments": [
+          {
+            "unit": "month",
+            "qty": 1,
+            "unit_cents": 90000
+          },
+          {
+            "unit": "day",
+            "qty": 1,
+            "unit_cents": 10000
+          }
+        ],
+        "fired": false,
+        "beaten_alternative": null
+      }
+    },
+    {
+      "id": "opt-tie-014-largest-blocks",
+      "description": "Tie: with week = 7*day, 14 days ties across 2w / 1w+7d / 14d at 140000. Tie-break = fewest segment lines, then largest blocks: 2 weeks wins.",
+      "rate_book": {
+        "day": 10000,
+        "week": 70000,
+        "month": 900000
+      },
+      "billable_days": 14,
+      "expected": {
+        "total": 140000,
+        "segments": [
+          {
+            "unit": "week",
+            "qty": 2,
+            "unit_cents": 70000
+          }
+        ],
+        "fired": false,
+        "beaten_alternative": null
+      }
+    },
+    {
+      "id": "opt-invweek-007-days-beat-week",
+      "description": "Inverted ladder: negotiated week (80000) exceeds 7*day (70000). Correctness must not assume ladder sanity \u2014 7 day-rates win.",
+      "rate_book": {
+        "day": 10000,
+        "week": 80000,
+        "month": 200000
+      },
+      "billable_days": 7,
+      "expected": {
+        "total": 70000,
+        "segments": [
+          {
+            "unit": "day",
+            "qty": 7,
+            "unit_cents": 10000
+          }
+        ],
+        "fired": true,
+        "beaten_alternative": {
+          "total": 80000,
+          "segments": [
+            {
+              "unit": "week",
+              "qty": 1,
+              "unit_cents": 80000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "opt-invmonth-010-month-under-week",
+      "description": "Inverted ladder: month (50000) undercuts week (60000). 10 days bills as one month by coverage.",
+      "rate_book": {
+        "day": 10000,
+        "week": 60000,
+        "month": 50000
+      },
+      "billable_days": 10,
+      "expected": {
+        "total": 50000,
+        "segments": [
+          {
+            "unit": "month",
+            "qty": 1,
+            "unit_cents": 50000
+          }
+        ],
+        "fired": true,
+        "beaten_alternative": {
+          "total": 90000,
+          "segments": [
+            {
+              "unit": "week",
+              "qty": 1,
+              "unit_cents": 60000
+            },
+            {
+              "unit": "day",
+              "qty": 3,
+              "unit_cents": 10000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "opt-cents-003-float-hostile",
+      "description": "Float trap: $33.33 day rate x 3 must equal exactly 9999 cents. Any float pipeline drifts here.",
+      "rate_book": {
+        "day": 3333,
+        "week": 19999,
+        "month": 59999
+      },
+      "billable_days": 3,
+      "expected": {
+        "total": 9999,
+        "segments": [
+          {
+            "unit": "day",
+            "qty": 3,
+            "unit_cents": 3333
+          }
+        ],
+        "fired": false,
+        "beaten_alternative": null
+      }
+    }
+  ],
+  "reconcile_cases": [
+    {
+      "id": "rec-053-global-optimum",
+      "description": "Cycle reconciliation: 53 elapsed days, one 28-day cycle already invoiced at month rate. Final = optimize(53) [= 2 months, 180000] - 90000 already invoiced = 90000. Never optimize the 25-day stub in isolation (1m+... stub math would overbill).",
+      "rate_book": {
+        "day": 10000,
+        "week": 30000,
+        "month": 90000
+      },
+      "entire_billable_days": 53,
+      "already_invoiced": 90000,
+      "expected": {
+        "entire_optimum": 180000,
+        "entire_segments": [
+          {
+            "unit": "month",
+            "qty": 2,
+            "unit_cents": 90000
+          }
+        ],
+        "final_invoice": 90000
+      }
+    },
+    {
+      "id": "rec-floor-028-never-negative",
+      "description": "Floor: already-invoiced exceeds the global optimum (e.g., mid-term negotiated rate drop). Final invoice floors at zero \u2014 no automatic negative invoice; credit memos are a human decision.",
+      "rate_book": {
+        "day": 10000,
+        "week": 30000,
+        "month": 90000
+      },
+      "entire_billable_days": 28,
+      "already_invoiced": 100000,
+      "expected": {
+        "entire_optimum": 90000,
+        "entire_segments": [
+          {
+            "unit": "month",
+            "qty": 1,
+            "unit_cents": 90000
+          }
+        ],
+        "final_invoice": 0
+      }
+    }
+  ],
+  "exchange_cases": [
+    {
+      "id": "exch-cross-010-005",
+      "description": "Cross-class exchange: 10 days on class A then swapped to class B for 5 days. Duration segments at the exchange timestamp; each segment optimizes on its own book. Segment A embeds a TIE (2w overshoot vs 1w+3d, both 60000): tie-break picks 2 weeks (fewest lines) but fired stays FALSE \u2014 a tie never prints a savings line. Segment B fires (1 week beats 5 day-rates).",
+      "segments": [
+        {
+          "rate_book": {
+            "day": 10000,
+            "week": 30000,
+            "month": 90000
+          },
+          "billable_days": 10,
+          "expected": {
+            "total": 60000,
+            "segments": [
+              {
+                "unit": "week",
+                "qty": 2,
+                "unit_cents": 30000
+              }
+            ],
+            "fired": false,
+            "beaten_alternative": null
+          }
+        },
+        {
+          "rate_book": {
+            "day": 15000,
+            "week": 45000,
+            "month": 135000
+          },
+          "billable_days": 5,
+          "expected": {
+            "total": 45000,
+            "segments": [
+              {
+                "unit": "week",
+                "qty": 1,
+                "unit_cents": 45000
+              }
+            ],
+            "fired": true,
+            "beaten_alternative": {
+              "total": 75000,
+              "segments": [
+                {
+                  "unit": "day",
+                  "qty": 5,
+                  "unit_cents": 15000
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "expected_contract_total": 105000
+    }
+  ]
+}

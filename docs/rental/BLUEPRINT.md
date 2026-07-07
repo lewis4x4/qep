@@ -179,22 +179,69 @@ the fallback rate card of last resort and surfaced read-only in the rate admin.
   computed number must explain itself — this is the rental analog of the KPI formula popover).
 - Writes nothing. Counter UI, portal, quote flows, and the billing engine all call the same resolver.
 
-### 2.2 Billing-time optimization (the pro move)
+### 2.2 Billing-time optimization (the pro move) — COVERAGE formulation
 
-`rental_optimize_charge(p_duration, p_rates, p_rounding_policy) → jsonb {segments[], total_cents, naive_total_cents, savings_cents}`
+`rental_optimize_charge(p_billable_days, p_rate_book) → jsonb {segments[], total_cents, fired: boolean, beaten_alternative}`
 
-Algorithm contract (classic day/week/month decomposition with monotonicity caps):
-1. Duration in billable days per proration rule (half_day, calendar_day, thirty_day_month…).
-2. Dynamic decomposition: `total = min(m·monthly + w·weekly + d·daily)` over all legal
-   decompositions, with caps — a run of days never bills more than one week
-   (`min(d·daily, weekly)`), a run of weeks never more than one month. 17 days at 3-2-1 ratios ⇒
-   week + week + 3 days, never 17·day.
-3. `segments[]` returns the human-readable breakdown for the invoice line and the contract print.
-4. Implemented **once in SQL** (billing engine + guard usable) and **once in TS**
-   (`shared/rental-rate-math.ts` for instant counter/portal quote preview), with a **shared JSON
-   test-vector file** both suites consume — divergence is a build-gate failure.
-5. `naive_total_cents − total_cents` (the savings) is stored on the invoice metadata and shown to
-   the customer. This is a trust feature; do not hide it.
+**The problem is coverage, not partition** (owner pressure-test 2026-07-07):
+minimize `28m·R_month + 7w·R_week + d·R_day` **subject to `28m + 7w + d ≥ D`**. The optimizer may
+buy MORE time than the rental used when overshoot is cheaper — 26 days bills as one month when
+`R_month < 3·R_week + 5·R_day`. Do NOT implement greedy decomposition with cap rules bolted on;
+the caps fall out of the covering search for free. Search space is brute-forceable and, because
+degenerate books void dominance shortcuts, the bounds must NOT assume a sane ladder: enumerate
+`m ∈ [0, ⌈D/28⌉]`, `w ∈ [0, ⌈D/7⌉]`, and for each pair `d` is determined —
+`d = max(0, D − 28m − 7w)` — so the search is O(⌈D/28⌉ · ⌈D/7⌉) pairs, trivially small.
+`fired` is STRICT: the optimum beat the greedy largest-block exact partition by > 0 cents; a tie
+never prints a savings line ("you saved $0" is worse than silence).
+
+Contract invariants:
+1. **Correct for arbitrary positive rate books — no ladder-sanity assumption.** Negotiated
+   overrides can be degenerate (week > 7·day; month < week). Brute-force coverage search is
+   correct for any positive rates; inverted-ladder vectors are mandatory in the test file.
+2. **Deterministic tie-breaking**: ties happen constantly at ratio boundaries. Preference order:
+   fewest line items, then largest blocks first. Both implementations MUST encode it.
+3. **Integer cents end to end.** TS uses integer math only (no floats anywhere in the pipeline);
+   SQL uses `numeric`; rounding happens at exactly ONE defined point — per charge line, half-up.
+   Vectors include float-hostile amounts ($33.33·3 class of trap).
+4. **Duration is an input, not a concern.** A separate **duration resolver** owns the off-rent
+   clock, same-day/grace cutoffs, minimum-rental-period, and any future 5-day-billing-week or
+   holiday rules, and emits billable days. Pipeline, each stage with its own vector set:
+   `duration resolver → rate resolver (§2.1) → optimizer → invoice assembler (§2.3)`.
+   Calendar rules must never leak into the optimizer or the shared-vector guarantee stops
+   covering the part that actually varies.
+5. `segments[]` is the human-readable breakdown printed on every invoice and contract.
+
+**Cycle-billing reconciliation (the hardest case, answered explicitly):** interim 28-day cycle
+invoices bill their period; the **final invoice = optimize(entire billable duration) −
+sum(already invoiced), floored at zero.** Reconcile to the global optimum, never optimize the
+stub fragment in isolation — otherwise two customers with identical total durations pay different
+totals depending on where the cycle boundary fell. Provable invariant (and the sentence Iron
+states to a customer): *total billed always equals the optimum for the elapsed duration.*
+**Exchanges**: same rate class → clock and optimization run continuously across the line chain;
+class change → segment the duration at the exchange timestamp, optimize per segment.
+Multi-invoice reconciliation and a cross-class exchange are mandatory vector cases.
+
+**Canonical implementation: TS** (`shared/rental-rate-math.ts`) — QEP's billing writers live in
+Deno edge functions and counter quoting needs zero-latency previews; **SQL is the verified
+mirror** for in-DB reporting/backfill. When production disputes an amount, TS is truth. The
+shared JSON vector file is **append-only with stable case IDs** — a changed expectation is a
+loud diff, never a silent edit. Divergence between implementations fails the build gate.
+Required vector coverage: boundary durations (7, 8, 27, 28, 29), overshoot wins, inverted
+ladders, ties, stub reconciliation across cycle boundaries, cross-class exchange.
+
+### 2.2a Savings policy (owner-approved 2026-07-07)
+
+Store both numbers on every invoice, always: the optimized total and what the naive/beaten
+alternative would have billed. **Print the decomposition itself on every invoice** ("Billed as:
+1 month + 4 days @ …") — inherently transparent, never overclaims. **Print a savings line ONLY
+when the coverage logic actually fired**, phrased against the specific alternative it beat:
+"Best-rate applied: billed as 1 month instead of 3 weeks + 5 days — you saved $180." Never
+compare against `day-rate × days` — that is an inflated reference price no rental house would
+charge (fake-strikethrough pattern; fails FTC former-price logic).
+Suppression rules: (a) when a negotiated rate override is active, any comparison is computed
+against the customer's OWN override book — never the standard book (leaking the delta hands
+national accounts a renegotiation lever); (b) the printed savings line is a **per-workspace
+setting** (merchandising policy) — store always, print conditionally.
 
 ### 2.3 Ancillary charges
 
@@ -205,6 +252,14 @@ damage waiver (% of base when accepted), environmental fee (policy param), deliv
 (from contract), fuel/cleaning/damage (from linked `rental_returns` on final invoice), sub-rental
 pass-through + `default_markup_pct`. Every charge lands in its dedicated `rental_invoices.*_cents`
 column — the decomposition already exists; the assembler is the missing writer.
+
+Assembler orthogonality rules (owner pressure-test 2026-07-07):
+- **Meter overage is additive on top of the optimized base — never an optimizer input.**
+- **Percentage charges name their base explicitly**: damage waiver / RPP percentages apply to the
+  **optimized base rental charge, excluding ancillaries** (industry standard). An undefined
+  percentage base is a guaranteed invoice dispute.
+- **RPO accrual references invoiced amounts, never naive totals** — otherwise the optimizer
+  quietly shrinks a customer's purchase credit relative to the RPO addendum.
 
 Tax: reuse the destination-sourcing plumbing (jurisdiction id, exemption certs, DR-15 fields) —
 the assembler computes `taxable_amount_cents` per treatment (`covers_rental`) and delegates rate
