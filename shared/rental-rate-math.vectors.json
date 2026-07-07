@@ -281,6 +281,64 @@
         "fired": false,
         "beaten_alternative": null
       }
+    },
+    {
+      "id": "opt-missing-month-013",
+      "description": "Missing tier: customer book has day/week only (no month rate). Absent tier = unavailable, not infinite-but-enumerable. 13 days: 2-week overshoot (60000) beats 1w+6d (90000).",
+      "rate_book": {
+        "day": 10000,
+        "week": 30000,
+        "month": null
+      },
+      "billable_days": 13,
+      "expected": {
+        "total": 60000,
+        "segments": [
+          {
+            "unit": "week",
+            "qty": 2,
+            "unit_cents": 30000
+          }
+        ],
+        "fired": true,
+        "beaten_alternative": {
+          "total": 90000,
+          "segments": [
+            {
+              "unit": "week",
+              "qty": 1,
+              "unit_cents": 30000
+            },
+            {
+              "unit": "day",
+              "qty": 6,
+              "unit_cents": 10000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "opt-day-only-005",
+      "description": "Missing tiers: day-rate-only book (week and month absent). 5 days must bill 5 day-rates with exact integer-cent multiplication.",
+      "rate_book": {
+        "day": 12345,
+        "week": null,
+        "month": null
+      },
+      "billable_days": 5,
+      "expected": {
+        "total": 61725,
+        "segments": [
+          {
+            "unit": "day",
+            "qty": 5,
+            "unit_cents": 12345
+          }
+        ],
+        "fired": false,
+        "beaten_alternative": null
+      }
     }
   ],
   "reconcile_cases": [

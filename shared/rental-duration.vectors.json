@@ -1,0 +1,35 @@
+{
+  "$schema_note": "Vectors for the L1 duration resolver (computeBillableDays) — the pipeline stage that OWNS the off-rent clock, grace, and minimum-period rules (blueprint §2.2 invariant 4). APPEND-ONLY with stable ids. billable days = max(minimum_days, max(1, ceil((clock_end - start - grace_hours) / 24h))). clock_end_at is off_rent_at when the clock was stopped — return/pickup timing never extends billing.",
+  "cases": [
+    {
+      "id": "dur-same-day",
+      "description": "Same-day rental bills one day.",
+      "input": { "start_at": "2026-03-02T08:00:00Z", "clock_end_at": "2026-03-02T15:30:00Z" },
+      "expected_billable_days": 1
+    },
+    {
+      "id": "dur-partial-day-rounds-up",
+      "description": "3 days + 1 hour with no grace ceilings to 4 billable days.",
+      "input": { "start_at": "2026-03-02T08:00:00Z", "clock_end_at": "2026-03-05T09:00:00Z" },
+      "expected_billable_days": 4
+    },
+    {
+      "id": "dur-grace-absorbs-overrun",
+      "description": "Same 3d1h span with a 2-hour grace policy bills 3 days.",
+      "input": { "start_at": "2026-03-02T08:00:00Z", "clock_end_at": "2026-03-05T09:00:00Z", "grace_hours": 2 },
+      "expected_billable_days": 3
+    },
+    {
+      "id": "dur-off-rent-stops-clock",
+      "description": "Off-rent stamped 9 days in stops billing there — the unit sitting in the field awaiting pickup is not billable (clock_end_at IS off_rent_at).",
+      "input": { "start_at": "2026-03-01T08:00:00Z", "clock_end_at": "2026-03-10T08:00:00Z" },
+      "expected_billable_days": 9
+    },
+    {
+      "id": "dur-minimum-days-floor",
+      "description": "A 6-hour rental under a 3-day contractual minimum bills 3 days.",
+      "input": { "start_at": "2026-03-02T08:00:00Z", "clock_end_at": "2026-03-02T14:00:00Z", "minimum_days": 3 },
+      "expected_billable_days": 3
+    }
+  ]
+}

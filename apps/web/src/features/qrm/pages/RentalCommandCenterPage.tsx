@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { optimizeCharge } from "../../../../../../shared/rental-rate-math";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, DollarSign, RefreshCcw, Truck, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -486,6 +487,25 @@ export function RentalCommandCenterPage() {
     },
   });
 
+  // Instant counter quote preview from the canonical rate math (L1). Day-rate
+  // book only until the resolver-backed book is wired into this card.
+  const counterPreview = useMemo(() => {
+    const dayCents = Math.round((Number(counterDailyRate) || 0) * 100);
+    const start = Date.parse(counterStartDate);
+    const end = Date.parse(counterEndDate);
+    if (dayCents <= 0 || !Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+    const billableDays = Math.max(1, Math.round((end - start) / 86_400_000));
+    try {
+      const charge = optimizeCharge(billableDays, { day: dayCents });
+      const billedAs = charge.segments
+        .map((s) => `${s.qty} ${s.unit}${s.qty > 1 ? "s" : ""}`)
+        .join(" + ");
+      return { billableDays, total: charge.total / 100, billedAs, fired: charge.fired };
+    } catch {
+      return null;
+    }
+  }, [counterDailyRate, counterStartDate, counterEndDate]);
+
   const center = commandQuery.data;
 
   return (
@@ -588,6 +608,12 @@ export function RentalCommandCenterPage() {
                   placeholder="Daily rate (optional, resolves from rate rules later)"
                   inputMode="decimal"
                 />
+                {counterPreview ? (
+                  <p className="text-xs text-muted-foreground">
+                    Preview: {counterPreview.billableDays} billable days · billed as {counterPreview.billedAs} ·{" "}
+                    {formatCurrency(counterPreview.total)}
+                  </p>
+                ) : null}
               </div>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-3">

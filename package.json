@@ -97,7 +97,8 @@
     "brand:guide:audit": "bun ./scripts/verify/brand-guide-compliance-audit.mjs",
     "floor:real-device:verify": "bun ./scripts/verify/floor-real-device-evidence.mjs",
     "kb:role-access:verify": "bun ./scripts/verify/kb-role-aware-access.mjs",
-    "kb:meeting-ingest:verify": "bun ./scripts/verify/kb-meeting-ingest.mjs"
+    "kb:meeting-ingest:verify": "bun ./scripts/verify/kb-meeting-ingest.mjs",
+    "test:rental-rate": "bun test ./shared/rental-rate-math.test.ts"
   },
   "devDependencies": {
     "playwright": "^1.52.0",
