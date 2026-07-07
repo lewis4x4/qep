@@ -296,6 +296,9 @@ export function RentalCommandCenterPage() {
   const [counterEndDate, setCounterEndDate] = useState(() => new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10));
   const [counterDailyRate, setCounterDailyRate] = useState("");
   const [counterResult, setCounterResult] = useState<string | null>(null);
+  const [exchangeUnits, setExchangeUnits] = useState<Record<string, string>>({});
+  const [exchangeContinuity, setExchangeContinuity] = useState<Record<string, boolean>>({});
+  const [opsError, setOpsError] = useState<string | null>(null);
 
   const commandQuery = useQuery({
     queryKey: ["qrm", "rental-command"],
@@ -506,6 +509,79 @@ export function RentalCommandCenterPage() {
     }
   }, [counterDailyRate, counterStartDate, counterEndDate]);
 
+  const onRentOpsQuery = useQuery({
+    queryKey: ["qrm", "rental-onrent-ops"],
+    queryFn: async () => {
+      const { data: contracts, error: contractsError } = await supabase
+        .from("rental_contracts")
+        .select("id, contract_number, lifecycle_state, contract_type, approved_end_date, requested_end_date")
+        .in("lifecycle_state", ["on_rent", "off_rent"])
+        .is("deleted_at", null)
+        .order("approved_end_date", { ascending: true })
+        .limit(100);
+      if (contractsError) throw new Error(contractsError.message);
+
+      const contractIds = (contracts ?? []).map((row) => row.id);
+      const { data: lines, error: linesError } = contractIds.length
+        ? await supabase
+            .from("rental_contract_lines")
+            .select("id, rental_contract_id, line_number, equipment_id, status, return_code, rental_end_at")
+            .in("rental_contract_id", contractIds)
+            .is("deleted_at", null)
+            .order("line_number")
+        : { data: [], error: null };
+      if (linesError) throw new Error(linesError.message);
+
+      const unitIds = Array.from(
+        new Set((lines ?? []).map((line) => line.equipment_id).filter((id): id is string => Boolean(id))),
+      );
+      const { data: units, error: unitsError } = unitIds.length
+        ? await supabase.from("crm_equipment").select("id, year, make, model, name").in("id", unitIds)
+        : { data: [], error: null };
+      if (unitsError) throw new Error(unitsError.message);
+
+      const unitName = new Map(
+        (units ?? []).map((unit) => [
+          unit.id,
+          [unit.year, unit.make, unit.model].filter(Boolean).join(" ") || unit.name || unit.id,
+        ]),
+      );
+      return { contracts: contracts ?? [], lines: lines ?? [], unitName };
+    },
+    staleTime: 30_000,
+  });
+
+  const invalidateRentalOps = async () => {
+    setOpsError(null);
+    await queryClient.invalidateQueries({ queryKey: ["qrm", "rental-onrent-ops"] });
+    await queryClient.invalidateQueries({ queryKey: ["qrm", "rental-command"] });
+    await queryClient.invalidateQueries({ queryKey: ["ops", "rental-returns"] });
+  };
+  const onOpsError = (error: unknown) => {
+    setOpsError(error instanceof Error ? error.message : "Rental operation failed.");
+  };
+
+  const codeLineMutation = useMutation({
+    mutationFn: (data: { line_id: string; return_code: "returned" | "off_rent" | "hold" }) =>
+      rentalOpsApi.codeLineReturn(data),
+    onSuccess: invalidateRentalOps,
+    onError: onOpsError,
+  });
+  const releaseHoldMutation = useMutation({
+    mutationFn: (data: { line_id: string }) => rentalOpsApi.releaseHold(data),
+    onSuccess: invalidateRentalOps,
+    onError: onOpsError,
+  });
+  const exchangeMutation = useMutation({
+    mutationFn: (data: { contract_id: string; line_id: string; new_equipment_id: string; rate_continuous: boolean }) =>
+      rentalOpsApi.exchangeLine(data),
+    onSuccess: async (_, variables) => {
+      setExchangeUnits((current) => ({ ...current, [variables.line_id]: "" }));
+      await invalidateRentalOps();
+    },
+    onError: onOpsError,
+  });
+
   const center = commandQuery.data;
 
   return (
@@ -628,6 +704,125 @@ export function RentalCommandCenterPage() {
                 {createContractMutation.isPending ? "Opening…" : "Open draft contract"}
               </Button>
               {counterResult ? <p className="text-xs text-muted-foreground">{counterResult}</p> : null}
+            </div>
+          </DeckSurface>
+
+          <DeckSurface className="p-4">
+            <h2 className="text-sm font-semibold text-foreground">On-rent operations</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Code lines Off-rent (clock stops, unit awaits pickup), Return, or Hold; release holds; exchange units
+              mid-rental. The contract follows the lines automatically — downstream only.
+            </p>
+            {opsError ? <p className="mt-2 text-xs text-red-300">{opsError}</p> : null}
+            <div className="mt-4 space-y-3">
+              {(onRentOpsQuery.data?.contracts ?? []).length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {onRentOpsQuery.isLoading ? "Loading on-rent contracts…" : "Nothing on rent right now."}
+                </p>
+              ) : null}
+              {(onRentOpsQuery.data?.contracts ?? []).map((contract) => {
+                const contractLines = (onRentOpsQuery.data?.lines ?? []).filter(
+                  (line) => line.rental_contract_id === contract.id,
+                );
+                const availableUnits = (contractQueueQuery.data?.equipment ?? []).filter(
+                  (equipment) => equipment.availability === "available",
+                );
+                return (
+                  <div key={contract.id} className="rounded-xl border border-border/60 bg-muted/10 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-foreground">
+                        {contract.contract_number ?? contract.id.slice(0, 8)}
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          {contract.contract_type} · due {contract.approved_end_date ?? contract.requested_end_date}
+                        </span>
+                      </p>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        contract.lifecycle_state === "off_rent"
+                          ? "bg-cyan-500/10 text-cyan-300"
+                          : "bg-emerald-500/10 text-emerald-300"
+                      }`}>
+                        {String(contract.lifecycle_state).replace(/_/g, " ")}
+                      </span>
+                    </div>
+                    <div className="mt-2 space-y-2">
+                      {contractLines.map((line) => (
+                        <div key={line.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-border/40 px-2 py-1.5">
+                          <span className="min-w-0 flex-1 truncate text-xs text-foreground">
+                            #{line.line_number}{" "}
+                            {line.equipment_id ? onRentOpsQuery.data?.unitName.get(line.equipment_id) ?? "—" : "unassigned"}
+                            <span className="ml-2 text-muted-foreground">{String(line.status).replace(/_/g, " ")}</span>
+                          </span>
+                          {["active", "held"].includes(String(line.status)) ? (
+                            <>
+                              {String(line.status) === "held" ? (
+                                <Button size="sm" variant="outline" disabled={releaseHoldMutation.isPending}
+                                  onClick={() => releaseHoldMutation.mutate({ line_id: line.id })}>
+                                  Release hold
+                                </Button>
+                              ) : (
+                                <Button size="sm" variant="outline" disabled={codeLineMutation.isPending}
+                                  onClick={() => codeLineMutation.mutate({ line_id: line.id, return_code: "hold" })}>
+                                  Hold
+                                </Button>
+                              )}
+                              <Button size="sm" variant="outline" disabled={codeLineMutation.isPending}
+                                onClick={() => codeLineMutation.mutate({ line_id: line.id, return_code: "off_rent" })}>
+                                Off-rent
+                              </Button>
+                              <Button size="sm" variant="outline" disabled={codeLineMutation.isPending}
+                                onClick={() => codeLineMutation.mutate({ line_id: line.id, return_code: "returned" })}>
+                                Return
+                              </Button>
+                              <select
+                                value={exchangeUnits[line.id] ?? ""}
+                                onChange={(event) => setExchangeUnits((current) => ({ ...current, [line.id]: event.target.value }))}
+                                className="rounded border border-input bg-card px-2 py-1 text-xs"
+                              >
+                                <option value="">Exchange to…</option>
+                                {availableUnits.map((equipment) => (
+                                  <option key={equipment.id} value={equipment.id}>
+                                    {[equipment.year, equipment.make, equipment.model].filter(Boolean).join(" ") || equipment.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                <input
+                                  type="checkbox"
+                                  checked={exchangeContinuity[line.id] ?? true}
+                                  onChange={(event) =>
+                                    setExchangeContinuity((current) => ({ ...current, [line.id]: event.target.checked }))}
+                                />
+                                same rate class
+                              </label>
+                              <Button size="sm" disabled={exchangeMutation.isPending || !exchangeUnits[line.id]}
+                                onClick={() => exchangeMutation.mutate({
+                                  contract_id: contract.id,
+                                  line_id: line.id,
+                                  new_equipment_id: exchangeUnits[line.id],
+                                  rate_continuous: exchangeContinuity[line.id] ?? true,
+                                })}>
+                                Exchange
+                              </Button>
+                            </>
+                          ) : String(line.status) === "off_rent" ? (
+                            <Button size="sm" variant="outline" disabled={codeLineMutation.isPending}
+                              onClick={() => codeLineMutation.mutate({ line_id: line.id, return_code: "returned" })}>
+                              Mark returned
+                            </Button>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">
+                              {line.return_code ? `coded ${line.return_code}` : "—"}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                      {contractLines.length === 0 ? (
+                        <p className="text-[10px] text-muted-foreground">No lines on this contract yet.</p>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </DeckSurface>
 
