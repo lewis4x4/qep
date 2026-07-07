@@ -126,6 +126,23 @@ Distinct downstream behavior (the IntelliDealer R/O/E/H semantics):
 Partial returns = some lines coded, contract stays `on_rent` until all lines terminal; multi-unit
 asterisk semantics come free from line granularity.
 
+**L2 contract pins (owner review 2026-07-07, model layer shipped in mig 772):**
+1. **Exchange declares rate-continuity at creation** — `rental_contract_lines.exchange_rate_continuous`
+   is CHECK-required on every exchange line; L5 reconciliation reads the fact, never re-derives it.
+2. **Damage disposition is a decision** — `rental_returns.damage_disposition`
+   (pending | customer_billable | warranty | internal_wear, default pending); assessed amounts never
+   reach an invoice while pending; ambiguity → `exception_queue(rental_damage_dispute)`.
+3. **Trunk status is a derived rollup on multi-line contracts** — `rental_contract_rollup_lifecycle()`
+   states THE rule (any active/held → on_rent; else any off_rent → off_rent; else pre-clock → reserved;
+   else returned); the enforcing trigger lands with L2 execution, additive against the 770 gate until
+   L0 formally closes.
+4. **Assembler-change rule**: any L2 change touching the assembler adds its vector THEN — customer-visible
+   math never changes on TS-tests-only coverage.
+5. **Resolver id-space mitigation (live)**: `rental_resolve_rates` records the id space consulted at the
+   customer stage and, when a qrm-anchored caller falls through while portal-id rules exist for the mapped
+   company, flags `customer_rate_mismatch` AND enqueues `exception_queue(rental_rate_mismatch)` — detection
+   now, id-space unification when the rate admin migrates.
+
 ### 1.5 Reservations & availability
 
 New table (the one genuinely missing structure):
