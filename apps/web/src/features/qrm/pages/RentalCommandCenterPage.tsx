@@ -511,6 +511,36 @@ export function RentalCommandCenterPage() {
     }
   }, [counterDailyRate, counterStartDate, counterEndDate]);
 
+  const utilizationQuery = useQuery({
+    queryKey: ["qrm", "rental-utilization"],
+    queryFn: async () => {
+      const { data: session } = await supabase.auth.getUser();
+      const userId = session.user?.id;
+      let workspaceId = "default";
+      if (userId) {
+        const { data: profileRow } = await supabase
+          .from("profiles")
+          .select("active_workspace_id")
+          .eq("id", userId)
+          .maybeSingle();
+        workspaceId = (profileRow?.active_workspace_id as string | null) ?? "default";
+      }
+      const { data, error } = await supabase.rpc("rental_compute_utilization", {
+        p_workspace_id: workspaceId,
+      });
+      if (error) throw new Error(error.message);
+      return data as {
+        fleet_count: number;
+        physical_pct: number | null;
+        time_pct_30d: number | null;
+        dollar_pct: number | null;
+        missing_oec_count: number;
+      };
+    },
+    staleTime: 60_000,
+    refetchInterval: 300_000,
+  });
+
   const onRentOpsQuery = useQuery({
     queryKey: ["qrm", "rental-onrent-ops"],
     queryFn: async () => {
@@ -635,7 +665,21 @@ export function RentalCommandCenterPage() {
           <div className="grid gap-4 md:grid-cols-5">
             <SummaryCard icon={Truck} label="Fleet" value={String(center.summary.totalFleet)} detail="Active rental fleet units." />
             <SummaryCard icon={DollarSign} label="On rent" value={String(center.summary.onRentCount)} detail={`Daily revenue in play ${formatCurrency(center.summary.dailyRevenueInPlay)}`} />
-            <SummaryCard icon={RefreshCcw} label="Ready" value={String(center.summary.readyCount)} detail={`${Math.round(center.summary.utilizationPct * 100)}% utilization`} />
+            <div
+              title={
+                "Physical: on-rent units ÷ rentable fleet (point-in-time)\n" +
+                "Time (30d): Σ on-rent days ÷ (fleet × 30 − service-down days)\n" +
+                "Dollar: trailing-365d invoiced rental revenue ÷ Σ fleet OEC (OEC: purchase price → insurable amount → rental amount; reads 0 until L5 billing writes invoices)" +
+                (utilizationQuery.data?.missing_oec_count ? `\n${utilizationQuery.data.missing_oec_count} unit(s) missing OEC — excluded` : "")
+              }
+            >
+              <SummaryCard
+                icon={RefreshCcw}
+                label="Utilization"
+                value={utilizationQuery.data?.physical_pct != null ? `${utilizationQuery.data.physical_pct}%` : "—"}
+                detail={`Time ${utilizationQuery.data?.time_pct_30d ?? "—"}% · Dollar ${utilizationQuery.data?.dollar_pct ?? "—"}% · ${center.summary.readyCount} ready`}
+              />
+            </div>
             <SummaryCard icon={Wrench} label="Recovery" value={String(center.summary.recoveryCount)} detail={`${center.summary.returnsInFlight} return cases in flight`} tone="warn" />
             <SummaryCard icon={Truck} label="Motion risk" value={String(center.summary.motionRiskCount)} detail={`${center.summary.motionCount} rental moves open`} tone={center.summary.motionRiskCount > 0 ? "warn" : "default"} />
           </div>

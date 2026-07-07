@@ -33,6 +33,7 @@ type ExtensionDeclinePayload = {
 
 type CounterContractPayload = {
   action: "create_contract";
+  override_overbook?: boolean;
   qrm_company_id?: string;
   qrm_contact_id?: string | null;
   contract_type?: string | null;
@@ -100,7 +101,48 @@ type CheckOutContractPayload = {
   action: "check_out_contract";
   contract_id?: string;
   equipment_id?: string | null;
+  /** Overbooking is allowed only via explicit manager override — recorded to
+   * the exception queue (blueprint L3 policy). */
+  override_overbook?: boolean;
 };
+
+async function consultAvailability(
+  // deno-lint-ignore no-explicit-any -- matches this module's untyped admin client convention
+  admin: any,
+  workspaceId: string,
+  equipmentId: string,
+  start: string,
+  end: string,
+): Promise<{ available: boolean; detail: unknown }> {
+  const { data, error } = await admin.rpc("rental_check_availability", {
+    p_workspace_id: workspaceId,
+    p_start: start,
+    p_end: end,
+    p_equipment_id: equipmentId,
+  });
+  if (error) return { available: true, detail: { skipped: error.message } }; // fail-open: never block the counter on the checker itself
+  const record = (data ?? {}) as Record<string, unknown>;
+  return { available: record.available !== false, detail: record };
+}
+
+async function recordOverbookOverride(
+  // deno-lint-ignore no-explicit-any -- matches this module's untyped admin client convention
+  admin: any,
+  workspaceId: string,
+  contractId: string,
+  actorId: string,
+  detail: unknown,
+) {
+  await admin.rpc("enqueue_exception", {
+    p_source: "rental_overbook_override",
+    p_title: "Rental overbooking approved by manager override",
+    p_severity: "warn",
+    p_detail: `Contract ${contractId}: availability conflicts overridden by ${actorId}.`,
+    p_payload: { contract_id: contractId, actor_id: actorId, availability: detail, workspace_id: workspaceId },
+    p_entity_table: "rental_contracts",
+    p_entity_id: contractId,
+  });
+}
 
 type RentalOpsPayload =
   | BookingApprovalPayload
@@ -326,6 +368,21 @@ Deno.serve(async (req) => {
       const monthlyRate = toCurrencyAmount(body.monthly_rate);
       const deliveryMode = body.delivery_mode === "delivery" ? "delivery" : "pickup";
 
+      let overbookedDetail: unknown = null;
+      if (equipmentId) {
+        const availability = await consultAvailability(admin, workspaceId, equipmentId, body.start_date, body.end_date);
+        if (!availability.available) {
+          if (body.override_overbook !== true) {
+            return safeJsonError(
+              "Unit is not available for the requested window (holds or on-rent lines conflict). A manager may override with override_overbook.",
+              409,
+              origin,
+            );
+          }
+          overbookedDetail = availability.detail;
+        }
+      }
+
       const { data: contract, error: insertError } = await admin
         .from("rental_contracts")
         .insert({
@@ -368,6 +425,10 @@ Deno.serve(async (req) => {
         .single();
       if (insertError || !contract) {
         return safeJsonError(insertError?.message ?? "Failed to create rental contract", 500, origin);
+      }
+
+      if (overbookedDetail != null) {
+        await recordOverbookOverride(admin, workspaceId, contract.id as string, auth.userId, overbookedDetail);
       }
 
       if (equipmentId) {
@@ -654,6 +715,32 @@ Deno.serve(async (req) => {
           .maybeSingle();
         if (unitError || !unit) return safeJsonError("Rental unit not found in the rental fleet", 404, origin);
         if (unit.availability !== "available") return safeJsonError("Rental unit is not available", 400, origin);
+      }
+
+      // Availability is the deterministic RPC's call, not this action's.
+      if (equipmentId) {
+        const availability = await consultAvailability(
+          admin, workspaceId, equipmentId,
+          (contract.approved_start_date ?? contract.requested_start_date) as string,
+          (contract.approved_end_date ?? contract.requested_end_date) as string,
+        );
+        // Conflicts from THIS contract's own converted-or-active hold are
+        // expected at check-out; only foreign conflicts block.
+        const foreignConflicts = Array.isArray((availability.detail as Record<string, unknown>)?.conflicts)
+          ? ((availability.detail as Record<string, unknown>).conflicts as Array<Record<string, unknown>>)
+              .filter((conflict) => conflict.contract_id !== contract.id)
+          : [];
+        if (!availability.available && foreignConflicts.length > 0) {
+          if (body.override_overbook === true) {
+            await recordOverbookOverride(admin, workspaceId, contract.id as string, auth.userId, foreignConflicts);
+          } else {
+            return safeJsonError(
+              `Unit is not available for the contract window (${foreignConflicts.length} conflict(s)). A manager may override with override_overbook.`,
+              409,
+              origin,
+            );
+          }
+        }
       }
 
       // Latest completed check-out inspection feeds the outbound meters.
