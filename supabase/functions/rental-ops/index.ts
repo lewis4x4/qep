@@ -405,18 +405,11 @@ Deno.serve(async (req) => {
       }
 
       const nowIso = new Date().toISOString();
-      const { error: closeError } = await admin
-        .from("rental_contract_lines")
-        .update({
-          status: "exchanged",
-          return_code: "exchange",
-          actual_returned_at: nowIso,
-          return_meter_hours: toMeter(body.return_meter_hours),
-        })
-        .eq("id", oldLine.id)
-        .eq("workspace_id", workspaceId);
-      if (closeError) return safeJsonError(closeError.message ?? "Failed to close the exchanged line", 500, origin);
 
+      // Insert the replacement BEFORE closing the old line: the L2 rollup
+      // trigger (mig 773) derives the trunk from line states, and closing a
+      // single-line contract's only active line first would roll it up to
+      // 'returned' mid-exchange.
       const { data: maxLine } = await admin
         .from("rental_contract_lines")
         .select("line_number")
@@ -450,7 +443,27 @@ Deno.serve(async (req) => {
         .select("id, line_number, exchange_parent_line_id, exchange_rate_continuous, status")
         .single();
       if (newLineError || !newLine) {
-        return safeJsonError(newLineError?.message ?? "Exchanged line closed but replacement insert failed", 500, origin);
+        return safeJsonError(newLineError?.message ?? "Replacement line insert failed; exchange not performed", 500, origin);
+      }
+
+      const { error: closeError } = await admin
+        .from("rental_contract_lines")
+        .update({
+          status: "exchanged",
+          return_code: "exchange",
+          actual_returned_at: nowIso,
+          return_meter_hours: toMeter(body.return_meter_hours),
+        })
+        .eq("id", oldLine.id)
+        .eq("workspace_id", workspaceId);
+      if (closeError) {
+        // Replacement exists but the old line stayed active — surface loudly;
+        // retrying the close (not the whole exchange) is the operator fix.
+        return safeJsonError(
+          `Replacement line ${newLine.line_number} created but closing line ${oldLine.line_number} failed: ${closeError.message ?? "unknown error"}`,
+          500,
+          origin,
+        );
       }
 
       if (contract.equipment_id === oldLine.equipment_id) {
