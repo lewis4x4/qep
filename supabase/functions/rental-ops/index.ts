@@ -61,13 +61,38 @@ type ExchangeLinePayload = {
   substitution_reason?: string | null;
 };
 
+type CodeLineReturnPayload = {
+  action: "code_line_return";
+  line_id?: string;
+  /** IntelliDealer R/O/E semantics; exchanges go through exchange_line. */
+  return_code?: "returned" | "off_rent" | "hold";
+  return_meter_hours?: number | string | null;
+};
+
+type ReleaseHoldPayload = {
+  action: "release_hold";
+  line_id?: string;
+};
+
+type DisposeDamagePayload = {
+  action: "dispose_damage";
+  return_id?: string;
+  /** Who pays is a decision (L2 pin, mig 772). 'dispute' escalates to the
+   * exception queue instead of choosing. */
+  disposition?: "customer_billable" | "warranty" | "internal_wear" | "dispute";
+  notes?: string | null;
+};
+
 type RentalOpsPayload =
   | BookingApprovalPayload
   | BookingDeclinePayload
   | ExtensionApprovalPayload
   | ExtensionDeclinePayload
   | CounterContractPayload
-  | ExchangeLinePayload;
+  | ExchangeLinePayload
+  | CodeLineReturnPayload
+  | ReleaseHoldPayload
+  | DisposeDamagePayload;
 
 function toMeter(value: number | string | null | undefined): number | null {
   const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
@@ -475,6 +500,145 @@ Deno.serve(async (req) => {
       }
 
       return safeJsonOk({ exchanged_line_id: oldLine.id, new_line: newLine }, origin);
+    }
+
+    if (body.action === "code_line_return") {
+      // L2: IntelliDealer R/O/H coding on a contract line. The mig 773 rollup
+      // trigger derives the trunk (downstream only); the clock stamps ride the
+      // guard. Exchanges have their own action.
+      if (!body.line_id) return safeJsonError("line_id required", 400, origin);
+      if (!body.return_code || !["returned", "off_rent", "hold"].includes(body.return_code)) {
+        return safeJsonError("return_code must be returned, off_rent, or hold", 400, origin);
+      }
+
+      const { data: line, error: lineError } = await admin
+        .from("rental_contract_lines")
+        .select("id, status")
+        .eq("id", body.line_id)
+        .eq("workspace_id", workspaceId)
+        .maybeSingle();
+      if (lineError || !line) return safeJsonError("Contract line not found", 404, origin);
+
+      const from = String(line.status);
+      const legal =
+        (["active", "held"].includes(from) && ["returned", "off_rent", "hold"].includes(body.return_code)) ||
+        (from === "off_rent" && body.return_code === "returned");
+      if (!legal) {
+        return safeJsonError(`Line in status '${from}' cannot be coded '${body.return_code}'`, 400, origin);
+      }
+
+      const patch: Record<string, unknown> = {
+        return_code: body.return_code,
+        status: body.return_code === "hold" ? "held" : body.return_code,
+      };
+      const meters = toMeter(body.return_meter_hours);
+      if (meters != null) patch.return_meter_hours = meters;
+      if (body.return_code === "returned") patch.actual_returned_at = new Date().toISOString();
+
+      const { data: updated, error } = await admin
+        .from("rental_contract_lines")
+        .update(patch)
+        .eq("id", body.line_id)
+        .eq("workspace_id", workspaceId)
+        .select("id, status, return_code, return_meter_hours, actual_returned_at")
+        .single();
+      if (error || !updated) return safeJsonError(error?.message ?? "Failed to code the line", 500, origin);
+      return safeJsonOk({ line: updated }, origin);
+    }
+
+    if (body.action === "release_hold") {
+      // Held lines (hour-usage holds) resume without trunk movement — a held
+      // line already counts as on-rent in the rollup. Off-rent reactivation is
+      // deliberately NOT this action: that is a new rental event.
+      if (!body.line_id) return safeJsonError("line_id required", 400, origin);
+      const { data: updated, error } = await admin
+        .from("rental_contract_lines")
+        .update({ status: "active", return_code: null })
+        .eq("id", body.line_id)
+        .eq("workspace_id", workspaceId)
+        .eq("status", "held")
+        .select("id, status, return_code")
+        .maybeSingle();
+      if (error) return safeJsonError(error.message ?? "Failed to release hold", 500, origin);
+      if (!updated) return safeJsonError("Line is not held (or not found)", 400, origin);
+      return safeJsonOk({ line: updated }, origin);
+    }
+
+    if (body.action === "dispose_damage") {
+      // L2 pin (mig 772): who pays is a decision. customer_billable opens a
+      // renter-fault H10 job (bills the customer); warranty/internal_wear open
+      // a non-billable internal job posting to the rental unit; dispute
+      // escalates to the exception queue and stays pending.
+      if (!body.return_id) return safeJsonError("return_id required", 400, origin);
+      if (!body.disposition || !["customer_billable", "warranty", "internal_wear", "dispute"].includes(body.disposition)) {
+        return safeJsonError("disposition must be customer_billable, warranty, internal_wear, or dispute", 400, origin);
+      }
+
+      const { data: ret, error: retError } = await admin
+        .from("rental_returns")
+        .select("id, equipment_id, rental_contract_id, damage_disposition, damage_description, damage_charge_cents, charge_amount")
+        .eq("id", body.return_id)
+        .eq("workspace_id", workspaceId)
+        .maybeSingle();
+      if (retError || !ret) return safeJsonError("Rental return not found", 404, origin);
+      if (ret.damage_disposition !== "pending") {
+        return safeJsonError(`Damage already disposed as '${ret.damage_disposition}'`, 400, origin);
+      }
+
+      if (body.disposition === "dispute") {
+        const { error: excError } = await admin.rpc("enqueue_exception", {
+          p_source: "rental_damage_dispute",
+          p_title: "Rental damage disposition disputed",
+          p_severity: "warn",
+          p_detail: `Return ${ret.id} damage disposition escalated: ${body.notes ?? ret.damage_description ?? "no detail provided"}`,
+          p_payload: { return_id: ret.id, rental_contract_id: ret.rental_contract_id },
+          p_entity_table: "rental_returns",
+          p_entity_id: ret.id,
+        });
+        if (excError) return safeJsonError(excError.message ?? "Failed to escalate dispute", 500, origin);
+        return safeJsonOk({ return_id: ret.id, disposition: "pending", escalated: true }, origin);
+      }
+
+      const renterFault = body.disposition === "customer_billable";
+      let serviceJobId: string | null = null;
+      if (ret.equipment_id) {
+        const { data: job, error: jobError } = await admin
+          .from("service_jobs")
+          .insert({
+            workspace_id: workspaceId,
+            machine_id: ret.equipment_id,
+            request_type: "internal",
+            customer_problem_summary:
+              `Rental return damage (${body.disposition}): ` +
+              (ret.damage_description ?? body.notes ?? "see return inspection"),
+            service_internal_work_class: "rental_fleet_maintenance",
+            service_internal_cost_destination: renterFault ? null : "rental_unit",
+            renter_fault_billable: renterFault,
+            internal_cost_posting_status: renterFault ? "not_applicable" : "pending",
+          })
+          .select("id")
+          .single();
+        if (jobError || !job) {
+          return safeJsonError(jobError?.message ?? "Disposition not applied: work order insert failed", 500, origin);
+        }
+        serviceJobId = job.id as string;
+      }
+
+      const { data: updated, error: updError } = await admin
+        .from("rental_returns")
+        .update({
+          damage_disposition: body.disposition,
+          work_order_number: serviceJobId ?? undefined,
+          status: serviceJobId ? "work_order_open" : "damage_assessment",
+        })
+        .eq("id", ret.id)
+        .eq("workspace_id", workspaceId)
+        .select("id, damage_disposition, work_order_number, status")
+        .single();
+      if (updError || !updated) {
+        return safeJsonError(updError?.message ?? "Work order opened but return update failed", 500, origin);
+      }
+      return safeJsonOk({ return: updated, service_job_id: serviceJobId }, origin);
     }
 
     if (body.action === "approve_booking") {

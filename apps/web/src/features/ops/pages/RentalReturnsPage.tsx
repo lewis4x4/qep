@@ -17,7 +17,17 @@ import {
   updateReturnChecklistItem,
 } from "../lib/rental-return-branching";
 import { normalizeRentalReturnRows, type RentalReturnRow } from "../lib/ops-row-normalizers";
+import { rentalOpsApi } from "@/features/qrm/lib/rental-ops-api";
 import { AlertTriangle, CheckCircle2, Loader2, RotateCcw, Wrench } from "lucide-react";
+
+const DAMAGE_DISPOSITIONS = [
+  { value: "customer_billable", label: "Customer billable", hint: "Renter-fault: charges flow to the rental invoice; opens a billable H10 work order." },
+  { value: "warranty", label: "Warranty", hint: "Warranty recovery: internal work order, cost posts to the rental unit." },
+  { value: "internal_wear", label: "Internal wear", hint: "Normal wear: internal work order eats margin via the rental unit ledger." },
+  { value: "dispute", label: "Dispute", hint: "Ambiguous: escalates to the exception queue; disposition stays pending." },
+] as const;
+
+type DamageDisposition = (typeof DAMAGE_DISPOSITIONS)[number]["value"];
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   inspection_pending: { label: "Inspection Pending", color: "bg-amber-500/10 text-amber-300" },
@@ -52,10 +62,6 @@ async function uploadReturnPhoto(returnId: string, file: File): Promise<string> 
   return data.publicUrl;
 }
 
-function buildWorkOrderNumber(returnId: string): string {
-  return `RR-WO-${returnId.slice(0, 8).toUpperCase()}`;
-}
-
 export function RentalReturnsPage() {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
@@ -69,6 +75,7 @@ export function RentalReturnsPage() {
   const [creditInvoiceNumber, setCreditInvoiceNumber] = useState("");
   const [originalPaymentMethod, setOriginalPaymentMethod] = useState<string | null>(null);
   const [refundMethod, setRefundMethod] = useState<string | null>(null);
+  const [damageDisposition, setDamageDisposition] = useState<DamageDisposition>("customer_billable");
 
   const { data: returns = [], isLoading, isError, error } = useQuery<RentalReturnRow[]>({
     queryKey: ["ops", "rental-returns"],
@@ -103,6 +110,20 @@ export function RentalReturnsPage() {
     },
   });
 
+  const disposeDamageMutation = useMutation({
+    mutationFn: async ({ id, disposition }: { id: string; disposition: DamageDisposition }) =>
+      rentalOpsApi.disposeDamage({ return_id: id, disposition, notes: damageDescription.trim() || null }),
+    onSuccess: (payload) => {
+      setStatusError(null);
+      const escalated = (payload as { escalated?: boolean }).escalated;
+      if (escalated) setStatusError("Escalated to the exception queue — disposition stays pending until resolved.");
+      queryClient.invalidateQueries({ queryKey: ["ops", "rental-returns"] });
+    },
+    onError: (mutationError) => {
+      setStatusError(mutationError instanceof Error ? mutationError.message : "Damage disposition failed.");
+    },
+  });
+
   const checklistItems = normalizeReturnChecklist(selectedReturn?.inspection_checklist ?? null);
   const conditionPhotos = asPhotoArray(selectedReturn?.condition_photos);
   const inspectionReady = inspectionComplete(checklistItems, conditionPhotos.length);
@@ -112,7 +133,9 @@ export function RentalReturnsPage() {
 
   async function patchSelectedReturn(patch: Partial<RentalReturnRow>) {
     if (!selectedReturn) return;
-    updateReturnMutation.mutate({ id: selectedReturn.id, patch });
+    // mutateAsync so callers that sequence work after the patch (e.g. damage
+    // disposition reading the persisted charge fields) actually wait for it.
+    await updateReturnMutation.mutateAsync({ id: selectedReturn.id, patch }).catch(() => undefined);
   }
 
   async function handleConditionPhoto(file: File | null) {
@@ -468,26 +491,48 @@ export function RentalReturnsPage() {
                   Balance due: {damageMath.balanceDue == null ? " —" : ` ${formatCurrency(damageMath.balanceDue)}`}
                 </div>
 
+                <div className="mt-4 space-y-2">
+                  <Label>Damage disposition — who pays is a decision, not a default</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {DAMAGE_DISPOSITIONS.map((option) => (
+                      <Button
+                        key={option.value}
+                        type="button"
+                        size="sm"
+                        variant={damageDisposition === option.value ? "default" : "outline"}
+                        title={option.hint}
+                        onClick={() => setDamageDisposition(option.value)}
+                      >
+                        {option.label}
+                      </Button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {DAMAGE_DISPOSITIONS.find((option) => option.value === damageDisposition)?.hint}
+                  </p>
+                </div>
+
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Button
-                    onClick={() => {
+                    onClick={async () => {
                       if (!damageDescription.trim()) {
-                        setStatusError("Damage description is required before opening the work order.");
+                        setStatusError("Damage description is required before disposing the damage.");
                         return;
                       }
-                      patchSelectedReturn({
+                      await patchSelectedReturn({
                         has_charges: true,
                         damage_description: damageDescription.trim(),
                         charge_amount: chargeValue,
                         deposit_amount: depositValue,
                         deposit_covers_charges: damageMath.depositCoversCharges,
                         balance_due: damageMath.balanceDue,
-                        work_order_number: selectedReturn.work_order_number ?? buildWorkOrderNumber(selectedReturn.id),
-                        status: "work_order_open",
                       });
+                      disposeDamageMutation.mutate({ id: selectedReturn.id, disposition: damageDisposition });
                     }}
+                    disabled={disposeDamageMutation.isPending}
                   >
-                    Open damage work order
+                    {disposeDamageMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+                    {damageDisposition === "dispute" ? "Escalate dispute" : "Dispose + open work order"}
                   </Button>
                   <Button
                     variant="outline"

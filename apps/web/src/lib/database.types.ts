@@ -38936,6 +38936,7 @@ export type Database = {
           deleted_at: string | null
           equipment_id: string | null
           exchange_parent_line_id: string | null
+          exchange_rate_continuous: boolean | null
           hourly_rate_cents: number | null
           id: string
           included_hours: number | null
@@ -38980,6 +38981,7 @@ export type Database = {
           deleted_at?: string | null
           equipment_id?: string | null
           exchange_parent_line_id?: string | null
+          exchange_rate_continuous?: boolean | null
           hourly_rate_cents?: number | null
           id?: string
           included_hours?: number | null
@@ -39024,6 +39026,7 @@ export type Database = {
           deleted_at?: string | null
           equipment_id?: string | null
           exchange_parent_line_id?: string | null
+          exchange_rate_continuous?: boolean | null
           hourly_rate_cents?: number | null
           id?: string
           included_hours?: number | null
@@ -39205,6 +39208,10 @@ export type Database = {
             | Database["public"]["Enums"]["rental_billing_cycle"]
             | null
           branch_id: string | null
+          checkout_inspection_required: boolean
+          checkout_security_override_at: string | null
+          checkout_security_override_by: string | null
+          checkout_security_override_reason: string | null
           closed_at: string | null
           coi_document_url: string | null
           coi_expires_at: string | null
@@ -39311,6 +39318,10 @@ export type Database = {
             | Database["public"]["Enums"]["rental_billing_cycle"]
             | null
           branch_id?: string | null
+          checkout_inspection_required?: boolean
+          checkout_security_override_at?: string | null
+          checkout_security_override_by?: string | null
+          checkout_security_override_reason?: string | null
           closed_at?: string | null
           coi_document_url?: string | null
           coi_expires_at?: string | null
@@ -39417,6 +39428,10 @@ export type Database = {
             | Database["public"]["Enums"]["rental_billing_cycle"]
             | null
           branch_id?: string | null
+          checkout_inspection_required?: boolean
+          checkout_security_override_at?: string | null
+          checkout_security_override_by?: string | null
+          checkout_security_override_reason?: string | null
           closed_at?: string | null
           coi_document_url?: string | null
           coi_expires_at?: string | null
@@ -39518,6 +39533,13 @@ export type Database = {
             columns: ["branch_id"]
             isOneToOne: false
             referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_contracts_checkout_security_override_by_fkey"
+            columns: ["checkout_security_override_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -40023,21 +40045,28 @@ export type Database = {
       }
       rental_rate_rules: {
         Row: {
+          approved_by: string | null
           branch_id: string | null
           category: string | null
           created_at: string
+          created_by: string | null
           customer_id: string | null
           daily_rate: number | null
+          effective_from: string | null
+          effective_to: string | null
           equipment_class: string | null
           equipment_id: string | null
           equipment_subclass: string | null
+          hourly_rate: number | null
           id: string
+          included_hours_per_day: number | null
           is_active: boolean
           make: string | null
           minimum_days: number | null
           model: string | null
           monthly_rate: number | null
           notes: string | null
+          overage_hourly_rate: number | null
           priority_rank: number
           season_end: string | null
           season_start: string | null
@@ -40046,21 +40075,28 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          approved_by?: string | null
           branch_id?: string | null
           category?: string | null
           created_at?: string
+          created_by?: string | null
           customer_id?: string | null
           daily_rate?: number | null
+          effective_from?: string | null
+          effective_to?: string | null
           equipment_class?: string | null
           equipment_id?: string | null
           equipment_subclass?: string | null
+          hourly_rate?: number | null
           id?: string
+          included_hours_per_day?: number | null
           is_active?: boolean
           make?: string | null
           minimum_days?: number | null
           model?: string | null
           monthly_rate?: number | null
           notes?: string | null
+          overage_hourly_rate?: number | null
           priority_rank?: number
           season_end?: string | null
           season_start?: string | null
@@ -40069,21 +40105,28 @@ export type Database = {
           workspace_id?: string
         }
         Update: {
+          approved_by?: string | null
           branch_id?: string | null
           category?: string | null
           created_at?: string
+          created_by?: string | null
           customer_id?: string | null
           daily_rate?: number | null
+          effective_from?: string | null
+          effective_to?: string | null
           equipment_class?: string | null
           equipment_id?: string | null
           equipment_subclass?: string | null
+          hourly_rate?: number | null
           id?: string
+          included_hours_per_day?: number | null
           is_active?: boolean
           make?: string | null
           minimum_days?: number | null
           model?: string | null
           monthly_rate?: number | null
           notes?: string | null
+          overage_hourly_rate?: number | null
           priority_rank?: number
           season_end?: string | null
           season_start?: string | null
@@ -40093,10 +40136,24 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "rental_rate_rules_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "rental_rate_rules_branch_id_fkey"
             columns: ["branch_id"]
             isOneToOne: false
             referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_rate_rules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -40162,6 +40219,7 @@ export type Database = {
           credit_invoice_number: string | null
           damage_charge_cents: number | null
           damage_description: string | null
+          damage_disposition: string
           damage_labor_cents: number | null
           damage_parts_cents: number | null
           decided_by: string | null
@@ -40201,6 +40259,7 @@ export type Database = {
           credit_invoice_number?: string | null
           damage_charge_cents?: number | null
           damage_description?: string | null
+          damage_disposition?: string
           damage_labor_cents?: number | null
           damage_parts_cents?: number | null
           decided_by?: string | null
@@ -40240,6 +40299,7 @@ export type Database = {
           credit_invoice_number?: string | null
           damage_charge_cents?: number | null
           damage_description?: string | null
+          damage_disposition?: string
           damage_labor_cents?: number | null
           damage_parts_cents?: number | null
           decided_by?: string | null
@@ -66452,9 +66512,38 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      rental_contract_rollup_lifecycle: {
+        Args: { p_contract_id: string }
+        Returns: string
+      }
+      rental_optimize_charge: {
+        Args: { p_billable_days: number; p_rate_book: Json }
+        Returns: Json
+      }
       rental_recompute_equipment_fleet_state: {
         Args: { p_equipment: string }
         Returns: undefined
+      }
+      rental_reconcile_final_invoice: {
+        Args: {
+          p_already_invoiced: number
+          p_entire_billable_days: number
+          p_rate_book: Json
+        }
+        Returns: Json
+      }
+      rental_resolve_rates: {
+        Args: {
+          p_branch_id?: string
+          p_category?: string
+          p_company_id?: string
+          p_equipment_class?: string
+          p_equipment_id?: string
+          p_equipment_subclass?: string
+          p_on_date?: string
+          p_workspace_id: string
+        }
+        Returns: Json
       }
       reopen_gl_quarter: {
         Args: {

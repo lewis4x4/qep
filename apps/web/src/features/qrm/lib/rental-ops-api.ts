@@ -96,6 +96,38 @@ export const rentalOpsApi = {
       action: "create_contract",
       ...data,
     }).then((payload) => ({ contract: requireRentalOpsObjectPayload(payload, "contract") })),
+  exchangeLine: (data: {
+    contract_id: string;
+    line_id: string;
+    new_equipment_id: string;
+    rate_continuous: boolean;
+    return_meter_hours?: number | null;
+    outbound_meter_hours?: number | null;
+    substitution_reason?: string | null;
+  }) =>
+    rentalOpsFetch({
+      action: "exchange_line",
+      ...data,
+    }).then((payload) => ({ newLine: requireRentalOpsObjectPayload(payload, "new_line") })),
+  codeLineReturn: (data: {
+    line_id: string;
+    return_code: "returned" | "off_rent" | "hold";
+    return_meter_hours?: number | null;
+  }) =>
+    rentalOpsFetch({
+      action: "code_line_return",
+      ...data,
+    }).then((payload) => ({ line: requireRentalOpsObjectPayload(payload, "line") })),
+  releaseHold: (data: { line_id: string }) =>
+    rentalOpsFetch({
+      action: "release_hold",
+      ...data,
+    }).then((payload) => ({ line: requireRentalOpsObjectPayload(payload, "line") })),
+  disposeDamage: (data: {
+    return_id: string;
+    disposition: "customer_billable" | "warranty" | "internal_wear" | "dispute";
+    notes?: string | null;
+  }) => rentalOpsFetch({ action: "dispose_damage", ...data }),
   approveBooking: (data: {
     contract_id: string;
     equipment_id: string;
