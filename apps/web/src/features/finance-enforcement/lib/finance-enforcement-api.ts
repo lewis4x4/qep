@@ -730,3 +730,96 @@ export async function recordApPayment(params: {
   if (error) fail("record_ap_payment", error);
   return data as string;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. AR receipts desk — cash application (mig 791, M3.1)
+// ─────────────────────────────────────────────────────────────────────────────
+export type ArTenderType = "cash" | "check" | "card" | "ach" | "wire" | "other";
+
+export interface OpenCustomerInvoiceRow {
+  id: string;
+  invoice_number: string;
+  invoice_type: string;
+  invoice_date: string | null;
+  due_date: string | null;
+  total: number;
+  amount_paid: number;
+  balance_due: number;
+  status: string;
+  crm_company_id: string | null;
+  company_name: string | null;
+}
+
+/** Open AR: invoices dunning would chase (balance_due > 0, not paid/void/reversed). */
+export async function listOpenCustomerInvoices(workspaceId: string): Promise<OpenCustomerInvoiceRow[]> {
+  const { data, error } = await supabase
+    .from("customer_invoices")
+    .select("id, invoice_number, invoice_type, invoice_date, due_date, total, amount_paid, balance_due, status, crm_company_id, crm_companies(name)")
+    .eq("workspace_id", workspaceId)
+    .gt("balance_due", 0)
+    .not("status", "in", "(paid,void,reversed)")
+    .not("crm_company_id", "is", null)
+    .order("due_date", { ascending: true })
+    .limit(200);
+  if (error) fail("listOpenCustomerInvoices", error);
+  return (data ?? []).map((row) => {
+    const record = row as Record<string, unknown> & { crm_companies?: { name?: string | null } | null };
+    return {
+      id: String(record.id),
+      invoice_number: String(record.invoice_number ?? ""),
+      invoice_type: String(record.invoice_type ?? "general"),
+      invoice_date: (record.invoice_date as string | null) ?? null,
+      due_date: (record.due_date as string | null) ?? null,
+      total: Number(record.total ?? 0),
+      amount_paid: Number(record.amount_paid ?? 0),
+      balance_due: Number(record.balance_due ?? 0),
+      status: String(record.status ?? "pending"),
+      crm_company_id: (record.crm_company_id as string | null) ?? null,
+      company_name: record.crm_companies?.name ?? null,
+    };
+  });
+}
+
+export interface RecordArPaymentResult {
+  ok: boolean;
+  payment_id: string;
+  amount: number;
+  applied_total: number;
+  unapplied_amount: number;
+  applications: Array<{
+    invoice_id: string;
+    invoice_number: string;
+    applied: number;
+    new_status: string;
+    balance_due: number;
+  }>;
+}
+
+/**
+ * Apply one physical tender (check/ACH/cash/card/wire) across open invoices.
+ * The RPC enforces the m661-style double-pay guard: FOR UPDATE locks in
+ * due-date order, per-invoice balance validation, atomic status transitions.
+ */
+export async function recordArPayment(params: {
+  workspaceId: string;
+  crmCompanyId: string;
+  tenderType: ArTenderType;
+  amount: number;
+  applications: Array<{ invoice_id: string; amount: number }>;
+  reference?: string | null;
+  branchId?: string | null;
+  notes?: string | null;
+}): Promise<RecordArPaymentResult> {
+  const { data, error } = await supabase.rpc("record_ar_payment", {
+    p_workspace_id: params.workspaceId,
+    p_crm_company_id: params.crmCompanyId,
+    p_tender_type: params.tenderType,
+    p_amount: params.amount,
+    p_applications: params.applications,
+    p_reference: params.reference ?? null,
+    p_branch_id: params.branchId ?? null,
+    p_notes: params.notes ?? null,
+  });
+  if (error) fail("record_ar_payment", error);
+  return data as RecordArPaymentResult;
+}

@@ -7,6 +7,7 @@ import { EquipmentReversalPanel } from "../components/EquipmentReversalPanel";
 import { Form8300Panel } from "../components/Form8300Panel";
 import { FetScaffoldPanel } from "../components/FetScaffoldPanel";
 import { ApThreeWayMatchPanel } from "../components/ApThreeWayMatchPanel";
+import { ArReceiptsPanel } from "../components/ArReceiptsPanel";
 import { FinanceFoundationStatusPanel } from "../components/FinanceFoundationStatusPanel";
 
 interface FinanceEnforcementPageProps {
@@ -55,6 +56,7 @@ export function FinanceEnforcementPage({ userRole, userId }: FinanceEnforcementP
         </TabsContent>
 
         <TabsContent value="receivables" className="mt-4 space-y-6">
+          <ArReceiptsPanel workspaceId={workspaceId} currentUserRole={userRole} />
           <CreditHoldsPanel workspaceId={workspaceId} currentUserRole={userRole} />
           <MarginMatrixPanel workspaceId={workspaceId} />
         </TabsContent>

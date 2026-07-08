@@ -15,6 +15,7 @@ const keys = {
   form8300: (ws: string) => ["fin", "form-8300", ws] as const,
   fetCategories: (ws: string) => ["fin", "fet-categories", ws] as const,
   vendorInvoices: (ws: string) => ["fin", "vendor-invoices", ws] as const,
+  openArInvoices: (ws: string) => ["fin", "open-ar-invoices", ws] as const,
 };
 
 // K1.1 foundation / system-of-record status
@@ -128,6 +129,30 @@ export function useApActions(workspaceId: string) {
     pay: useMutation({
       mutationFn: (params: { vendorInvoiceId: string; amount: number; method?: string; reference?: string }) =>
         api.recordApPayment(params),
+      onSuccess: invalidate,
+    }),
+  };
+}
+
+// 8. AR receipts desk — cash application (M3.1)
+export function useOpenCustomerInvoices(workspaceId: string) {
+  return useQuery({
+    queryKey: keys.openArInvoices(workspaceId),
+    queryFn: () => api.listOpenCustomerInvoices(workspaceId),
+    enabled: Boolean(workspaceId),
+  });
+}
+
+export function useArActions(workspaceId: string) {
+  const qc = useQueryClient();
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: keys.openArInvoices(workspaceId) });
+    qc.invalidateQueries({ queryKey: keys.heldAccounts(workspaceId) });
+  };
+  return {
+    pay: useMutation({
+      mutationFn: (params: Omit<Parameters<typeof api.recordArPayment>[0], "workspaceId">) =>
+        api.recordArPayment({ workspaceId, ...params }),
       onSuccess: invalidate,
     }),
   };
