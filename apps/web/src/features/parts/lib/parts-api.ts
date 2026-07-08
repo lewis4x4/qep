@@ -28,9 +28,9 @@ export async function invokeCreateInternalOrder(body: {
   return normalizeOrderManagerOrderResult(data);
 }
 
-export async function invokeSubmitInternalOrder(parts_order_id: string) {
+export async function invokeSubmitInternalOrder(parts_order_id: string, extra?: { override_credit_hold?: boolean }) {
   const { data, error } = await supabase.functions.invoke("parts-order-manager", {
-    body: { action: "submit_internal_order", parts_order_id },
+    body: { action: "submit_internal_order", parts_order_id, ...extra },
   });
   if (error) throw error;
   return normalizeOrderManagerSubmitResult(data);

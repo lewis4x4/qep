@@ -139,7 +139,7 @@ export const rentalOpsApi = {
   }) =>
     rentalOpsFetch({ action: "complete_checkout_inspection", ...data })
       .then((payload) => ({ run: requireRentalOpsObjectPayload(payload, "run") })),
-  checkOutContract: (data: { contract_id: string; equipment_id?: string | null; override_rate_floor?: boolean }) =>
+  checkOutContract: (data: { contract_id: string; equipment_id?: string | null; override_rate_floor?: boolean; override_credit_hold?: boolean; override_credit_hold_reason?: string | null }) =>
     rentalOpsFetch({ action: "check_out_contract", ...data })
       .then((payload) => ({ contract: requireRentalOpsObjectPayload(payload, "contract") })),
   approveBooking: (data: {

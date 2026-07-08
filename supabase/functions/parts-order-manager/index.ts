@@ -55,6 +55,7 @@ interface Body {
   charge_authorization_note?: string | null;
   tender_type?: string | null;
   tender_amount?: number | null;
+  override_credit_hold?: boolean;
   part_id?: string;
   from_location_id?: string;
   to_location_id?: string;
@@ -660,6 +661,37 @@ Deno.serve(async (req) => {
       const response = counterPosErrorResponse(e, origin);
       if (response) return response;
       throw e;
+    }
+
+    // M5.1 unified credit hold: charge-class orders extend credit, so an
+    // aged-AR customer blocks here (cash-class pay-now tickets pass — no
+    // credit extended). Managers may override with an exception audit.
+    if (row.payment_classification !== "cash") {
+      const { data: onHold } = await supabase.rpc("is_customer_on_credit_hold", {
+        p_company_id: row.crm_company_id,
+      });
+      if (onHold === true) {
+        if (body.override_credit_hold === true) {
+          if (!["admin", "manager", "owner"].includes(userRole)) {
+            return safeJsonError("Credit hold override requires a manager or owner", 403, origin);
+          }
+          await supabase.rpc("enqueue_exception", {
+            p_source: "ar_override_pending",
+            p_title: "Parts order submitted over credit hold by manager override",
+            p_severity: "warn",
+            p_detail: `Order ${orderId}: credit hold overridden by ${userId} at submit.`,
+            p_payload: { parts_order_id: orderId, crm_company_id: row.crm_company_id, actor_id: userId },
+            p_entity_table: "parts_orders",
+            p_entity_id: orderId,
+          });
+        } else {
+          return safeJsonError(
+            "Customer is on credit hold — clear or override the AR block, or a manager may submit with override_credit_hold.",
+            409,
+            origin,
+          );
+        }
+      }
     }
 
     const { data: run, error: runErr } = await supabase

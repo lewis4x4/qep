@@ -116,6 +116,11 @@ type CheckOutContractPayload = {
   /** Below-book rates beyond the workspace discount threshold require an
    * explicit manager override — recorded to the exception queue (M4.1). */
   override_rate_floor?: boolean;
+  /** Credit-held customers block at checkout (m770/773 gate). A manager may
+   * record a security override — stamps checkout_security_override_* and an
+   * exception audit (M5.1). */
+  override_credit_hold?: boolean;
+  override_credit_hold_reason?: string | null;
 };
 
 async function consultAvailability(
@@ -855,24 +860,66 @@ Deno.serve(async (req) => {
         .limit(1)
         .maybeSingle();
 
+      // M5.1: a manager may record a checkout security override — the m770/773
+      // gate short-circuits on checkout_security_override_by. Recorded loudly
+      // as the rental_credit_hold exception (whitelisted m772, first producer).
+      const checkoutPatch: Record<string, unknown> = {
+        equipment_id: equipmentId,
+        assignment_status: equipmentId ? "assigned" : contract.assignment_status,
+        approved_start_date: contract.approved_start_date ?? contract.requested_start_date,
+        approved_end_date: contract.approved_end_date ?? contract.requested_end_date,
+        agreed_daily_rate: contract.agreed_daily_rate ?? contract.estimate_daily_rate,
+        agreed_weekly_rate: contract.agreed_weekly_rate ?? contract.estimate_weekly_rate,
+        agreed_monthly_rate: contract.agreed_monthly_rate ?? contract.estimate_monthly_rate,
+        lifecycle_state: "on_rent",
+      };
+      if (body.override_credit_hold === true) {
+        if (!["admin", "manager", "owner"].includes(auth.role)) {
+          return safeJsonError("Checkout security override requires a manager or owner", 403, origin);
+        }
+        checkoutPatch.checkout_security_override_by = auth.userId;
+        checkoutPatch.checkout_security_override_at = new Date().toISOString();
+        checkoutPatch.checkout_security_override_reason =
+          (typeof body.override_credit_hold_reason === "string" && body.override_credit_hold_reason.trim())
+            ? body.override_credit_hold_reason.trim().slice(0, 500)
+            : "Credit hold overridden at checkout";
+        await admin.rpc("enqueue_exception", {
+          p_source: "rental_credit_hold",
+          p_title: "Rental checkout security override recorded over credit hold",
+          p_severity: "warn",
+          p_detail: `Contract ${contract.id}: checkout security override by ${auth.userId}.`,
+          p_payload: { contract_id: contract.id, actor_id: auth.userId, company_id: checkoutCompanyId },
+          p_entity_table: "rental_contracts",
+          p_entity_id: contract.id,
+        });
+      }
+
       const { data: updated, error: updateError } = await admin
         .from("rental_contracts")
-        .update({
-          equipment_id: equipmentId,
-          assignment_status: equipmentId ? "assigned" : contract.assignment_status,
-          approved_start_date: contract.approved_start_date ?? contract.requested_start_date,
-          approved_end_date: contract.approved_end_date ?? contract.requested_end_date,
-          agreed_daily_rate: contract.agreed_daily_rate ?? contract.estimate_daily_rate,
-          agreed_weekly_rate: contract.agreed_weekly_rate ?? contract.estimate_weekly_rate,
-          agreed_monthly_rate: contract.agreed_monthly_rate ?? contract.estimate_monthly_rate,
-          lifecycle_state: "on_rent",
-        })
+        .update(checkoutPatch)
         .eq("id", contract.id)
         .eq("workspace_id", workspaceId)
         .select("id, contract_number, lifecycle_state, on_rent_at, equipment_id")
         .single();
       if (updateError || !updated) {
-        return safeJsonError(updateError?.message ?? "Check-out was refused by the lifecycle guard", 400, origin);
+        const message = updateError?.message ?? "Check-out was refused by the lifecycle guard";
+        if (message.includes("credit-held")) {
+          await admin.rpc("enqueue_exception", {
+            p_source: "rental_credit_hold",
+            p_title: "Rental checkout blocked by credit hold",
+            p_severity: "warn",
+            p_detail: `Contract ${contract.id}: ${message}`,
+            p_payload: { contract_id: contract.id, company_id: checkoutCompanyId },
+            p_entity_table: "rental_contracts",
+            p_entity_id: contract.id,
+          });
+          return safeJsonError(
+            `${message} A manager may proceed with override_credit_hold.`,
+            409,
+            origin,
+          );
+        }
+        return safeJsonError(message, 400, origin);
       }
 
       // Activate lines (or create line 1 for a single-unit counter contract).

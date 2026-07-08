@@ -8512,7 +8512,10 @@ Deno.serve(async (req) => {
       // Fetch quote package with contact email
       const { data: pkg, error: pkgErr } = await supabase
         .from("quote_packages")
-        .select("id, workspace_id, deal_id, contact_id, quote_number, share_token, branch_slug, customer_total, amount_financed, selected_finance_scenario, equipment, equipment_total, net_total, trade_allowance, sent_at, status, margin_pct, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason, special_terms, expires_at, delivery_eta, delivery_state, delivery_county, crm_contacts(first_name, last_name, email)")
+        // customer_total was never a quote_packages column (never in any
+        // migration) — selecting it 42703s and every staff send 404ed
+        // "Quote package not found". net_total is the real total.
+        .select("id, workspace_id, deal_id, contact_id, quote_number, share_token, branch_slug, amount_financed, selected_finance_scenario, equipment, equipment_total, net_total, trade_allowance, sent_at, status, margin_pct, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason, special_terms, expires_at, delivery_eta, delivery_state, delivery_county, crm_contacts(first_name, last_name, email)")
         .eq("id", body.quote_package_id)
         .single();
 
@@ -8533,6 +8536,56 @@ Deno.serve(async (req) => {
       }
 
       const admin = createAdminClient();
+
+      // M5.1 unified credit hold: sending an equipment quote extends credit
+      // intent — an aged-AR customer blocks here until the AR block is
+      // cleared or overridden. Managers may send with an exception audit.
+      // The quote's company anchor is deal-first (crm_deals.company_id),
+      // contact-second (qrm_contacts.primary_company_id).
+      let holdCompanyId: string | null = null;
+      if (pkg.deal_id) {
+        const { data: holdDeal } = await admin
+          .from("crm_deals")
+          .select("company_id")
+          .eq("id", pkg.deal_id)
+          .maybeSingle();
+        holdCompanyId = (holdDeal?.company_id as string | null) ?? null;
+      }
+      if (!holdCompanyId && pkg.contact_id) {
+        const { data: holdContact } = await admin
+          .from("qrm_contacts")
+          .select("primary_company_id")
+          .eq("id", pkg.contact_id)
+          .maybeSingle();
+        holdCompanyId = (holdContact?.primary_company_id as string | null) ?? null;
+      }
+      if (holdCompanyId) {
+        const { data: onHold } = await admin.rpc("is_customer_on_credit_hold", {
+          p_company_id: holdCompanyId,
+        });
+        if (onHold === true) {
+          if ((body as Record<string, unknown>).override_credit_hold === true) {
+            if (!["admin", "manager", "owner"].includes(userRole ?? "")) {
+              return safeJsonError("Credit hold override requires a manager or owner", 403, origin);
+            }
+            await admin.rpc("enqueue_exception", {
+              p_source: "ar_override_pending",
+              p_title: "Quote sent over credit hold by manager override",
+              p_severity: "warn",
+              p_detail: `Quote ${pkg.id}: credit hold overridden by ${user.id} at send.`,
+              p_payload: { quote_package_id: pkg.id, company_id: holdCompanyId, actor_id: user.id },
+              p_entity_table: "quote_packages",
+              p_entity_id: pkg.id,
+            });
+          } else {
+            return safeJsonError(
+              "Customer is on credit hold — clear or override the AR block, or a manager may send with override_credit_hold.",
+              409,
+              origin,
+            );
+          }
+        }
+      }
       const activeQuoteVersion = await getLatestQuotePackageVersion({
         admin,
         quotePackageId: String(pkg.id),
@@ -8665,7 +8718,7 @@ Deno.serve(async (req) => {
       const emailBody = buildCustomerProposalEmailText({
         contactName,
         quoteNumber: typeof pkg.quote_number === "string" ? pkg.quote_number : null,
-        customerTotal: pkg.customer_total ?? pkg.net_total,
+        customerTotal: pkg.net_total,
         amountFinanced: pkg.amount_financed,
         selectedFinanceScenario: typeof pkg.selected_finance_scenario === "string" ? pkg.selected_finance_scenario : null,
         whyThisMachine: typeof pkg.why_this_machine === "string" ? pkg.why_this_machine : null,
