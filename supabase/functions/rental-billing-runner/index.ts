@@ -17,6 +17,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 import {
   planNextInvoice,
   type BillingContractSnapshot,
@@ -30,9 +31,10 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return optionsResponse(origin);
 
   try {
-    const secret = Deno.env.get("INTERNAL_SERVICE_SECRET");
-    if (!secret || req.headers.get("x-internal-service-secret") !== secret) {
-      return safeJsonError("Unauthorized", 401, origin);
+    // Canonical cron/service auth (matches the rest of the internal-secret
+    // fleet): Bearer service_role_key OR apikey OR x-internal-service-secret.
+    if (!isServiceRoleCaller(req)) {
+      return safeJsonError("service-role or internal-service-secret required", 401, origin);
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -46,7 +48,9 @@ Deno.serve(async (req) => {
 
     const { data: run, error: runError } = await admin
       .from("rental_billing_runs")
-      .insert({ run_date: today, billing_cycle: "cycle_28_day", status: "running", triggered_by: "rental-billing-runner", workspace_id: "default" })
+      // triggered_by is a uuid (user id) and null for system runs; the
+      // "rental-billing-runner" provenance rides metadata instead.
+      .insert({ run_date: today, billing_cycle: "cycle_28_day", status: "running", triggered_by: null, workspace_id: "default", metadata: { triggered_by: "rental-billing-runner" } })
       .select("id")
       .single();
     if (runError || !run) return safeJsonError(runError?.message ?? "Failed to open billing run", 500, origin);
@@ -64,7 +68,7 @@ Deno.serve(async (req) => {
       try {
         const { data: priorRows } = await admin
           .from("rental_invoices")
-          .select("period_end, rental_charge_cents, status")
+          .select("period_end, rental_charge_cents, status, metadata")
           .eq("rental_contract_id", contract.id)
           .is("deleted_at", null)
           .not("status", "in", "(void,reversed)");
@@ -78,6 +82,9 @@ Deno.serve(async (req) => {
           rental_charge_cents_total: (priorRows ?? []).reduce(
             (sum: number, row: { rental_charge_cents: number | null }) => sum + (row.rental_charge_cents ?? 0),
             0,
+          ),
+          has_final_invoice: (priorRows ?? []).some(
+            (row: { metadata: { kind?: string } | null }) => row.metadata?.kind === "final",
           ),
         };
 
@@ -216,7 +223,7 @@ Deno.serve(async (req) => {
         invoice_count: summary.invoiced,
         total_billed_cents: summary.total_billed_cents,
         completed_at: new Date().toISOString(),
-        metadata: summary,
+        metadata: { ...summary, triggered_by: "rental-billing-runner" },
       })
       .eq("id", run.id);
 

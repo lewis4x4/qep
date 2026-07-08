@@ -89,6 +89,47 @@ describe("rental-billing-core planner (blueprint §3)", () => {
     expect(plan?.charges.fuel_charge_cents).toBe(8000);
   });
 
+  it("a returned contract with a final invoice already issued is not re-billed (idempotent, no inverted period)", () => {
+    // Regression: after the final invoice writes, a re-run recomputed
+    // period_start from the final's own period_end (last_period_end + 1),
+    // landing past the clock end and inverting the range (period_end <
+    // period_start) — which fails the rental_invoices period check every run.
+    const returnedContract: BillingContractSnapshot = {
+      ...BASE_CONTRACT,
+      lifecycle_state: "returned",
+      off_rent_at: "2026-06-28T08:00:00Z", // 27 days after 06-01 — sub-cycle
+      returned_at: "2026-06-29T12:00:00Z",
+    };
+    const returnCharges = { fuel_charge_cents: 0, cleaning_charge_cents: 0, damage_charge_cents: null, environmental_fee_cents: null, damage_disposition: null };
+
+    // First pass: no priors → a final invoice is planned, period not inverted.
+    const first = planNextInvoice(returnedContract, [], { count: 0, last_period_end: null, rental_charge_cents_total: 0 }, returnCharges, "2026-06-30");
+    expect(first?.kind).toBe("final");
+    expect(first!.period_end >= first!.period_start).toBe(true);
+
+    // Second pass: the final invoice now exists → nothing further is due.
+    const second = planNextInvoice(
+      returnedContract, [],
+      { count: 1, last_period_end: first!.period_end, rental_charge_cents_total: first!.charges.rental_charge_cents, has_final_invoice: true },
+      returnCharges, "2026-07-05",
+    );
+    expect(second).toBeNull();
+  });
+
+  it("clamps the final period_start to the clock end even without the final-invoice flag", () => {
+    // Belt-and-suspenders for the inversion: a prior period_end at/after the
+    // clock end must never produce period_end < period_start.
+    const plan = planNextInvoice(
+      { ...BASE_CONTRACT, lifecycle_state: "returned", off_rent_at: "2026-06-28T08:00:00Z", returned_at: "2026-06-29T12:00:00Z" },
+      [],
+      { count: 1, last_period_end: "2026-06-28", rental_charge_cents_total: 90000 }, // last interim ran to the clock end
+      { fuel_charge_cents: 0, cleaning_charge_cents: 0, damage_charge_cents: null, environmental_fee_cents: null, damage_disposition: null },
+      "2026-06-30",
+    );
+    expect(plan?.kind).toBe("final");
+    expect(plan!.period_end >= plan!.period_start).toBe(true);
+  });
+
   it("loaners bill zero base but still carry final return charges", () => {
     const plan = planNextInvoice(
       {

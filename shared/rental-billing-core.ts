@@ -64,6 +64,13 @@ export interface PriorInvoicesSummary {
   last_period_end: string | null;
   /** Σ rental_charge_cents already invoiced (reconciliation base). */
   rental_charge_cents_total: number;
+  /**
+   * True once a FINAL invoice has been issued for the contract. A returned
+   * contract is billed exactly once; without this flag a re-run recomputes
+   * period_start from the final invoice's own period_end (last_period_end + 1),
+   * which lands past the clock end and inverts the period.
+   */
+  has_final_invoice?: boolean;
 }
 
 export interface ReturnChargesSnapshot {
@@ -138,8 +145,10 @@ export function planNextInvoice(
   const zeroBase: OptimizedCharge = { total: 0, segments: [], fired: false, beaten_alternative: null };
 
   // FINAL invoice: the unit is back (physically returned). Reconcile the
-  // whole duration; fold in return charges and the pickup fee.
+  // whole duration; fold in return charges and the pickup fee. Issued once —
+  // a contract that already has its final invoice has nothing further due.
   if (contract.lifecycle_state === "returned" && contract.returned_at) {
+    if (prior.has_final_invoice) return null;
     const entireDays = computeBillableDays({
       start_at: contract.on_rent_at,
       clock_end_at: clockEndIso ?? contract.returned_at,
@@ -168,13 +177,18 @@ export function planNextInvoice(
     charges.overage_charge_cents = lineOverageCents(lines);
     charges.subtotal_cents += charges.overage_charge_cents;
 
+    const periodEndIso = (clockEndIso ?? contract.returned_at).slice(0, 10);
     const periodStartMs = prior.last_period_end
       ? Date.parse(prior.last_period_end) + DAY_MS
       : anchorMs;
+    // Clamp the start to the period end: a mid-cycle off-rent can leave the
+    // last interim's period_end at or past the clock end, and an unclamped
+    // start would invert the range (period_end < period_start).
+    const clampedStartMs = Math.min(periodStartMs, Date.parse(periodEndIso));
     return {
       kind: "final",
-      period_start: isoDate(Math.min(periodStartMs, Date.parse(contract.returned_at.slice(0, 10)))),
-      period_end: (clockEndIso ?? contract.returned_at).slice(0, 10),
+      period_start: isoDate(clampedStartMs),
+      period_end: periodEndIso,
       billable_days: entireDays,
       base: finalBase,
       charges,
