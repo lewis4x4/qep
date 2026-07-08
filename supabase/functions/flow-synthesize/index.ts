@@ -50,6 +50,7 @@ const EVENT_TAXONOMY = [
   "rental.inspected", "rental.damage.assessed", "rental.cycle.billed",
   "rental.overdue", "rental.coi.expiring", "rental.unit.idle_aging",
   "rental.rpo.threshold_reached", "rental.rerent.sourced",
+  "rental.geofence.exit", "rental.telematics.overage",
   "invoice.aged_past_threshold", "ar.block.created",
   "equipment.hours_crossed_interval",
   "price_file.imported",

@@ -171,6 +171,48 @@ export const RENTAL_FLOW_DEFINITIONS: FlowWorkflowDefinition[] = [
     affects_modules: ["rental", "logistics"],
   },
   {
+    slug: "rental-geofence-exit",
+    name: "Geofence exit on rented iron → inspection prompt",
+    description:
+      "An on-rent unit left its jobsite geofence (theft/unauthorized-move exception already queued by the DB trigger): prompt the off-rent inspection decision.",
+    owner_role: "rental",
+    trigger_event_pattern: "rental.geofence.exit",
+    conditions: [{ op: "exists", field: "event.payload.rental_id" }],
+    actions: [
+      {
+        action_key: "create_task",
+        params: {
+          activity_type: "follow_up",
+          subject: "Geofence exit: ${event.payload.contract_number}",
+          body:
+            "Unit on ${event.payload.contract_number} exited its geofence at ${event.payload.event_at}. Confirm with the customer: authorized move (update jobsite), off-rent (start the return), or escalate the theft exception.",
+        },
+      },
+    ],
+    affects_modules: ["rental", "ops"],
+  },
+  {
+    slug: "rental-telematics-overage",
+    name: "Telematics overage early warning → rep task",
+    description:
+      "Telematics hours already exceed the included-hours allowance (110%) mid-rental: warn the rep before the final invoice surprises the customer.",
+    owner_role: "rental",
+    trigger_event_pattern: "rental.telematics.overage",
+    conditions: [{ op: "exists", field: "event.payload.rental_id" }],
+    actions: [
+      {
+        action_key: "create_task",
+        params: {
+          activity_type: "follow_up",
+          subject: "Hour overage building: ${event.payload.contract_number}",
+          body:
+            "Telematics shows ${event.payload.hours_used}h used against ${event.payload.included_hours}h included on ${event.payload.contract_number}. Call the customer: extend the allowance, upsell the next tier, or set expectations for overage billing.",
+        },
+      },
+    ],
+    affects_modules: ["rental", "qrm"],
+  },
+  {
     slug: "rental-rpo-threshold",
     name: "RPO credit threshold → sales motion",
     description:
