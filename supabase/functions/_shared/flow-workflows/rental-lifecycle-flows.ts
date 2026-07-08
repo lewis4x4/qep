@@ -192,3 +192,123 @@ export const RENTAL_FLOW_DEFINITIONS: FlowWorkflowDefinition[] = [
     affects_modules: ["rental", "qrm"],
   },
 ];
+
+/* ─── Iron conversational origination (Stream L / L6) ─────────────────────
+ * Dispatched synchronously by iron-execute-flow-step (surface below); the
+ * trigger pattern is the runner's safety net, same as iron-flows.ts.
+ * Drafts only: "put a 320 on rent to Acme for two weeks" becomes a DRAFT
+ * counter contract — the 769/770/773 guard stack owns reserve and check-out,
+ * so Iron can never bypass security, inspection, or signature gates. */
+export const ironOpenRentalContract: FlowWorkflowDefinition = {
+  slug: "iron.open_rental_contract",
+  name: "Iron · Open a rental contract",
+  description:
+    "Draft a counter rental contract from voice or chat: customer, dates, optional unit and rate. The draft lands in the Rental Command Center for reserve → inspect → check out.",
+  owner_role: "shared",
+  conditions: [],
+  enabled: true,
+  surface: "iron_conversational",
+  trigger_event_pattern: "iron.intent.open_rental_contract",
+  affects_modules: ["rental"],
+  feature_flag: "iron.flow.open_rental_contract",
+  roles_allowed: ["rep", "admin", "manager", "owner"],
+  actions: [
+    {
+      action_key: "iron_open_rental_contract",
+      params: {},
+      description: "Insert a draft rental_contracts row (origination_channel=iron)",
+    },
+  ],
+  iron_metadata: {
+    iron_role: "iron_advisor",
+    short_label: "Open a rental",
+    voice_intent_keywords: [
+      "put on rent",
+      "rent out",
+      "open a rental",
+      "rental contract",
+      "rent a machine",
+      "reserve a rental",
+    ],
+    voice_open_prompt: "Sure. Which customer is renting?",
+    voice_review_prompt:
+      "Drafting a ${contract_type} for ${customer_name}, ${start_date} to ${end_date}. Create it?",
+    action_key: "iron_open_rental_contract",
+    prefill_from_route: {
+      qrm_company_id: "route.params.company_id",
+    },
+    slot_schema: [
+      {
+        id: "qrm_company_id",
+        label: "Customer",
+        type: "entity_picker",
+        required: true,
+        entity_table: "qrm_companies",
+        entity_search_column: "name",
+        helper_text: "Type to search a company. Iron pre-fills from the page you're on.",
+        merge_strategy: "auto_if_unrelated",
+      },
+      {
+        id: "start_date",
+        label: "Start date",
+        type: "text",
+        required: true,
+        placeholder: "YYYY-MM-DD",
+        helper_text: "Voice: 'starting Tuesday' — Iron normalizes to a date.",
+      },
+      {
+        id: "end_date",
+        label: "End date",
+        type: "text",
+        required: true,
+        placeholder: "YYYY-MM-DD",
+        helper_text: "Voice: 'for two weeks' — Iron computes the end date.",
+      },
+      {
+        id: "contract_type",
+        label: "Type",
+        type: "choice",
+        required: false,
+        default_value: "rental",
+        choices: [
+          { value: "rental", label: "Rental" },
+          { value: "reservation", label: "Reservation" },
+          { value: "demo", label: "Demo" },
+          { value: "loaner", label: "Loaner" },
+        ],
+      },
+      {
+        id: "equipment_id",
+        label: "Unit (optional)",
+        type: "entity_picker",
+        required: false,
+        entity_table: "qrm_equipment",
+        entity_search_column: "name",
+        helper_text: "Pick the exact machine, or leave for later assignment.",
+      },
+      {
+        id: "daily_rate",
+        label: "Daily rate (optional)",
+        type: "text",
+        required: false,
+        placeholder: "e.g. 350",
+        helper_text: "Dollars per day; rate rules resolve the full book at quote time.",
+      },
+      {
+        id: "notes",
+        label: "Notes",
+        type: "longtext",
+        required: false,
+        placeholder: "Anything the counter should know",
+      },
+      {
+        id: "review",
+        label: "Review",
+        type: "review",
+        required: true,
+      },
+    ],
+  },
+};
+
+RENTAL_FLOW_DEFINITIONS.push(ironOpenRentalContract);

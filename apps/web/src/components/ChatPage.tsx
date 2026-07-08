@@ -196,6 +196,7 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
         else if (ctxType === "flare") fromAskAdvisor.flareReportId = ctxId;
         else if (ctxType === "metric") fromAskAdvisor.metricKey = ctxId;
         else if (ctxType === "flow_run") fromAskAdvisor.flowRunId = ctxId;
+        else if (ctxType === "rental_contract") fromAskAdvisor.rentalContractId = ctxId;
       }
       return {
         customerProfileId: searchParams.get("customer_profile_id") || undefined,
@@ -209,6 +210,7 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
         flareReportId: fromAskAdvisor.flareReportId,
         metricKey: fromAskAdvisor.metricKey,
         flowRunId: fromAskAdvisor.flowRunId,
+        rentalContractId: fromAskAdvisor.rentalContractId,
       };
     },
     [searchParams, locationState]
@@ -216,9 +218,10 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
   const hasChatContext = Boolean(
     chatContext.customerProfileId || chatContext.contactId || chatContext.companyId || chatContext.dealId
     || chatContext.equipmentId || chatContext.serviceJobId || chatContext.partsOrderId || chatContext.voiceCaptureId
-    || chatContext.flareReportId || chatContext.metricKey || chatContext.flowRunId
+    || chatContext.flareReportId || chatContext.metricKey || chatContext.flowRunId || chatContext.rentalContractId
   );
   const contextLabel = useMemo(() => {
+    if (chatContext.rentalContractId) return "Rental contract context active: the contract, lines, meters, invoices and balance, AR posture, haul tickets, inspections, RPO accrual, and recent rental events are preloaded.";
     if (chatContext.flowRunId) return "Flow run context active: the workflow definition, full step trace, resolved context, originating event, and any dead-letter detail are preloaded.";
     if (chatContext.metricKey) return `Command Center metric context active (${chatContext.metricKey}): the latest snapshot, snapshot history, and any open alerts on this KPI are preloaded.`;
     if (chatContext.flareReportId) return "Flare report context active: answers can use the captured bug context, click trail, and console errors.";

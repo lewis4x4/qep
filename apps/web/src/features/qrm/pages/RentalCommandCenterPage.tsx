@@ -6,6 +6,7 @@ import { ArrowUpRight, DollarSign, RefreshCcw, Truck, Wrench } from "lucide-reac
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { AskIronAdvisorButton } from "@/components/primitives";
 import { formatCurrency } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import { rentalOpsApi } from "../lib/rental-ops-api";
@@ -812,14 +813,23 @@ export function RentalCommandCenterPage() {
                           {contract.contract_type} · due {contract.approved_end_date ?? contract.requested_end_date}
                         </span>
                       </p>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                        contract.lifecycle_state === "off_rent"
-                          ? "bg-cyan-500/10 text-cyan-300"
-                          : contract.lifecycle_state === "reserved"
-                            ? "bg-amber-500/10 text-amber-300"
-                            : "bg-emerald-500/10 text-emerald-300"
-                      }`}>
-                        {String(contract.lifecycle_state).replace(/_/g, " ")}
+                      <span className="flex items-center gap-2">
+                        <AskIronAdvisorButton
+                          variant="inline"
+                          contextType="rental_contract"
+                          contextId={contract.id}
+                          contextTitle={contract.contract_number ?? "Rental contract"}
+                          label="Ask Iron"
+                        />
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          contract.lifecycle_state === "off_rent"
+                            ? "bg-cyan-500/10 text-cyan-300"
+                            : contract.lifecycle_state === "reserved"
+                              ? "bg-amber-500/10 text-amber-300"
+                              : "bg-emerald-500/10 text-emerald-300"
+                        }`}>
+                          {String(contract.lifecycle_state).replace(/_/g, " ")}
+                        </span>
                       </span>
                     </div>
                     {contract.lifecycle_state === "reserved" ? (() => {

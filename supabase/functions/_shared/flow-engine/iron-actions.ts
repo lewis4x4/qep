@@ -921,6 +921,88 @@ const iron_initiate_rental_return: FlowAction = {
   },
 };
 
+/* ─── iron_open_rental_contract (Stream L / L6) ─────────────────────────── */
+
+const iron_open_rental_contract: FlowAction = {
+  key: "iron_open_rental_contract",
+  description:
+    "Iron: draft a counter rental contract from a sentence ('put a 320 on rent to Acme for two weeks'). Drafts only — the 769/770/773 lifecycle guard governs reserve and check-out.",
+  affects_modules: ["rental"],
+  idempotency_key_template: "iron_open_rental:${event.correlation_id}",
+  async execute(_params, ctx, deps) {
+    if (deps.dry_run) return dryRunSkip("iron_open_rental_contract");
+
+    const s = slots(ctx);
+    const companyId = str(s.qrm_company_id, 64);
+    const startDate = str(s.start_date, 10);
+    const endDate = str(s.end_date, 10);
+    if (!companyId) {
+      return { status: "failed", error: "iron_open_rental_contract: qrm_company_id slot missing", retryable: false };
+    }
+    if (!startDate || !endDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate) || endDate < startDate) {
+      return { status: "failed", error: "iron_open_rental_contract: valid start_date/end_date (YYYY-MM-DD) required", retryable: false };
+    }
+    const contractType = ["reservation", "rental", "demo", "loaner"].includes(String(s.contract_type ?? ""))
+      ? String(s.contract_type)
+      : "rental";
+
+    const equipmentId = str(s.equipment_id, 64);
+    if (equipmentId) {
+      const { data: unit, error: unitErr } = await deps.admin
+        .from("crm_equipment")
+        .select("id, availability")
+        .eq("workspace_id", deps.workspace_id)
+        .eq("id", equipmentId)
+        .eq("ownership", "rental_fleet")
+        .maybeSingle();
+      if (unitErr || !unit) {
+        return { status: "failed", error: "iron_open_rental_contract: unit not found in the rental fleet", retryable: false };
+      }
+    }
+
+    const dailyRate = num(s.daily_rate);
+    const { data, error } = await deps.admin
+      .from("rental_contracts")
+      .insert({
+        workspace_id: deps.workspace_id,
+        qrm_company_id: companyId,
+        origination_channel: "iron",
+        contract_type: contractType,
+        status: "draft",
+        lifecycle_state: "draft",
+        request_type: "booking",
+        delivery_mode: "pickup",
+        requested_start_date: startDate,
+        requested_end_date: endDate,
+        equipment_id: equipmentId ?? null,
+        assignment_status: equipmentId ? "assigned" : "pending_assignment",
+        estimate_daily_rate: dailyRate && dailyRate > 0 ? dailyRate : null,
+        dealer_notes: str(s.notes, 500),
+        checkout_inspection_required: true,
+        deposit_required: false,
+        tax_exempt: false,
+        coi_required: false,
+        po_required: false,
+        rpo_eligible: false,
+        delivery_required: false,
+        pickup_required: false,
+        delivery_address: {},
+        pickup_address: {},
+        tax_sourcing_method: "branch_origin",
+      })
+      .select("id, contract_number")
+      .single();
+    if (error || !data?.id) {
+      return { status: "failed", error: `iron_open_rental_contract: ${error?.message ?? "unknown"}`, retryable: true };
+    }
+
+    return {
+      status: "succeeded",
+      result: { entity_type: "rental_contract", entity_id: data.id, contract_number: data.contract_number },
+    };
+  },
+};
+
 /* ─── Registry export ───────────────────────────────────────────────────── */
 
 export const IRON_ACTION_REGISTRY: Record<string, FlowAction> = {
@@ -931,4 +1013,5 @@ export const IRON_ACTION_REGISTRY: Record<string, FlowAction> = {
   iron_draft_email,
   iron_schedule_follow_up,
   iron_initiate_rental_return,
+  iron_open_rental_contract,
 };

@@ -56,6 +56,8 @@ interface ChatContextPayload {
   metricKey?: string;
   // QEP Flow Engine — workflow run drill-to-chat
   flowRunId?: string;
+  // Stream L — rental contract drill-to-chat
+  rentalContractId?: string;
 }
 
 interface EvidenceItem {
@@ -454,11 +456,12 @@ function parseChatContext(raw: unknown): ChatContextPayload | null {
       ? context.metricKey
       : undefined,
     flowRunId: cleanUuid(context.flowRunId) ?? undefined,
+    rentalContractId: cleanUuid(context.rentalContractId) ?? undefined,
   };
 
   if (!parsed.customerProfileId && !parsed.contactId && !parsed.companyId && !parsed.dealId
       && !parsed.equipmentId && !parsed.serviceJobId && !parsed.partsOrderId && !parsed.voiceCaptureId
-      && !parsed.flareReportId && !parsed.metricKey && !parsed.flowRunId) {
+      && !parsed.flareReportId && !parsed.metricKey && !parsed.flowRunId && !parsed.rentalContractId) {
     return null;
   }
   return parsed;
@@ -2410,7 +2413,7 @@ Deno.serve(async (req) => {
     // callerClient BEFORE any admin-privileged fetch. Without this guard,
     // a rep could pass an equipment_id / service_job_id they don't own and
     // exfiltrate private records via the preload block. (Round-4 audit fix.)
-    if (context && (context.equipmentId || context.serviceJobId || context.partsOrderId || context.voiceCaptureId || context.flareReportId || context.metricKey || context.flowRunId)) {
+    if (context && (context.equipmentId || context.serviceJobId || context.partsOrderId || context.voiceCaptureId || context.flareReportId || context.metricKey || context.flowRunId || context.rentalContractId)) {
       const preloadParts: string[] = [];
 
       if (context.equipmentId) {
@@ -2612,6 +2615,34 @@ Deno.serve(async (req) => {
           }
         } catch (err) {
           console.warn(`[chat:${traceId}] flow run preload failed:`, err);
+        }
+      }
+
+      // Stream L / L6 — rental contract drill-to-chat preload.
+      // RLS probe via callerClient (rep+ read on rental_contracts), then the
+      // rental_resolve_context composite RPC hydrates everything QEP knows
+      // about the contract in one round trip.
+      if (context.rentalContractId) {
+        try {
+          const { data: probe } = await callerClient
+            .from("rental_contracts")
+            .select("id")
+            .eq("id", context.rentalContractId)
+            .maybeSingle();
+          if (probe) {
+            const { data: rentalCtx } = await adminClient.rpc("rental_resolve_context", {
+              p_contract_id: context.rentalContractId,
+            });
+            if (rentalCtx) {
+              preloadParts.push(
+                `### Rental contract context (preloaded by Rental Command drill)\n${JSON.stringify(rentalCtx, null, 0)}`,
+              );
+            }
+          } else {
+            console.warn(`[chat:${traceId}] rental contract preload denied by RLS for ${context.rentalContractId}`);
+          }
+        } catch (err) {
+          console.warn(`[chat:${traceId}] rental contract preload failed:`, err);
         }
       }
 
