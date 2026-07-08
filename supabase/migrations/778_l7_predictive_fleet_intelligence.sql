@@ -60,15 +60,15 @@ DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = 'public.rental_demand_forecasts'::regclass AND p.polname = 'rental_forecasts_internal') THEN
     CREATE POLICY rental_forecasts_internal ON public.rental_demand_forecasts
-      USING (workspace_id = public.get_my_workspace()
-             AND public.get_my_role() IN ('rep', 'admin', 'manager', 'owner'))
-      WITH CHECK (workspace_id = public.get_my_workspace()
-                  AND public.get_my_role() IN ('rep', 'admin', 'manager', 'owner'));
+      USING (workspace_id = (select public.get_my_workspace())
+             AND (select public.get_my_role()) IN ('rep', 'admin', 'manager', 'owner'))
+      WITH CHECK (workspace_id = (select public.get_my_workspace())
+                  AND (select public.get_my_role()) IN ('rep', 'admin', 'manager', 'owner'));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = 'public.rental_demand_forecasts'::regclass AND p.polname = 'rental_forecasts_service') THEN
     CREATE POLICY rental_forecasts_service ON public.rental_demand_forecasts
-      USING ((SELECT auth.role()) = 'service_role')
-      WITH CHECK ((SELECT auth.role()) = 'service_role');
+      USING ((select auth.role()) = 'service_role')
+      WITH CHECK ((select auth.role()) = 'service_role');
   END IF;
 END $$;
 

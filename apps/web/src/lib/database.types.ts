@@ -39289,6 +39289,7 @@ export type Database = {
           requested_model: string | null
           requested_start_date: string
           returned_at: string | null
+          rpo_credit_accrued_cents: number
           rpo_eligible: boolean
           rpo_exercise_deadline: string | null
           rpo_purchase_price_cents: number | null
@@ -39399,6 +39400,7 @@ export type Database = {
           requested_model?: string | null
           requested_start_date: string
           returned_at?: string | null
+          rpo_credit_accrued_cents?: number
           rpo_eligible?: boolean
           rpo_exercise_deadline?: string | null
           rpo_purchase_price_cents?: number | null
@@ -39509,6 +39511,7 @@ export type Database = {
           requested_model?: string | null
           requested_start_date?: string
           returned_at?: string | null
+          rpo_credit_accrued_cents?: number
           rpo_eligible?: boolean
           rpo_exercise_deadline?: string | null
           rpo_purchase_price_cents?: number | null
@@ -39739,6 +39742,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      rental_demand_forecasts: {
+        Row: {
+          category: string
+          computed_at: string
+          created_at: string
+          drivers: Json
+          fleet_count_at_forecast: number | null
+          forecast_month: string
+          id: string
+          model_version: string
+          predicted_demand: number | null
+          recommendation: string | null
+          shortage_risk: string | null
+          shortfall: number | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          category: string
+          computed_at?: string
+          created_at?: string
+          drivers?: Json
+          fleet_count_at_forecast?: number | null
+          forecast_month: string
+          id?: string
+          model_version?: string
+          predicted_demand?: number | null
+          recommendation?: string | null
+          shortage_risk?: string | null
+          shortfall?: number | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          category?: string
+          computed_at?: string
+          created_at?: string
+          drivers?: Json
+          fleet_count_at_forecast?: number | null
+          forecast_month?: string
+          id?: string
+          model_version?: string
+          predicted_demand?: number | null
+          recommendation?: string | null
+          shortage_risk?: string | null
+          shortfall?: number | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
       }
       rental_invoices: {
         Row: {
@@ -40203,6 +40257,90 @@ export type Database = {
             columns: ["equipment_id"]
             isOneToOne: false
             referencedRelation: "qrm_equipment"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rental_reservation_holds: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          equipment_category: string | null
+          equipment_class: string | null
+          equipment_id: string | null
+          hold_end: string
+          hold_start: string
+          id: string
+          rental_contract_id: string
+          rental_contract_line_id: string | null
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          equipment_category?: string | null
+          equipment_class?: string | null
+          equipment_id?: string | null
+          hold_end: string
+          hold_start: string
+          id?: string
+          rental_contract_id: string
+          rental_contract_line_id?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          equipment_category?: string | null
+          equipment_class?: string | null
+          equipment_id?: string | null
+          hold_end?: string
+          hold_start?: string
+          id?: string
+          rental_contract_id?: string
+          rental_contract_line_id?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rental_reservation_holds_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "crm_equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_reservation_holds_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_status_canonical"
+            referencedColumns: ["equipment_id"]
+          },
+          {
+            foreignKeyName: "rental_reservation_holds_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_reservation_holds_rental_contract_id_fkey"
+            columns: ["rental_contract_id"]
+            isOneToOne: false
+            referencedRelation: "rental_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_reservation_holds_rental_contract_line_id_fkey"
+            columns: ["rental_contract_line_id"]
+            isOneToOne: false
+            referencedRelation: "rental_contract_lines"
             referencedColumns: ["id"]
           },
         ]
@@ -65454,6 +65592,10 @@ export type Database = {
         }
         Returns: string
       }
+      next_rental_invoice_number: {
+        Args: { p_workspace_id: string }
+        Returns: string
+      }
       next_vendor_order_date: {
         Args: { p_branch?: string; p_from_date?: string; p_vendor_id: string }
         Returns: string
@@ -66512,10 +66654,46 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      rental_availability_calendar: {
+        Args: {
+          p_equipment_id?: string
+          p_from: string
+          p_to: string
+          p_workspace_id: string
+        }
+        Returns: Json
+      }
+      rental_check_availability: {
+        Args: {
+          p_category?: string
+          p_end: string
+          p_equipment_id?: string
+          p_start: string
+          p_workspace_id: string
+        }
+        Returns: Json
+      }
+      rental_compute_utilization: {
+        Args: { p_workspace_id: string }
+        Returns: Json
+      }
+      rental_contract_close_billing_gate: {
+        Args: {
+          p_contract: Database["public"]["Tables"]["rental_contracts"]["Row"]
+        }
+        Returns: boolean
+      }
       rental_contract_rollup_lifecycle: {
         Args: { p_contract_id: string }
         Returns: string
       }
+      rental_disposal_signals: {
+        Args: { p_workspace_id: string }
+        Returns: Json
+      }
+      rental_forecast_demand: { Args: never; Returns: number }
+      rental_intelligence_scan: { Args: never; Returns: Json }
+      rental_lifecycle_scan: { Args: never; Returns: number }
       rental_optimize_charge: {
         Args: { p_billable_days: number; p_rate_book: Json }
         Returns: Json
@@ -66532,6 +66710,7 @@ export type Database = {
         }
         Returns: Json
       }
+      rental_resolve_context: { Args: { p_contract_id: string }; Returns: Json }
       rental_resolve_rates: {
         Args: {
           p_branch_id?: string
@@ -66543,6 +66722,12 @@ export type Database = {
           p_on_date?: string
           p_workspace_id: string
         }
+        Returns: Json
+      }
+      rental_snapshot_utilization: { Args: never; Returns: number }
+      rental_telematics_overage_check: { Args: never; Returns: number }
+      rental_yield_suggestions: {
+        Args: { p_workspace_id: string; p_write?: boolean }
         Returns: Json
       }
       reopen_gl_quarter: {

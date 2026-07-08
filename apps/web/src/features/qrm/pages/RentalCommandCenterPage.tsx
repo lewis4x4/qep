@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { optimizeCharge } from "../../../../../../shared/rental-rate-math";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, DollarSign, RefreshCcw, Truck, Wrench } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, DollarSign, RefreshCcw, TrendingUp, Truck, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -542,6 +542,63 @@ export function RentalCommandCenterPage() {
     refetchInterval: 300_000,
   });
 
+  const intelligenceQuery = useQuery({
+    queryKey: ["qrm", "rental-intelligence"],
+    queryFn: async () => {
+      const { data: session } = await supabase.auth.getUser();
+      const userId = session.user?.id;
+      let workspaceId = "default";
+      if (userId) {
+        const { data: profileRow } = await supabase
+          .from("profiles")
+          .select("active_workspace_id")
+          .eq("id", userId)
+          .maybeSingle();
+        workspaceId = (profileRow?.active_workspace_id as string | null) ?? "default";
+      }
+      const [forecastRes, yieldRes, disposalRes] = await Promise.all([
+        supabase
+          .from("rental_demand_forecasts")
+          .select("category, forecast_month, predicted_demand, fleet_count_at_forecast, shortfall, shortage_risk, recommendation, drivers, computed_at")
+          .eq("workspace_id", workspaceId)
+          .gte("forecast_month", new Date(Date.now() - 31 * 86_400_000).toISOString().slice(0, 10))
+          .order("forecast_month"),
+        supabase.rpc("rental_yield_suggestions", { p_workspace_id: workspaceId, p_write: false }),
+        supabase.rpc("rental_disposal_signals", { p_workspace_id: workspaceId }),
+      ]);
+      if (forecastRes.error) throw new Error(forecastRes.error.message);
+      if (yieldRes.error) throw new Error(yieldRes.error.message);
+      if (disposalRes.error) throw new Error(disposalRes.error.message);
+      const forecasts = (forecastRes.data ?? []) as Array<{
+        category: string;
+        forecast_month: string;
+        predicted_demand: number | null;
+        fleet_count_at_forecast: number | null;
+        shortfall: number | null;
+        shortage_risk: "none" | "tight" | "short" | null;
+        recommendation: string | null;
+        drivers: { confidence?: string; days_with_demand?: number; window?: string } | null;
+        computed_at: string;
+      }>;
+      const yieldSuggestions = ((yieldRes.data as { suggestions?: unknown[] } | null)?.suggestions ?? []) as Array<{
+        category: string;
+        direction: "premium" | "discount";
+        adjustment_pct: number;
+        suggested_daily: number;
+        drivers: { physical_utilization_pct?: number; idle_units?: number; rule?: string };
+      }>;
+      const disposal = ((disposalRes.data ?? []) as Array<{
+        equipment_id: string;
+        label: string;
+        dollar_utilization_pct: number | null;
+        cost_ratio_pct: number | null;
+        recommendation: "consider_disposal" | "watch_maintenance_curve" | "hold";
+      }>).filter((row) => row.recommendation !== "hold");
+      return { forecasts, yieldSuggestions, disposal };
+    },
+    staleTime: 300_000,
+  });
+
   const onRentOpsQuery = useQuery({
     queryKey: ["qrm", "rental-onrent-ops"],
     queryFn: async () => {
@@ -685,13 +742,118 @@ export function RentalCommandCenterPage() {
             <SummaryCard icon={Truck} label="Motion risk" value={String(center.summary.motionRiskCount)} detail={`${center.summary.motionCount} rental moves open`} tone={center.summary.motionRiskCount > 0 ? "warn" : "default"} />
           </div>
 
-          <div className="flex justify-end">
-            <Button asChild size="sm" variant="outline">
-              <Link to="/admin/rental-pricing">
-                Rental pricing admin <ArrowUpRight className="ml-1 h-3 w-3" />
-              </Link>
-            </Button>
-          </div>
+          <DeckSurface className="p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <TrendingUp className="h-4 w-4" /> Fleet intelligence
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Advisory only — every signal shows its driver. Yield drafts land inactive in pricing admin;
+                  nothing changes a price or the fleet without a human.
+                </p>
+              </div>
+              <Button asChild size="sm" variant="outline">
+                <Link to="/admin/rental-pricing">
+                  Rental pricing admin <ArrowUpRight className="ml-1 h-3 w-3" />
+                </Link>
+              </Button>
+            </div>
+            {intelligenceQuery.isLoading ? (
+              <p className="mt-3 text-xs text-muted-foreground">Reading forecasts…</p>
+            ) : intelligenceQuery.isError ? (
+              <p className="mt-3 text-xs text-red-300">
+                {intelligenceQuery.error instanceof Error ? intelligenceQuery.error.message : "Fleet intelligence unavailable."}
+              </p>
+            ) : (
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                <div className="rounded-lg border border-border/60 p-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Demand outlook · 60d</h3>
+                  {(() => {
+                    const atRisk = (intelligenceQuery.data?.forecasts ?? []).filter(
+                      (row) => row.shortage_risk === "short" || row.shortage_risk === "tight",
+                    );
+                    const all = intelligenceQuery.data?.forecasts ?? [];
+                    if (all.length === 0) {
+                      return <p className="mt-2 text-xs text-muted-foreground">No forecasts yet — the nightly scan writes them at 04:10 UTC.</p>;
+                    }
+                    if (atRisk.length === 0) {
+                      const categories = new Set(all.map((row) => row.category)).size;
+                      return (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          No shortage risk across {categories} categor{categories === 1 ? "y" : "ies"} · peak-concurrency model ·
+                          computed {new Date(all[0].computed_at).toLocaleDateString()}
+                        </p>
+                      );
+                    }
+                    return (
+                      <ul className="mt-2 space-y-2">
+                        {atRisk.slice(0, 4).map((row) => (
+                          <li key={`${row.category}-${row.forecast_month}`} className="rounded border border-amber-500/30 bg-amber-500/5 p-2 text-xs">
+                            <div className="flex items-center gap-1.5 font-medium text-amber-300">
+                              <AlertTriangle className="h-3 w-3" />
+                              {row.shortage_risk === "short" ? "Short" : "Tight"}: {row.category} ·{" "}
+                              {new Date(`${row.forecast_month}T00:00:00`).toLocaleDateString(undefined, { month: "long" })}
+                            </div>
+                            <div className="mt-1 text-muted-foreground">
+                              {row.recommendation ??
+                                `Peak demand ${row.predicted_demand ?? "—"} vs fleet ${row.fleet_count_at_forecast ?? "—"} — no slack for walk-ins.`}
+                            </div>
+                            <div className="mt-1 text-[10px] text-muted-foreground/80">
+                              confidence {row.drivers?.confidence ?? "low"} · {row.drivers?.window ?? "60d holds + on-rent lines"}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    );
+                  })()}
+                </div>
+                <div className="rounded-lg border border-border/60 p-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Yield suggestions</h3>
+                  {(intelligenceQuery.data?.yieldSuggestions ?? []).length === 0 ? (
+                    <p className="mt-2 text-xs text-muted-foreground">No rate moves suggested — category utilization is inside the 40–80% band.</p>
+                  ) : (
+                    <ul className="mt-2 space-y-2">
+                      {(intelligenceQuery.data?.yieldSuggestions ?? []).slice(0, 4).map((suggestion) => (
+                        <li key={suggestion.category} className="rounded border border-border/60 p-2 text-xs">
+                          <div className={`font-medium ${suggestion.direction === "premium" ? "text-emerald-300" : "text-sky-300"}`}>
+                            {suggestion.direction === "premium" ? "+" : ""}{suggestion.adjustment_pct}% {suggestion.category} → {formatCurrency(suggestion.suggested_daily)}/day
+                          </div>
+                          <div className="mt-1 text-muted-foreground">
+                            {suggestion.drivers.rule ?? "utilization-conditioned suggestion"}
+                            {suggestion.drivers.physical_utilization_pct != null ? ` · util ${suggestion.drivers.physical_utilization_pct}%` : ""}
+                            {suggestion.drivers.idle_units != null ? ` · ${suggestion.drivers.idle_units} idle` : ""}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="rounded-lg border border-border/60 p-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Disposal watch</h3>
+                  {(intelligenceQuery.data?.disposal ?? []).length === 0 ? (
+                    <p className="mt-2 text-xs text-muted-foreground">No units tripping the maintenance-curve rule (cost &gt;15% OEC with revenue &lt;25%).</p>
+                  ) : (
+                    <ul className="mt-2 space-y-2">
+                      {(intelligenceQuery.data?.disposal ?? []).slice(0, 4).map((row) => (
+                        <li
+                          key={row.equipment_id}
+                          className={`rounded border p-2 text-xs ${row.recommendation === "consider_disposal" ? "border-red-500/30 bg-red-500/5" : "border-amber-500/30 bg-amber-500/5"}`}
+                        >
+                          <div className={`font-medium ${row.recommendation === "consider_disposal" ? "text-red-300" : "text-amber-300"}`}>
+                            {row.recommendation === "consider_disposal" ? "Consider disposal" : "Watch maintenance curve"}: {row.label || row.equipment_id.slice(0, 8)}
+                          </div>
+                          <div className="mt-1 text-muted-foreground">
+                            trailing-365 cost {row.cost_ratio_pct ?? "—"}% of OEC · dollar utilization {row.dollar_utilization_pct ?? "—"}%
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
+          </DeckSurface>
 
           <DeckSurface className="p-4">
             <h2 className="text-sm font-semibold text-foreground">New counter contract</h2>
