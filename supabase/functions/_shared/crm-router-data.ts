@@ -1566,7 +1566,9 @@ export async function createCompany(
     assigned_rep_id: ctx.caller.userId,
     status: cleanText(payload.status ?? null),
     product_category: cleanText(payload.productCategory ?? null),
-    ar_type: cleanText(payload.arType ?? null),
+    // ar_type is NOT NULL with a DB default — an explicit null bypasses the
+    // default and 23502s, which 500ed every bare company create.
+    ...(cleanText(payload.arType ?? null) ? { ar_type: cleanText(payload.arType ?? null) } : {}),
     payment_terms_code: cleanText(payload.paymentTermsCode ?? null),
     terms_code: cleanText(payload.termsCode ?? null),
     territory_code: cleanText(payload.territoryCode ?? null),
@@ -1649,7 +1651,8 @@ export async function patchCompany(
     updates.product_category = cleanText(payload.productCategory ?? null);
   }
   if (payload.arType !== undefined) {
-    updates.ar_type = cleanText(payload.arType ?? null);
+    // ar_type is NOT NULL — "clear" reverts to the schema default.
+    updates.ar_type = cleanText(payload.arType ?? null) ?? "open_item";
   }
   if (payload.paymentTermsCode !== undefined) {
     updates.payment_terms_code = cleanText(payload.paymentTermsCode ?? null);
