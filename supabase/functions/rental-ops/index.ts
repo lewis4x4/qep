@@ -987,11 +987,14 @@ Deno.serve(async (req) => {
       let depositStatus: string | null = "not_required";
 
       if (depositAmount > 0) {
+        const { data: depositNumber } = await admin.rpc("next_rental_invoice_number", {
+          p_workspace_id: workspaceId,
+        });
         const invoice = await createRentalInvoice(
           admin,
           customer as PortalCustomerRow,
           "Rental deposit",
-          `RENT-${Date.now()}`,
+          (depositNumber as string | null) ?? `RENT-${Date.now()}`,
           depositAmount,
         );
         depositInvoiceId = invoice.id;
@@ -1078,11 +1081,14 @@ Deno.serve(async (req) => {
       let paymentStatus: string | null = "not_required";
 
       if (additionalCharge > 0) {
+        const { data: extensionNumber } = await admin.rpc("next_rental_invoice_number", {
+          p_workspace_id: workspaceId,
+        });
         const invoice = await createRentalInvoice(
           admin,
           customer as PortalCustomerRow,
           "Rental extension charge",
-          `EXT-${Date.now()}`,
+          (extensionNumber as string | null) ?? `EXT-${Date.now()}`,
           additionalCharge,
         );
         paymentInvoiceId = invoice.id;
