@@ -37,8 +37,10 @@ interface InventoryMatch {
   model: string;
   year: number | null;
   condition: string | null;
-  list_price: number | null;
-  rental_rate_daily: number | null;
+  availability: string | null;
+  purchase_price: number | null;
+  current_market_value: number | null;
+  daily_rental_rate: number | null;
 }
 
 interface MarketValuation {
@@ -341,7 +343,8 @@ export function EquipmentVision({ equipmentId, onAnalysisComplete }: EquipmentVi
                     {result.crm_matches.inventory.map((inv, i) => (
                       <div key={i} className="text-xs text-muted-foreground py-1 border-b border-white/5 last:border-0">
                         <span className="text-foreground">{inv.name}</span>
-                        {inv.list_price && <span className="ml-2">List: ${inv.list_price.toLocaleString()}</span>}
+                        {inv.current_market_value && <span className="ml-2">Value: ${inv.current_market_value.toLocaleString()}</span>}
+                        {inv.daily_rental_rate && <span className="ml-2">Rental: ${inv.daily_rental_rate.toLocaleString()}/day</span>}
                         {inv.condition && <span className="ml-2">Condition: {inv.condition}</span>}
                       </div>
                     ))}

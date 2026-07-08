@@ -1688,6 +1688,9 @@ Deno.serve(async (req) => {
         const safeBody: Record<string, unknown> = {
           workspace_id: portalWorkspaceId,
           portal_customer_id: portalCustomer.id,
+          // RF-008: stamp both customer anchors so company-keyed lenses
+          // (account 360, parts intelligence) see portal orders too
+          crm_company_id: typeof portalCustomer.crm_company_id === "string" ? portalCustomer.crm_company_id : null,
           fleet_id: body.fleet_id || null,
           status: "draft", // Always start as draft
           line_items,

@@ -111,7 +111,14 @@ export default defineConfig({
             return "vendor-supabase";
           }
 
-          if (id.includes("@radix-ui") || id.includes("lucide-react")) {
+          // lucide-react is deliberately NOT pinned to vendor-ui: the entry
+          // graph statically imports a few icons (lib/nav-config.ts,
+          // components/ui/toast.tsx), so grouping all icons here would pull
+          // every icon used by the ~32 lazy feature modules into a single
+          // modulepreload chunk on the critical path (~396KB raw / 111KB
+          // gzip before first paint). Falling through lets rollup place each
+          // icon module with the route chunks that actually import it.
+          if (id.includes("@radix-ui")) {
             return "vendor-ui";
           }
 

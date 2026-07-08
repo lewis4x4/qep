@@ -133,7 +133,7 @@ export function SerialFirstWidget() {
           </h3>
         </div>
         <Link
-          to="/qrm/equipment"
+          to="/fleet"
           className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground hover:text-[hsl(var(--qep-orange))]"
         >
           All machines
@@ -191,7 +191,7 @@ export function SerialFirstWidget() {
             No match for{" "}
             <span className="font-mono font-semibold text-foreground">{debounced}</span>. Check
             for extra characters, or{" "}
-            <Link to="/qrm/equipment" className="text-[hsl(var(--qep-orange))] hover:underline">
+            <Link to="/fleet" className="text-[hsl(var(--qep-orange))] hover:underline">
               browse all machines
             </Link>
             .

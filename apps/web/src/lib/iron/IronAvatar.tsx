@@ -22,10 +22,14 @@ import ironIdlePng1x from "@/assets/iron/iron-idle-72.png";
 import ironIdlePng2x from "@/assets/iron/iron-idle-144.png";
 import ironIdleWebp1x from "@/assets/iron/iron-idle-72.webp";
 import ironIdleWebp2x from "@/assets/iron/iron-idle-144.webp";
-import ironThinking from "@/assets/iron/iron-thinking.png";
-import ironSpeaking from "@/assets/iron/iron-speaking.png";
-import ironListening from "@/assets/iron/iron-listening.png";
-import ironAlert from "@/assets/iron/iron-alert.png";
+import ironThinkingPng1x from "@/assets/iron/iron-thinking-72.png";
+import ironThinkingPng2x from "@/assets/iron/iron-thinking-144.png";
+import ironSpeakingPng1x from "@/assets/iron/iron-speaking-72.png";
+import ironSpeakingPng2x from "@/assets/iron/iron-speaking-144.png";
+import ironListeningPng1x from "@/assets/iron/iron-listening-72.png";
+import ironListeningPng2x from "@/assets/iron/iron-listening-144.png";
+import ironAlertPng1x from "@/assets/iron/iron-alert-72.png";
+import ironAlertPng2x from "@/assets/iron/iron-alert-144.png";
 
 import type { IronAvatarState } from "./types";
 
@@ -50,14 +54,37 @@ const idleAvatarSource: AvatarSource = {
   webpSrcSet: `${ironIdleWebp1x} 1x, ${ironIdleWebp2x} 2x`,
 };
 
+// No webp variants for these yet — no webp encoder was available when the
+// resized assets were generated. The 72/144px PNGs are still ~99% smaller
+// than the original 1080px exports.
+const thinkingAvatarSource: AvatarSource = {
+  src: ironThinkingPng1x,
+  srcSet: `${ironThinkingPng1x} 1x, ${ironThinkingPng2x} 2x`,
+};
+
+const speakingAvatarSource: AvatarSource = {
+  src: ironSpeakingPng1x,
+  srcSet: `${ironSpeakingPng1x} 1x, ${ironSpeakingPng2x} 2x`,
+};
+
+const listeningAvatarSource: AvatarSource = {
+  src: ironListeningPng1x,
+  srcSet: `${ironListeningPng1x} 1x, ${ironListeningPng2x} 2x`,
+};
+
+const alertAvatarSource: AvatarSource = {
+  src: ironAlertPng1x,
+  srcSet: `${ironAlertPng1x} 1x, ${ironAlertPng2x} 2x`,
+};
+
 const STATE_TO_SRC: Record<IronAvatarState, AvatarSource> = {
   idle: idleAvatarSource,
-  thinking: { src: ironThinking },
-  speaking: { src: ironSpeaking },
-  listening: { src: ironListening },
-  alert: { src: ironAlert },
-  flow_active: { src: ironThinking }, // reuse thinking pose during flow execution
-  success: { src: ironSpeaking }, // positive-affect pose; ring color carries the win
+  thinking: thinkingAvatarSource,
+  speaking: speakingAvatarSource,
+  listening: listeningAvatarSource,
+  alert: alertAvatarSource,
+  flow_active: thinkingAvatarSource, // reuse thinking pose during flow execution
+  success: speakingAvatarSource, // positive-affect pose; ring color carries the win
 };
 
 const STATE_TO_LABEL: Record<IronAvatarState, string> = {
