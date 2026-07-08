@@ -255,25 +255,30 @@ const notify_service_recipient: FlowAction = {
   async execute(params, ctx, deps) {
     if (deps.dry_run) return dryRunSkip(deps, "notify_service_recipient");
     const p = resolveParams(params, ctx);
-    // Wraps the existing service-lifecycle-notify pattern by inserting into
-    // crm_in_app_notifications scoped to the service writer.
+    // Notify the job's people: service_jobs carries advisor_id/technician_id
+    // (service_writer_id never existed — this action 42703ed on every run),
+    // and crm_in_app_notifications has no link/severity columns (metadata).
     const { data: job, error: jobErr } = await deps.admin
       .from("service_jobs")
-      .select("service_writer_id, customer_id")
+      .select("advisor_id, technician_id, customer_id")
       .eq("id", p.service_job_id)
       .maybeSingle();
     if (jobErr) return { status: "failed", error: jobErr.message, retryable: true };
-    if (!job?.service_writer_id) {
-      return { status: "skipped", reason: "no service writer assigned" };
+    const recipient = job?.advisor_id ?? job?.technician_id ?? null;
+    if (!recipient) {
+      return { status: "skipped", reason: "no advisor or technician assigned" };
     }
     const { error } = await deps.admin.from("crm_in_app_notifications").insert({
       workspace_id: deps.workspace_id,
-      user_id: job.service_writer_id,
+      user_id: recipient,
       kind: "service_update",
       title: p.title,
       body: p.body ?? null,
-      link: `/service/jobs/${p.service_job_id}`,
-      severity: p.severity ?? "info",
+      metadata: {
+        link: `/service/jobs/${p.service_job_id}`,
+        severity: p.severity ?? "info",
+        service_job_id: p.service_job_id,
+      },
     });
     if (error && !error.message?.includes("does not exist")) {
       return { status: "failed", error: error.message, retryable: true };

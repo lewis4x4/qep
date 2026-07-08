@@ -578,9 +578,27 @@ async function handleGenerate(
     });
   }
 
-  // Parts lines
+  // Parts lines — N3.1: quote at parts_catalog RETAIL (list price, tier and
+  // last-known fallbacks), not the requirement's unit_cost (usually unset,
+  // which quoted parts at $0). unit_cost remains the last-resort fallback.
+  const partNumbersForPricing = [...new Set((parts ?? []).map((p) => String(p.part_number ?? "").trim()).filter(Boolean))];
+  const retailByPart = new Map<string, number>();
+  if (partNumbersForPricing.length > 0) {
+    const { data: catalogRows } = await supabase
+      .from("parts_catalog")
+      .select("part_number, list_price, pricing_level_1, last_known_price")
+      .eq("workspace_id", job.workspace_id)
+      .in("part_number", partNumbersForPricing);
+    for (const row of catalogRows ?? []) {
+      const pn = String(row.part_number ?? "").trim();
+      const retail = Number(row.list_price ?? 0) || Number(row.pricing_level_1 ?? 0) || Number(row.last_known_price ?? 0);
+      if (pn && retail > 0 && !retailByPart.has(pn)) retailByPart.set(pn, retail);
+    }
+  }
+
   for (const part of (parts ?? [])) {
-    const unitCost = part.unit_cost ?? 0;
+    const retail = retailByPart.get(String(part.part_number ?? "").trim());
+    const unitPrice = retail ?? (part.unit_cost ?? 0);
     lines.push({
       workspace_id: job.workspace_id,
       line_type: "part",
@@ -588,8 +606,8 @@ async function handleGenerate(
         part.description ? ` — ${part.description}` : ""
       }`,
       quantity: part.quantity,
-      unit_price: unitCost,
-      extended_price: Math.round(part.quantity * unitCost * 100) / 100,
+      unit_price: unitPrice,
+      extended_price: Math.round(part.quantity * unitPrice * 100) / 100,
       part_requirement_id: part.id,
       sort_order: sortOrder++,
     });

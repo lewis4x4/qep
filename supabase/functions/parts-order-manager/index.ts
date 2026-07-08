@@ -56,6 +56,7 @@ interface Body {
   tender_type?: string | null;
   tender_amount?: number | null;
   override_credit_hold?: boolean;
+  service_job_id?: string | null;
   part_id?: string;
   from_location_id?: string;
   to_location_id?: string;
@@ -578,6 +579,11 @@ Deno.serve(async (req) => {
       tax: 0,
       shipping: 0,
       total,
+      // N3.1: counter orders sourced for a service job — delivery emits
+      // parts.item.received so the waiting job advances (m796 trigger).
+      ...(typeof body.service_job_id === "string" && body.service_job_id.trim()
+        ? { service_job_id: body.service_job_id.trim() }
+        : {}),
       ...tenderPatch,
     };
 

@@ -209,23 +209,32 @@ Deno.serve(async (req) => {
       );
     }
 
-    /** branch_id -> part -> qty */
+    /** branch_id -> part -> qty (N3.1: canonical parts_stock ledger,
+     * availability = on_hand − reserved; keyed by every branch handle the
+     * location carries so pick/transfer logic keeps matching job branch ids). */
     const stockByBranch = new Map<string, Map<string, number>>();
     if (partNumbers.length > 0) {
-      const { data: invRows } = await supabase
-        .from("parts_inventory")
-        .select("branch_id, part_number, qty_on_hand")
+      const { data: stockRows } = await supabase
+        .from("parts_stock")
+        .select("qty_on_hand, qty_reserved, branch_slug, parts:part_id(part_number), parts_locations:location_id(branch_id, branch_slug)")
         .eq("workspace_id", job.workspace_id)
-        .is("deleted_at", null)
-        .in("part_number", partNumbers);
+        .is("deleted_at", null);
 
-      for (const row of invRows ?? []) {
-        const bid = String(row.branch_id ?? "").trim();
-        const pn = String(row.part_number ?? "").trim();
-        if (!bid || !pn) continue;
-        if (!stockByBranch.has(bid)) stockByBranch.set(bid, new Map());
-        const m = stockByBranch.get(bid)!;
-        m.set(pn, Number(row.qty_on_hand ?? 0));
+      for (const row of (stockRows ?? []) as Array<Record<string, unknown>>) {
+        const part = Array.isArray(row.parts) ? row.parts[0] : row.parts;
+        const pn = String((part as { part_number?: string } | null)?.part_number ?? "").trim();
+        if (!pn || !partNumbers.includes(pn)) continue;
+        const location = Array.isArray(row.parts_locations) ? row.parts_locations[0] : row.parts_locations;
+        const available = Math.max(0, Number(row.qty_on_hand ?? 0) - Number(row.qty_reserved ?? 0));
+        const handles = [
+          String((location as { branch_id?: string } | null)?.branch_id ?? "").trim(),
+          String(row.branch_slug ?? (location as { branch_slug?: string } | null)?.branch_slug ?? "").trim(),
+        ].filter((handle) => handle.length > 0);
+        for (const bid of new Set(handles)) {
+          if (!stockByBranch.has(bid)) stockByBranch.set(bid, new Map());
+          const m = stockByBranch.get(bid)!;
+          m.set(pn, (m.get(pn) ?? 0) + available);
+        }
       }
     }
 
@@ -536,6 +545,117 @@ Deno.serve(async (req) => {
         need_by_date: row.needByIso,
       });
     }
+
+    // ── N3.1 additions ──────────────────────────────────────────────────
+    const reqById = new Map(
+      (requirements as Array<Record<string, unknown>>).map((r) => [
+        String(r.id),
+        {
+          pn: String(r.part_number ?? "").trim(),
+          qty: Math.max(1, Number(r.quantity ?? 1)),
+          vendorId: (r.vendor_id as string | null) ?? null,
+          unitCost: Number(r.unit_cost ?? 0),
+        },
+      ]),
+    );
+
+    // Reserve planned picks on the canonical ledger so counter sales can't
+    // take them off the shelf first. Best-effort: an unreservable part
+    // (no stock row) leaves the plan intact.
+    if (jobBranchId) {
+      for (const row of planned) {
+        if (row.actionType !== "pick") continue;
+        const req = reqById.get(String(row.requirementId));
+        if (!req?.pn) continue;
+        const { data: reserved, error: reserveErr } = await supabase.rpc("reserve_service_part", {
+          p_workspace_id: job.workspace_id,
+          p_branch_id: jobBranchId,
+          p_part_number: req.pn,
+          p_qty: req.qty,
+        });
+        if (reserveErr) console.error("reserve_service_part:", reserveErr.message);
+        else if (reserved !== true) console.warn(`reservation not placed for ${req.pn} (no stock row or insufficient)`);
+      }
+    }
+
+    // Vendor demand becomes a real PO: group order actions by vendor,
+    // create purchase_orders + lines linked to the requirement, and write
+    // the po_number back onto the action rows — which is exactly what the
+    // vendor escalator chases when missing.
+    const orderRowsByVendor = new Map<string, typeof planned>();
+    for (const row of planned) {
+      if (row.actionType !== "order") continue;
+      const key = row.vendorId ?? "unassigned";
+      if (!orderRowsByVendor.has(key)) orderRowsByVendor.set(key, []);
+      orderRowsByVendor.get(key)!.push(row);
+    }
+    const poByRequirement = new Map<string, string>();
+    for (const [vendorKey, rows] of orderRowsByVendor) {
+      const poNumber = `PO-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
+      const expectedAt = rows
+        .map((r) => r.expectedDelivery?.toISOString() ?? null)
+        .filter((d): d is string => d != null)
+        .sort()
+        .pop() ?? null;
+      const { data: po, error: poErr } = await supabase
+        .from("purchase_orders")
+        .insert({
+          workspace_id: job.workspace_id,
+          po_number: poNumber,
+          vendor_id: vendorKey === "unassigned" ? null : vendorKey,
+          status: "submitted",
+          order_type: "special_order",
+          expected_at: expectedAt,
+        })
+        .select("id")
+        .single();
+      if (poErr || !po) {
+        console.error("purchase order insert:", poErr?.message);
+        continue;
+      }
+      const { error: lineErr } = await supabase
+        .from("purchase_order_lines")
+        .insert(rows.map((r, index) => {
+          const req = reqById.get(String(r.requirementId));
+          return {
+            workspace_id: job.workspace_id,
+            purchase_order_id: po.id,
+            line_number: index + 1,
+            part_number: req?.pn ?? "",
+            qty_ordered: req?.qty ?? 1,
+            unit_cost_cents: Math.round((req?.unitCost ?? 0) * 100),
+            service_parts_requirement_id: r.requirementId,
+          };
+        }));
+      if (lineErr) console.error("purchase order lines insert:", lineErr.message);
+      for (const r of rows) poByRequirement.set(String(r.requirementId), poNumber);
+    }
+    if (poByRequirement.size > 0) {
+      for (const action of actionsToInsert) {
+        const poNumber = poByRequirement.get(String(action.requirement_id));
+        if (poNumber && action.action_type === "order") {
+          (action as Record<string, unknown>).po_reference = poNumber;
+        }
+      }
+    }
+
+    // Flag the job for reschedule when the latest planned arrival lands
+    // after the scheduled start (cleared by the receive path in m796).
+    if (job.scheduled_start_at) {
+      const latestArrival = planned
+        .filter((r) => r.actionType !== "pick")
+        .map((r) => r.expectedDelivery?.toISOString() ?? null)
+        .filter((d): d is string => d != null)
+        .sort()
+        .pop() ?? null;
+      if (latestArrival && latestArrival > String(job.scheduled_start_at)) {
+        await supabase
+          .from("service_jobs")
+          .update({ parts_delay_expected_at: latestArrival })
+          .eq("id", body.job_id);
+      }
+    }
+    // ── end N3.1 additions ──────────────────────────────────────────────
 
     if (actionsToInsert.length > 0) {
       const { error: insertErr } = await supabase
