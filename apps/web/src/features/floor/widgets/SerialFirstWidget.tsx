@@ -192,7 +192,9 @@ export function SerialFirstWidget() {
         {showResults && isError && (
           <div className="flex items-start gap-2 rounded-md border border-rose-500/30 bg-rose-500/5 p-2 text-xs text-rose-300">
             <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
-            <span>Lookup failed. Try again, or open the full machines list.</span>
+            <span>
+              Lookup failed. Try again{canOpenRecords ? ", or open the full machines list" : " in a moment"}.
+            </span>
           </div>
         )}
         {showResults && !isFetching && !isError && !topHit && (
