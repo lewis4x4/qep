@@ -8,6 +8,14 @@ From: BlackRock AI (Brian Lewis) · Prepared: July 4, 2026
 > Plain-text companion to the fillable PDF (`QEP_K3.1_FINANCE_DECISION_RELEASE_2026-07-04.pdf`).
 > Answer in the PDF, or reply inline here — either one unblocks finance.
 > Engineering backing: `QEP_223_K31_MIGRATION_PATH_WORKSHEET_2026-07-04.md` (Linear QEP-223 / K3.1 / BLK-FIN-MIGRATION-PATH).
+> **Added 2026-07-08:** the same working session should also clear the Stream M
+> (Revenue Convergence) decision register — six items covering company id-space,
+> invoice numbering per department, GL account mapping, finance charges/statement
+> cadence, deposit/trade-credit application order, and FET handling. See
+> `docs/finance/REVENUE-CONVERGENCE-BLUEPRINT.md` §10. Context: the 2026-07-08
+> codebase review verified equipment and parts sales currently never invoice at
+> all (order-to-cash exists for only 2 of 4 revenue streams) — the K3.1
+> QuickBooks reduction presupposes the native invoicing Stream M builds.
 
 ---
 

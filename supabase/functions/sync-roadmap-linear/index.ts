@@ -26,7 +26,7 @@ const LINEAR_API_URL = 'https://api.linear.app/graphql';
 interface QepRoadmapTask {
   id: string;
   task_id: string;
-  stream: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L';
+  stream: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M' | 'N';
   wave: string;
   title: string;
   description: string | null;
@@ -71,6 +71,8 @@ const STREAM_PROJECT_NAMES: Record<string, string> = {
   J: 'Stream J — Workforce',
   K: 'Stream K — Financials Re-architecture',
   L: 'Stream L — Rental Department',
+  M: 'Stream M — Revenue Convergence',
+  N: 'Stream N — Seam Completion',
 };
 
 const STATUS_TYPE_MAP: Record<string, string[]> = {

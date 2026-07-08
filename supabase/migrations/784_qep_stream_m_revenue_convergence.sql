@@ -1,38 +1,13 @@
 -- ============================================================================
--- DRAFT — Stream M seed (Revenue Convergence). DO NOT APPLY FROM docs/.
--- At approval: SPLIT INTO TWO migration files (enum ADD VALUE cannot be used
--- in the transaction that adds it, and db-push.mjs wraps each file in one
--- BEGIN..COMMIT): NNN_qep_stream_m_enum.sql (ALTER TYPE + COMMENT ON TYPE
--- only) and NNN+1_qep_stream_m_revenue_convergence.sql (the INSERT, dropping
--- the interior BEGIN/COMMIT). Then complete the sync checklist in
--- docs/reviews/drafts/README.md.
---
--- Purpose: promote the money-spine work from the 2026-07-08 full-codebase
---          review into a first-class qep_roadmap_tasks stream, following the
---          discovery → blueprint → stream process (precedent: migrations
---          650 [G-K], 768 [L]).
---
--- Sources:
---   - docs/reviews/2026-07-08-full-codebase-review.md  (discovery; Part 1)
---   - docs/reviews/2026-07-08-findings.json            (RF-xxx finding ids)
---   - docs/finance/REVENUE-CONVERGENCE-BLUEPRINT.md    (target contracts)
---
--- Ground truth this stream is built on (all adversarially verified):
---   - No code creates customer_invoices rows for equipment (RF-013) or parts
---     (RF-009); the equipment reversal foundation guards invoices nothing mints
---   - amount_paid is written only by the Stripe portal path — no staff-side
---     cash application exists (RF-012)
---   - Counter/QRM-anchored rental revenue never mirrors to AR and no rental/
---     equipment GL accounts exist (RF-003, RF-011)
---   - Parts/service/rental invoices all post tax 0 (RF-040); rental has no
---     rate floor (RF-010); two disconnected credit-hold systems (RF-038)
---
--- Safety envelope: append-only; adds enum label 'M'; idempotent upserts.
+-- Migration 784: QEP Stream M — Revenue Convergence source of truth
+-- Seeds the qep_roadmap_tasks rows for the stream whose enum label landed in
+-- the previous migration. Idempotent upserts (ON CONFLICT task_id DO UPDATE).
+-- Source: docs/reviews/2026-07-08-full-codebase-review.md +
+--         docs/reviews/2026-07-08-findings.json (RF ids) +
+--         docs/finance/REVENUE-CONVERGENCE-BLUEPRINT.md
+-- Red-lined and approved by Brian 2026-07-08 (PR #76 + follow-up session).
+-- No explicit BEGIN/COMMIT: the db-push runner wraps this file in one txn.
 -- ============================================================================
-
-ALTER TYPE qep_roadmap_stream ADD VALUE IF NOT EXISTS 'M' AFTER 'L';
-
-BEGIN;
 
 INSERT INTO qep_roadmap_tasks
   (task_id, stream, wave, title, description, ship_state, owner,
@@ -106,8 +81,3 @@ ON CONFLICT (task_id) DO UPDATE SET
   notes = EXCLUDED.notes,
   sort_order = EXCLUDED.sort_order,
   updated_at = now();
-
-COMMIT;
-
-COMMENT ON TYPE public.qep_roadmap_stream IS
-  'A=Iron Quote · B=Sales-Advisor Field Platform · C=IntelliDealer Cutover · D=Parity Validation+Decision Resolution · E=Platform Foundation · F=Decision Velocity · G=Parts Department · H=Service Department · I=Grapple-Truck Production · J=Workforce · K=Financials Re-architecture · L=Rental Department · M=Revenue Convergence';

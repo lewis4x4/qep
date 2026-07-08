@@ -1,30 +1,13 @@
 -- ============================================================================
--- DRAFT — Stream N seed (Seam Completion) + Stream L9 rows. DO NOT APPLY FROM docs/.
--- At approval: SPLIT INTO TWO migration files (enum ADD VALUE cannot be used
--- in the transaction that adds it, and db-push.mjs wraps each file in one
--- BEGIN..COMMIT): NNN_qep_stream_n_enum.sql (ALTER TYPE + COMMENT ON TYPE
--- only) and NNN+1_qep_stream_n_seam_completion.sql (the INSERTs incl. the
--- L9 rows, dropping the interior BEGIN/COMMIT). Then complete the sync
--- checklist in docs/reviews/drafts/README.md.
---
--- Purpose: promote the cross-module seam work from the 2026-07-08 full-codebase
---          review into a first-class qep_roadmap_tasks stream. The review's
---          systemic finding: schema + one side of a workflow ships; the
---          connecting writer, event producer, or cron never does (~40 cases).
---          Stream N owns the "between the streams" work no existing stream owns.
---          Rental-anchored seam defects are seeded as L9 rows in Stream L
---          (no enum change needed) so they stay with their owning stream.
---
--- Sources:
---   - docs/reviews/2026-07-08-full-codebase-review.md  (discovery; Parts 2-3, 5)
---   - docs/reviews/2026-07-08-findings.json            (RF-xxx finding ids)
---
--- Safety envelope: append-only; adds enum label 'N'; idempotent upserts.
+-- Migration 786: QEP Stream N — Seam Completion + Stream L9 rental seam rows
+-- Seeds the qep_roadmap_tasks rows for the stream whose enum label landed in
+-- the previous migration. Idempotent upserts (ON CONFLICT task_id DO UPDATE).
+-- Source: docs/reviews/2026-07-08-full-codebase-review.md +
+--         docs/reviews/2026-07-08-findings.json (RF ids) +
+--         docs/finance/REVENUE-CONVERGENCE-BLUEPRINT.md
+-- Red-lined and approved by Brian 2026-07-08 (PR #76 + follow-up session).
+-- No explicit BEGIN/COMMIT: the db-push runner wraps this file in one txn.
 -- ============================================================================
-
-ALTER TYPE qep_roadmap_stream ADD VALUE IF NOT EXISTS 'N' AFTER 'M';
-
-BEGIN;
 
 INSERT INTO qep_roadmap_tasks
   (task_id, stream, wave, title, description, ship_state, owner,
@@ -78,10 +61,10 @@ VALUES
 -- ---------------------------------------------------------------------------
 ('N0.1', 'N', 'N0', 'Verified defect burn-down (P0 batch from the review)',
  'The seven verified-live defects fixed in the review''s P0 pass: equipment-vision selecting nonexistent columns with swallowed errors; Floor "All machines" links 404ing; lucide-react in the preloaded vendor-ui chunk; 5.6MB avatar PNGs (→ 225KB); portal parts_orders missing crm_company_id (+ backfill migration); realtime publication missing all 12 dashboard/approval-subscribed tables; m046 follow-up reminder cron registered with invalid schedule syntax. Plus the double-scheduling investigation (GHA is the only live service-engine scheduler; docs/SERVICE_CRON.md inverts reality — update it, and do NOT disable GHA during the secret-rotation incident).',
- 'in_progress', 'Engineer',
+ 'shipped', 'Engineer',
  NULL,
- 'docs/reviews/2026-07-08-full-codebase-review.md (P0 list) | PR: review/p0-and-stream-seeds',
- '[2026-07-08] Fixes staged on branch review/p0-and-stream-seeds. Mark shipped when the PR merges AND migrations 780-782 are applied AND equipment-vision/portal-api are redeployed (deployment step is part of done, per the L8.c lesson).',
+ 'docs/reviews/2026-07-08-full-codebase-review.md (P0 list) | https://github.com/lewis4x4/qep/pull/76',
+ '[2026-07-08] SHIPPED: PR #76 squash-merged to main after high-effort red-line (10 findings addressed); migrations 780-782 applied to prod; equipment-vision (v49) + portal-api (v54) redeployed. Done-conditions met per the L8.c deployment-freshness lesson.',
  9201),
 
 ('N1.1', 'N', 'N1', 'Sales↔Service loop — make-ready, trade recon, service-to-sales persistence',
@@ -160,8 +143,3 @@ ON CONFLICT (task_id) DO UPDATE SET
   notes = EXCLUDED.notes,
   sort_order = EXCLUDED.sort_order,
   updated_at = now();
-
-COMMIT;
-
-COMMENT ON TYPE public.qep_roadmap_stream IS
-  'A=Iron Quote · B=Sales-Advisor Field Platform · C=IntelliDealer Cutover · D=Parity Validation+Decision Resolution · E=Platform Foundation · F=Decision Velocity · G=Parts Department · H=Service Department · I=Grapple-Truck Production · J=Workforce · K=Financials Re-architecture · L=Rental Department · M=Revenue Convergence · N=Seam Completion';

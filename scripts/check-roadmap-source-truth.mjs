@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const repoRoot = resolve(new URL('..', import.meta.url).pathname);
-const expectedStreams = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+const expectedStreams = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N'];
 const expectedProjectNames = {
   A: 'Stream A — Iron Quote',
   B: 'Stream B — Sales-Advisor Field Platform',
@@ -17,6 +17,8 @@ const expectedProjectNames = {
   J: 'Stream J — Workforce',
   K: 'Stream K — Financials Re-architecture',
   L: 'Stream L — Rental Department',
+  M: 'Stream M — Revenue Convergence',
+  N: 'Stream N — Seam Completion',
 };
 const expectedSeedCounts = { G: 14, H: 15, I: 8, J: 2, K: 4 };
 const expectedStreamLSeedCount = 9;
@@ -83,12 +85,12 @@ for (const [stream, projectName] of Object.entries(expectedProjectNames)) {
 
 assertIncludes(
   edgeForwardSync,
-  "stream: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L';",
+  "stream: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M' | 'N';",
   'edge sync QepRoadmapTask.stream type',
 );
 assertIncludes(
   roadmapPackageEdgeForwardSync,
-  "stream: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L';",
+  "stream: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M' | 'N';",
   'roadmap-linear-sync package edge sync QepRoadmapTask.stream type',
 );
 
@@ -110,6 +112,31 @@ const streamLMigration = read('supabase/migrations/768_qep_stream_l_rental_depar
   }
 }
 assertIncludes(streamLMigration, "ADD VALUE IF NOT EXISTS 'L' AFTER 'K'", 'migration 768 Stream L enum label');
+
+const streamMEnumMigration = read('supabase/migrations/783_qep_stream_m_enum.sql');
+assertIncludes(streamMEnumMigration, "ADD VALUE IF NOT EXISTS 'M' AFTER 'L'", 'migration 783 Stream M enum label');
+const streamMMigration = read('supabase/migrations/784_qep_stream_m_revenue_convergence.sql');
+{
+  const matches = [...streamMMigration.matchAll(/\('M\d+\.1',\s*'M'/g)];
+  if (matches.length !== 7) {
+    fail(`migration 784 expected 7 seed rows for Stream M, found ${matches.length}`);
+  }
+}
+assertIncludes(streamMMigration, 'BLK-FIN-WORKING-SESSION', 'migration 784 Stream M finance gate');
+
+const streamNEnumMigration = read('supabase/migrations/785_qep_stream_n_enum.sql');
+assertIncludes(streamNEnumMigration, "ADD VALUE IF NOT EXISTS 'N' AFTER 'M'", 'migration 785 Stream N enum label');
+const streamNMigration = read('supabase/migrations/786_qep_stream_n_seam_completion.sql');
+{
+  const nMatches = [...streamNMigration.matchAll(/\('N\d+\.1',\s*'N'/g)];
+  if (nMatches.length !== 9) {
+    fail(`migration 786 expected 9 seed rows for Stream N, found ${nMatches.length}`);
+  }
+  const l9Matches = [...streamNMigration.matchAll(/\('L9\.\d+',\s*'L'/g)];
+  if (l9Matches.length !== 5) {
+    fail(`migration 786 expected 5 Stream L9 rows, found ${l9Matches.length}`);
+  }
+}
 assertIncludes(streamLMigration, 'docs/rental/BLUEPRINT.md', 'migration 768 Stream L blueprint evidence link');
 
 if (failures.length > 0) {

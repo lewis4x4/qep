@@ -1,7 +1,7 @@
 # Stream M — Revenue Convergence Blueprint
 
 **Date:** 2026-07-08
-**Status:** DRAFT — pending Brian red-line; M0.1 items additionally gated on the finance working session (BLK-FIN-WORKING-SESSION)
+**Status:** RATIFIED 2026-07-08 (Brian red-line via PR #76 + follow-up session) — Stream M seeded as migrations 783/784. §10 decision-register items remain gated on the finance working session (BLK-FIN-WORKING-SESSION); everything else is unblocked engineering.
 **Discovery:** [docs/reviews/2026-07-08-full-codebase-review.md](../reviews/2026-07-08-full-codebase-review.md) Part 1 (finding IDs cited per section from [2026-07-08-findings.json](../reviews/2026-07-08-findings.json))
 **Precedent:** follows the discovery → blueprint → stream process used by Parts (G), Service (H), Financials (K), Rental (L)
 
