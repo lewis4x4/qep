@@ -2,6 +2,7 @@
  * PM / recall / repeat-failure suggestions for a machine.
  * Auth: user JWT
  */
+import { createClient } from "jsr:@supabase/supabase-js@2";
 import {
   requireServiceUser,
   SERVICE_TECHNICIAN_ROLES,
@@ -13,6 +14,8 @@ import {
 } from "../_shared/safe-cors.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { ingestSignal } from "../_shared/qrm-signals.ts";
+import type { RouterCtx } from "../_shared/crm-router-service.ts";
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   if (req.method === "OPTIONS") return optionsResponse(origin);
@@ -114,6 +117,33 @@ Deno.serve(async (req) => {
           "Multiple service events on this machine — consider root-cause inspection",
         severity: "low",
       });
+    }
+
+    // N1.1: recommendations used to die in this HTTP response — persist them
+    // to the signals bridge so the sales side (Pulse, Service-to-Sales) sees
+    // them. Best-effort: signal failures never block the scanner response.
+    try {
+      const admin = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        { auth: { persistSession: false } },
+      );
+      const signalCtx = { admin, workspaceId: auth.workspaceId } as unknown as RouterCtx;
+      for (const rec of recommendations) {
+        await ingestSignal(signalCtx, {
+          kind: "service_due",
+          severity: rec.severity === "high" ? "high" : rec.severity === "medium" ? "medium" : "low",
+          source: "service-upsell-scanner",
+          title: `Upsell: ${rec.type.replace(/_/g, " ")}`,
+          description: rec.message,
+          entityType: "equipment",
+          entityId: machineId,
+          dedupeKey: `upsell:${machineId}:${rec.type}`,
+          payload: { machine_id: machineId, type: rec.type, job_id: body.job_id ?? null },
+        });
+      }
+    } catch (signalErr) {
+      console.error("service-upsell-scanner signal persistence:", signalErr);
     }
 
     return safeJsonOk({ machine_id: machineId, recommendations }, origin);

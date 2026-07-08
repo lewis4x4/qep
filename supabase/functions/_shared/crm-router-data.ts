@@ -1116,12 +1116,14 @@ async function resolveStage(
     isClosedLost: boolean;
   } | null
 > {
+  // crm_deal_stages has no deleted_at column (stages are seeded rows, never
+  // soft-deleted) — filtering on it 42703'd every resolveStage call, which
+  // made router deal-creation dead since the filter shipped.
   const { data, error } = await ctx.callerDb
     .from("crm_deal_stages")
     .select("id, is_closed_won, is_closed_lost")
     .eq("workspace_id", ctx.workspaceId)
     .eq("id", stageId)
-    .is("deleted_at", null)
     .maybeSingle();
 
   if (error) throw error;

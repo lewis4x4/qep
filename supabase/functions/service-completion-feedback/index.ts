@@ -17,7 +17,10 @@ import {
   formatVectorLiteral,
 } from "../_shared/openai-embeddings.ts";
 
+import { createClient } from "jsr:@supabase/supabase-js@2";
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { ingestSignal } from "../_shared/qrm-signals.ts";
+import type { RouterCtx } from "../_shared/crm-router-service.ts";
 interface FeedbackRequest {
   job_id: string;
   actual_problem_fixed?: boolean;
@@ -94,6 +97,36 @@ Deno.serve(async (req) => {
     if (fbErr) {
       console.error("feedback upsert error:", fbErr);
       return safeJsonError(fbErr.message, 400, origin);
+    }
+
+    // N1.1: tech upsell suggestions used to terminate in the feedback row —
+    // persist each to the signals bridge so sales sees them. Best-effort.
+    if (Array.isArray(body.upsell_suggestions) && body.upsell_suggestions.length > 0 && job.machine_id) {
+      try {
+        const admin = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+          { auth: { persistSession: false } },
+        );
+        const signalCtx = { admin, workspaceId: job.workspace_id } as unknown as RouterCtx;
+        for (const [index, suggestion] of body.upsell_suggestions.entries()) {
+          const text = String(suggestion ?? "").trim();
+          if (!text) continue;
+          await ingestSignal(signalCtx, {
+            kind: "service_due",
+            severity: "medium",
+            source: "service-completion-feedback",
+            title: "Tech upsell suggestion",
+            description: text.slice(0, 500),
+            entityType: "equipment",
+            entityId: job.machine_id as string,
+            dedupeKey: `upsell-feedback:${body.job_id}:${index}`,
+            payload: { job_id: body.job_id, machine_id: job.machine_id, suggested_by: userId },
+          });
+        }
+      } catch (signalErr) {
+        console.error("service-completion-feedback signal persistence:", signalErr);
+      }
     }
 
     // Persist serial-specific note as machine knowledge

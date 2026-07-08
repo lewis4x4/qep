@@ -1,10 +1,13 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
-import { ArrowUpRight, Loader2, TrendingUp } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowUpRight, Loader2, PlusCircle, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import { buildAccountCommandHref } from "../lib/account-command";
+import { createCrmDealViaRouter } from "../lib/qrm-router-api";
+import { listCrmDealStages } from "../lib/qrm-deals-api";
+import { crmSupabase } from "../lib/qrm-supabase";
 import {
   buildServiceToSalesBoard,
   type ServiceToSalesFleetSignal,
@@ -121,6 +124,7 @@ function normalizeFleetSignals(rows: unknown): ServiceToSalesFleetSignal[] {
 }
 
 export function ServiceToSalesPage() {
+  const navigate = useNavigate();
   const boardQuery = useQuery({
     queryKey: ["qrm", "service-to-sales"],
     queryFn: async () => {
@@ -154,6 +158,31 @@ export function ServiceToSalesPage() {
     },
     staleTime: 60_000,
     refetchInterval: 120_000,
+  });
+
+  // N1.1: one-click replacement opportunity — deal created via the QRM
+  // router at the earliest open stage, machine linked as the subject unit.
+  const createOpportunityMutation = useMutation({
+    mutationFn: async (input: { companyId: string; machineId: string; machineName: string }) => {
+      const stages = await listCrmDealStages();
+      const openStage = stages
+        .filter((stage) => !stage.isClosedWon && !stage.isClosedLost)
+        .sort((a, b) => a.sortOrder - b.sortOrder)[0];
+      if (!openStage) throw new Error("No open pipeline stage available");
+      const deal = await createCrmDealViaRouter({
+        name: `Replacement — ${input.machineName}`,
+        stageId: openStage.id,
+        companyId: input.companyId,
+      });
+      const { error: linkError } = await crmSupabase
+        .from("crm_deal_equipment")
+        .insert({ deal_id: deal.id, equipment_id: input.machineId, role: "subject" });
+      if (linkError) {
+        console.error("service-to-sales machine link:", linkError.message);
+      }
+      return deal;
+    },
+    onSuccess: (deal) => navigate(`/qrm/deals/${deal.id}`),
   });
 
   const draftMutation = useMutation({
@@ -298,6 +327,23 @@ export function ServiceToSalesPage() {
                       >
                         {drafting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <TrendingUp className="mr-1 h-3 w-3" />}
                         Draft
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          createOpportunityMutation.mutate({
+                            companyId: item.companyId,
+                            machineId: item.machineId,
+                            machineName: item.machineName,
+                          })}
+                        disabled={createOpportunityMutation.isPending}
+                        className="h-7 px-2 font-mono text-[10.5px] uppercase tracking-[0.1em]"
+                      >
+                        {createOpportunityMutation.isPending
+                          ? <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                          : <PlusCircle className="mr-1 h-3 w-3" />}
+                        Create Opportunity
                       </Button>
                     </div>
                   </div>

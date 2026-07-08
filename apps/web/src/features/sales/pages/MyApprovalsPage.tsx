@@ -35,6 +35,7 @@ import {
   type MyApprovalStatus,
 } from "../hooks/useMyApprovals";
 import { withdrawApprovalCase } from "@/features/quote-builder/lib/quote-api";
+import { TradeReconApprovalsCard } from "../components/TradeReconApprovalsCard";
 import { toast } from "@/hooks/use-toast";
 import {
   DropdownMenu,
@@ -229,6 +230,12 @@ export function MyApprovalsPage() {
           })}
         </div>
       )}
+
+      {/* N1.1: manager-facing trade-recon approvals ride the same page.
+          Renders nothing when no keep_recondition trades are pending. */}
+      <div className="px-4 pt-3">
+        <TradeReconApprovalsCard />
+      </div>
 
       {/* Body */}
       <div className="px-4 py-3" aria-busy={isLoading}>
