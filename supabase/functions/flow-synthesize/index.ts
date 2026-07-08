@@ -36,6 +36,7 @@ const ACTION_CATALOG = [
   "update_deal_stage", "tag_account", "create_exception", "recompute_health_score",
   "notify_service_recipient", "escalate_parts_vendor", "create_audit_event",
   "request_approval",
+  "create_traffic_ticket", "open_internal_service_job",
 ];
 
 const EVENT_TAXONOMY = [
@@ -44,7 +45,11 @@ const EVENT_TAXONOMY = [
   "quote.created", "quote.sent", "quote.expiring_soon", "quote.expired",
   "service.job.created", "service.job.delayed", "service.job.completed",
   "parts.item.received", "parts.order.status.changed",
-  "rental.nearing_end", "rental.created",
+  "rental.nearing_end", "rental.reservation.created", "rental.contract.opened",
+  "rental.contract.exchanged", "rental.off_rent", "rental.returned",
+  "rental.inspected", "rental.damage.assessed", "rental.cycle.billed",
+  "rental.overdue", "rental.coi.expiring", "rental.unit.idle_aging",
+  "rental.rpo.threshold_reached", "rental.rerent.sourced",
   "invoice.aged_past_threshold", "ar.block.created",
   "equipment.hours_crossed_interval",
   "price_file.imported",

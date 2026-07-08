@@ -35,6 +35,7 @@ import { rentalNearingEnd } from "../_shared/flow-workflows/rental-nearing-end.t
 import { competitorSignalFromVoice } from "../_shared/flow-workflows/competitor-signal-from-voice.ts";
 import { quoteManagerApproval } from "../_shared/flow-workflows/quote-manager-approval.ts";
 import { IRON_FLOW_DEFINITIONS } from "../_shared/flow-workflows/iron-flows.ts";
+import { RENTAL_FLOW_DEFINITIONS } from "../_shared/flow-workflows/rental-lifecycle-flows.ts";
 
 /** All workflow files known to this build. Auto-synced into the DB on every tick. */
 const REGISTERED_WORKFLOWS: FlowWorkflowDefinition[] = [
@@ -51,6 +52,8 @@ const REGISTERED_WORKFLOWS: FlowWorkflowDefinition[] = [
   quoteManagerApproval,
   // Wave 7 Iron Companion conversational flows (6 v1 flows)
   ...IRON_FLOW_DEFINITIONS,
+  // Stream L / L4 rental lifecycle flows (7 flows; rental-nearing-end above)
+  ...RENTAL_FLOW_DEFINITIONS,
 ];
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";

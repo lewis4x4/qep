@@ -355,6 +355,81 @@ const request_approval: FlowAction = {
   },
 };
 
+/* ─── 13. create_traffic_ticket (Stream L / L4) ─────────────────────────── */
+
+const create_traffic_ticket: FlowAction = {
+  key: "create_traffic_ticket",
+  description: "Create a rental delivery/pickup haul ticket on the traffic board",
+  affects_modules: ["logistics", "rental"],
+  idempotency_key_template:
+    "traffic:${params.rental_contract_id}:${params.direction}:${event.flow_event_type}",
+  async execute(params, ctx, deps) {
+    if (deps.dry_run) return dryRunSkip(deps, "create_traffic_ticket");
+    const p = resolveParams(params, ctx);
+
+    // Stock label from the unit when available; dispatch completes the rest.
+    let stockNumber = String(p.stock_number ?? "");
+    if (!stockNumber && p.equipment_id) {
+      const { data: unit } = await deps.admin
+        .from("crm_equipment")
+        .select("year, make, model, name")
+        .eq("id", p.equipment_id)
+        .maybeSingle();
+      stockNumber = unit
+        ? [unit.year, unit.make, unit.model].filter(Boolean).join(" ") || unit.name || String(p.equipment_id)
+        : String(p.equipment_id);
+    }
+    const direction = p.direction === "delivery" ? "delivery" : "pickup";
+
+    const { data, error } = await deps.admin.from("traffic_tickets").insert({
+      workspace_id: deps.workspace_id,
+      equipment_id: p.equipment_id ?? null,
+      stock_number: stockNumber || "rental unit",
+      from_location: p.from_location ?? (direction === "delivery" ? "Rental yard" : "Customer site"),
+      to_location: p.to_location ?? (direction === "delivery" ? "Customer site" : "Rental yard"),
+      to_contact_name: p.to_contact_name ?? "Dispatch to assign",
+      to_contact_phone: p.to_contact_phone ?? "TBD",
+      shipping_date: p.shipping_date ?? new Date().toISOString().slice(0, 10),
+      department: "rental",
+      billing_comments:
+        p.billing_comments ??
+        `Rental ${direction} · contract ${p.contract_number ?? p.rental_contract_id ?? ""} (flow ${ctx.event.flow_event_type})`,
+      ticket_type: "rental",
+      promised_delivery_at: p.promised_at ?? null,
+    }).select("id").single();
+    if (error) return { status: "failed", error: error.message, retryable: true };
+    return { status: "succeeded", result: { traffic_ticket_id: data?.id, direction } };
+  },
+};
+
+/* ─── 14. open_internal_service_job (Stream L / L4, H10 seam) ───────────── */
+
+const open_internal_service_job: FlowAction = {
+  key: "open_internal_service_job",
+  description: "Open an internal H10 service job (rental-fleet maintenance) on a machine",
+  affects_modules: ["service", "rental"],
+  idempotency_key_template: "svc:${params.equipment_id}:${event.event_id}",
+  async execute(params, ctx, deps) {
+    if (deps.dry_run) return dryRunSkip(deps, "open_internal_service_job");
+    const p = resolveParams(params, ctx);
+    if (!p.equipment_id) return { status: "skipped", reason: "no equipment_id in params" };
+
+    const renterFault = p.renter_fault === true || p.renter_fault === "true";
+    const { data, error } = await deps.admin.from("service_jobs").insert({
+      workspace_id: deps.workspace_id,
+      machine_id: p.equipment_id,
+      request_type: "internal",
+      customer_problem_summary: p.summary ?? `Flow-opened rental fleet job (${ctx.event.flow_event_type})`,
+      service_internal_work_class: p.work_class ?? "rental_fleet_maintenance",
+      service_internal_cost_destination: renterFault ? null : (p.cost_destination ?? "rental_unit"),
+      renter_fault_billable: renterFault,
+      internal_cost_posting_status: renterFault ? "not_applicable" : "pending",
+    }).select("id").single();
+    if (error) return { status: "failed", error: error.message, retryable: true };
+    return { status: "succeeded", result: { service_job_id: data?.id } };
+  },
+};
+
 /* ─── Registry export ───────────────────────────────────────────────────── */
 
 export const ACTION_REGISTRY: Record<string, FlowAction> = {
@@ -370,6 +445,9 @@ export const ACTION_REGISTRY: Record<string, FlowAction> = {
   escalate_parts_vendor,
   create_audit_event,
   request_approval,
+  // Stream L / L4 rental seam actions
+  create_traffic_ticket,
+  open_internal_service_job,
   // Wave 7 Iron Companion actions (6 v1 flows)
   ...IRON_ACTION_REGISTRY,
 };
