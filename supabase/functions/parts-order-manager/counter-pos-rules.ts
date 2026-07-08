@@ -6,6 +6,9 @@ export type ChargeAuthorizationStatus =
   | "exec_approved"
   | "pending_ar_approval"
   | "denied";
+// Cash-class tender instruments (M2.1). "cash" classification covers every
+// pay-now instrument; charge-class tickets carry no tender at the counter.
+export type TenderType = "cash" | "check" | "card" | "ach" | "wire";
 
 export type CounterTenderState = {
   order_source?: string | null;
@@ -13,6 +16,8 @@ export type CounterTenderState = {
   payment_classification?: string | null;
   payment_status?: string | null;
   charge_authorization_status?: string | null;
+  tender_type?: string | null;
+  tender_amount?: number | string | null;
 };
 
 export type CounterTenderPatch = {
@@ -21,6 +26,8 @@ export type CounterTenderPatch = {
   payment_reference: string | null;
   charge_authorization_status: ChargeAuthorizationStatus;
   charge_authorization_note: string | null;
+  tender_type: TenderType | null;
+  tender_amount: number | null;
 };
 
 const releaseStatuses = new Set([
@@ -73,6 +80,21 @@ function chargeStatusValue(value: unknown): ChargeAuthorizationStatus | null {
   return null;
 }
 
+function tenderTypeValue(value: unknown): TenderType | null {
+  const raw = stringValue(value);
+  if (raw === "cash" || raw === "check" || raw === "card" || raw === "ach" || raw === "wire") {
+    return raw;
+  }
+  return null;
+}
+
+function tenderAmountValue(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) return null;
+  return Math.round(numeric * 100) / 100;
+}
+
 export function normalizeCounterTenderInput(
   raw: Record<string, unknown>,
   current?: CounterTenderState | null,
@@ -105,6 +127,15 @@ export function normalizeCounterTenderInput(
   const chargeAuthorizationNote =
     stringValue(raw.charge_authorization_note)?.slice(0, 500) ?? null;
 
+  const requestedTenderType = tenderTypeValue(raw.tender_type);
+  if (stringValue(raw.tender_type) && !requestedTenderType) {
+    throw new CounterPosRuleError("tender_type must be cash, check, card, ach, or wire");
+  }
+  const requestedTenderAmount = tenderAmountValue(raw.tender_amount);
+  if (raw.tender_amount != null && raw.tender_amount !== "" && requestedTenderAmount == null) {
+    throw new CounterPosRuleError("tender_amount must be a non-negative number");
+  }
+
   if (paymentClassification === "cash") {
     const paymentStatus = requestedPaymentStatus ??
       paymentStatusValue(current?.payment_status) ??
@@ -112,12 +143,19 @@ export function normalizeCounterTenderInput(
     if (paymentStatus === "charge_account") {
       throw new CounterPosRuleError("Cash-class tickets must be unpaid or paid");
     }
+    const tenderType = requestedTenderType ??
+      tenderTypeValue(current?.tender_type) ??
+      (paymentStatus === "paid" ? "cash" : null);
+    const tenderAmount = requestedTenderAmount ??
+      tenderAmountValue(current?.tender_amount);
     return {
       payment_classification: "cash",
       payment_status: paymentStatus,
       payment_reference: paymentReference,
       charge_authorization_status: "not_applicable",
       charge_authorization_note: null,
+      tender_type: tenderType,
+      tender_amount: tenderAmount,
     };
   }
 
@@ -130,6 +168,8 @@ export function normalizeCounterTenderInput(
     payment_reference: paymentReference,
     charge_authorization_status: chargeAuthorizationStatus,
     charge_authorization_note: chargeAuthorizationNote,
+    tender_type: null,
+    tender_amount: null,
   };
 }
 

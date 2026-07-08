@@ -10,6 +10,14 @@ import { invokeCreateInternalOrder, invokeSubmitInternalOrder } from "../lib/par
 
 type Line = { part_number: string; description: string; quantity: string; unit_price: string };
 type PaymentClassification = "cash" | "charge";
+type TenderType = "cash" | "check" | "card" | "ach";
+
+const TENDER_TYPES: Array<{ value: TenderType; label: string }> = [
+  { value: "cash", label: "Cash" },
+  { value: "check", label: "Check" },
+  { value: "card", label: "Card" },
+  { value: "ach", label: "ACH" },
+];
 
 export function CounterSaleForm() {
   const navigate = useNavigate();
@@ -22,6 +30,8 @@ export function CounterSaleForm() {
   const [creditApproved, setCreditApproved] = useState(false);
   const [paymentReference, setPaymentReference] = useState("");
   const [chargeNote, setChargeNote] = useState("");
+  const [tenderType, setTenderType] = useState<TenderType>("cash");
+  const [tenderAmount, setTenderAmount] = useState("");
   const [lines, setLines] = useState<Line[]>([
     { part_number: "", description: "", quantity: "1", unit_price: "" },
   ]);
@@ -61,6 +71,8 @@ export function CounterSaleForm() {
         payment_reference: paymentReference.trim() || null,
         charge_authorization_status: "not_applicable",
         charge_authorization_note: null,
+        tender_type: tenderType,
+        tender_amount: tenderAmount.trim() ? Number(tenderAmount) : null,
       };
     }
 
@@ -215,6 +227,42 @@ export function CounterSaleForm() {
             Charge
           </Button>
         </div>
+        {paymentClassification === "cash" && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-[10px] text-muted-foreground" htmlFor="counter-tender-type">
+                Tender type
+              </label>
+              <select
+                id="counter-tender-type"
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={tenderType}
+                onChange={(e) => setTenderType(e.target.value as TenderType)}
+              >
+                {TENDER_TYPES.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] text-muted-foreground" htmlFor="counter-tender-amount">
+                Amount tendered
+              </label>
+              <Input
+                id="counter-tender-amount"
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={tenderAmount}
+                onChange={(e) => setTenderAmount(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
         <div className="grid gap-3 sm:grid-cols-2">
           {paymentClassification === "cash" ? (
             <label className="flex min-h-9 items-center gap-2 rounded-md border border-border/60 px-3 text-sm">

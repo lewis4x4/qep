@@ -476,16 +476,17 @@ function inferRevenueAccount(
   credentials: QuickBooksCredentials,
   invoiceType?: string | null,
 ): string {
-  // Stream-typed routing wins over description inference (blueprint §5).
-  if (invoiceType === "equipment" && credentials.equipment_revenue_account_id) {
-    return credentials.equipment_revenue_account_id;
-  }
   const lower = description.toLowerCase();
   if (lower.includes("labor")) return credentials.service_revenue_account_id;
   if (lower.includes("haul") || lower.includes("transport")) return credentials.haul_revenue_account_id;
   if (lower.includes("shop supplies")) return credentials.shop_supplies_account_id;
   if (lower.includes("service total")) return credentials.service_revenue_account_id;
-  if (invoiceType === "equipment") return credentials.misc_revenue_account_id;
+  // Stream-typed routing beats the parts-shaped-description fallback
+  // (blueprint §5): equipment lines would otherwise regex-match as parts.
+  if (invoiceType === "equipment") {
+    return credentials.equipment_revenue_account_id ?? credentials.misc_revenue_account_id;
+  }
+  if (invoiceType === "parts") return credentials.parts_revenue_account_id;
   if (/^[a-z0-9-]+\s+—/i.test(description) || /^[a-z0-9-]+$/i.test(description.split(" ")[0] ?? "")) {
     return credentials.parts_revenue_account_id;
   }

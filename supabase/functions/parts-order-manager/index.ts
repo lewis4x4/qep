@@ -19,6 +19,8 @@ import {
   type CounterTenderState,
   normalizeCounterTenderInput,
 } from "./counter-pos-rules.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
+import { generateInvoiceForPartsOrder } from "../_shared/parts-invoice.ts";
 
 type Action =
   | "create_internal_order"
@@ -51,6 +53,8 @@ interface Body {
   payment_reference?: string | null;
   charge_authorization_status?: string;
   charge_authorization_note?: string | null;
+  tender_type?: string | null;
+  tender_amount?: number | null;
   part_id?: string;
   from_location_id?: string;
   to_location_id?: string;
@@ -1022,7 +1026,41 @@ Deno.serve(async (req) => {
       metadata: patch,
     });
 
-    return safeJsonOk({ order: updated }, origin);
+    // M2.1: the delivered transition is the parts order-to-cash moment —
+    // write the customer_invoices + parts_invoice_lines rows. Zero-blocking:
+    // a failed invoice never rolls back the delivered status; it dead-letters
+    // to exception_queue('parts_billing_failed') for the finance desk.
+    let invoiceSummary: Record<string, unknown> | null = null;
+    if (newStatus === "delivered") {
+      try {
+        // The role gate (requireServiceUser + SERVICE_PARTS_ROLES) already
+        // authorized this transition; the invoice writer needs a true
+        // service client because quickbooks_gl_sync_jobs and flow_events
+        // are service-role-write-only under RLS.
+        const invoiceAdmin = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+          { auth: { persistSession: false } },
+        );
+        const result = await generateInvoiceForPartsOrder(invoiceAdmin, orderId);
+        invoiceSummary = result as unknown as Record<string, unknown>;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("parts-order-manager invoice generation:", message);
+        invoiceSummary = { status: "failed", error: message };
+        await supabase.rpc("enqueue_exception", {
+          p_source: "parts_billing_failed",
+          p_title: `Parts invoicing failed for order ${orderId}`.slice(0, 200),
+          p_severity: "error",
+          p_detail: message.slice(0, 1000),
+          p_payload: { parts_order_id: orderId },
+          p_entity_table: "parts_orders",
+          p_entity_id: orderId,
+        });
+      }
+    }
+
+    return safeJsonOk({ order: updated, invoice: invoiceSummary }, origin);
   }
 
   // ── PICK ORDER LINE ─────────────────────────────────────────────────

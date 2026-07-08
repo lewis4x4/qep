@@ -18,6 +18,8 @@ export async function invokeCreateInternalOrder(body: {
   payment_reference?: string | null;
   charge_authorization_status?: string;
   charge_authorization_note?: string | null;
+  tender_type?: string | null;
+  tender_amount?: number | null;
 }) {
   const { data, error } = await supabase.functions.invoke("parts-order-manager", {
     body: { action: "create_internal_order", ...body },
@@ -45,6 +47,8 @@ export async function invokeUpdateInternalOrder(
     payment_reference?: string | null;
     charge_authorization_status?: string;
     charge_authorization_note?: string | null;
+    tender_type?: string | null;
+    tender_amount?: number | null;
   },
 ) {
   const { data, error } = await supabase.functions.invoke("parts-order-manager", {
