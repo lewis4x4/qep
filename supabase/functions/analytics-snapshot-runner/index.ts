@@ -328,7 +328,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const startedAt = new Date();
-  const results: { workspace: string; metric: string; ok: boolean; error?: string }[] = [];
+  const results: { workspace: string; metric: string; ok: boolean; skipped?: boolean; error?: string }[] = [];
 
   try {
     // 1. Refresh materialized views (best-effort; failure does not block snapshots)
@@ -356,7 +356,11 @@ Deno.serve(async (req: Request) => {
       for (const def of definitions) {
         const computer = COMPUTERS[def.metric_key];
         if (!computer) {
-          results.push({ workspace, metric: def.metric_key, ok: false, error: "no_computer" });
+          // Not an error: the metric is registered + enabled but has no
+          // implementation yet (no hardcoded computer and no formula_sql).
+          // Classify as skipped so it never inflates the failure count or
+          // marks the service_cron_runs audit row failed.
+          results.push({ workspace, metric: def.metric_key, ok: false, skipped: true, error: "not_implemented" });
           continue;
         }
         try {
@@ -385,7 +389,8 @@ Deno.serve(async (req: Request) => {
     }
 
     const okCount = results.filter((r) => r.ok).length;
-    const failCount = results.length - okCount;
+    const skippedCount = results.filter((r) => r.skipped).length;
+    const failCount = results.filter((r) => !r.ok && !r.skipped).length;
     const finishedAt = new Date();
 
     // Audit row in service_cron_runs (best-effort)
@@ -397,7 +402,7 @@ Deno.serve(async (req: Request) => {
         finished_at: finishedAt.toISOString(),
         ok: failCount === 0,
         error: failCount > 0 ? `${failCount} computations failed` : null,
-        metadata: { ok: okCount, failed: failCount, results },
+        metadata: { ok: okCount, skipped: skippedCount, failed: failCount, results },
       });
     } catch { /* swallow */ }
 
@@ -405,6 +410,7 @@ Deno.serve(async (req: Request) => {
       ok: true,
       duration_ms: finishedAt.getTime() - startedAt.getTime(),
       snapshots_written: okCount,
+      skipped: skippedCount,
       failed: failCount,
       results,
     }), {
