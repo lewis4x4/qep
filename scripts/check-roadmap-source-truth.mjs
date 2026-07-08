@@ -55,6 +55,16 @@ const enumValues = collectRoadmapStreamEnumValues();
 for (const stream of expectedStreams) {
   if (!enumValues.has(stream)) fail(`qep_roadmap_stream enum is missing ${stream}`);
 }
+// A migration adding a stream enum value without registering it here (and in
+// the Linear sync maps below) means the new stream silently never mirrors to
+// Linear — fail loudly instead (see docs/reviews/drafts/README.md).
+for (const value of enumValues) {
+  if (!expectedStreams.includes(value)) {
+    fail(
+      `unregistered stream enum value '${value}' — extend expectedStreams/expectedProjectNames here and update the roadmap-linear-sync maps`,
+    );
+  }
+}
 
 const statusMap = read('roadmap-linear-sync/scripts/lib/status-map.mjs');
 const regen = read('roadmap-linear-sync/scripts/regen-unified-roadmap.mjs');

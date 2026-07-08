@@ -4,11 +4,11 @@ import { channelNameForRole, tablesForIronRole } from "./realtime-tables";
 describe("tablesForIronRole", () => {
   test("iron_manager covers pipeline + approvals + aging sources", () => {
     const tables = tablesForIronRole("iron_manager");
-    expect(tables).toContain("crm_deals");
+    expect(tables).toContain("qrm_deals");
     expect(tables).toContain("prospecting_kpis");
     expect(tables).toContain("demos");
     expect(tables).toContain("trade_valuations");
-    expect(tables).toContain("crm_equipment");
+    expect(tables).toContain("qrm_equipment");
     expect(tables).toContain("manufacturer_incentives");
     expect(tables).toContain("qrm_predictions");
   });
@@ -16,7 +16,7 @@ describe("tablesForIronRole", () => {
   test("iron_advisor is narrow — own deals + touchpoints + kpis", () => {
     const tables = tablesForIronRole("iron_advisor");
     expect(tables).toEqual([
-      "crm_deals",
+      "qrm_deals",
       "follow_up_touchpoints",
       "prospecting_kpis",
     ]);
@@ -25,10 +25,18 @@ describe("tablesForIronRole", () => {
   test("iron_woman covers order processing surface", () => {
     const tables = tablesForIronRole("iron_woman");
     expect(tables).toEqual([
-      "crm_deals",
+      "qrm_deals",
       "deposits",
       "equipment_intake",
     ]);
+  });
+
+  test("subscription targets are base tables, never the crm_* compatibility views", () => {
+    const roles = ["iron_manager", "iron_advisor", "iron_woman", "iron_man"] as const;
+    for (const role of roles) {
+      expect(tablesForIronRole(role)).not.toContain("crm_deals");
+      expect(tablesForIronRole(role)).not.toContain("crm_equipment");
+    }
   });
 
   test("iron_man covers prep / demo / returns", () => {

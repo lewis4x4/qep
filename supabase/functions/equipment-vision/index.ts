@@ -272,6 +272,7 @@ Be specific about make/model when identifiable. Note any brand logos, model numb
 
     let matchingInventory: unknown[] = [];
     let marketValuations: unknown[] = [];
+    let matchLookupDegraded = false;
 
     const makeModel = [analysis.equipment.make, analysis.equipment.model]
       .filter(Boolean)
@@ -281,7 +282,11 @@ Be specific about make/model when identifiable. Note any brand logos, model numb
       const [inventoryResult, valuationResult] = await Promise.all([
         callerDb
           .from("crm_equipment")
-          .select("id, name, make, model, year, serial_number, condition, status, list_price, rental_rate_daily")
+          // NOTE: purchase_price / current_market_value / daily_rental_rate are
+          // column-revoked from authenticated (migration 237) — this query runs
+          // under the caller's JWT, so selecting them would 42501 for every user.
+          // Financial fields require a service-role path with role-gated shaping.
+          .select("id, name, make, model, year, serial_number, condition, availability")
           .or(`make.ilike.%${analysis.equipment.make ?? ""}%,model.ilike.%${analysis.equipment.model ?? ""}%`)
           .is("deleted_at", null)
           .limit(5),
@@ -293,6 +298,15 @@ Be specific about make/model when identifiable. Note any brand logos, model numb
           .limit(5),
       ]);
 
+      if (inventoryResult.error) {
+        console.error("Inventory match query error:", inventoryResult.error.message);
+        matchLookupDegraded = true;
+      }
+      if (valuationResult.error) {
+        console.error("Market valuation query error:", valuationResult.error.message);
+        matchLookupDegraded = true;
+      }
+
       matchingInventory = inventoryResult.data ?? [];
       marketValuations = valuationResult.data ?? [];
     }
@@ -303,6 +317,7 @@ Be specific about make/model when identifiable. Note any brand logos, model numb
       crm_matches: {
         inventory: matchingInventory,
         valuations: marketValuations,
+        degraded: matchLookupDegraded,
       },
     }, origin);
   } catch (err) {

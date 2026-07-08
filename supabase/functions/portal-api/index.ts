@@ -1684,10 +1684,29 @@ Deno.serve(async (req) => {
             ? body.ai_suggestion_reason.trim().slice(0, 2000)
             : null;
 
+        // RF-008: stamp both customer anchors so company-keyed lenses
+        // (account 360, parts intelligence) see portal orders too — but only
+        // when the link passes the same predicate the
+        // parts_orders_enforce_customer_workspace trigger enforces (same
+        // workspace, not soft-deleted). A stale link degrades to the
+        // portal-only anchor instead of failing order creation.
+        let stampedCrmCompanyId: string | null = null;
+        if (typeof portalCustomer.crm_company_id === "string") {
+          const { data: linkedCompany } = await supabase
+            .from("crm_companies")
+            .select("id")
+            .eq("id", portalCustomer.crm_company_id)
+            .eq("workspace_id", portalWorkspaceId)
+            .is("deleted_at", null)
+            .maybeSingle();
+          if (linkedCompany) stampedCrmCompanyId = portalCustomer.crm_company_id;
+        }
+
         // Whitelist safe fields — totals computed server-side, not customer-provided
         const safeBody: Record<string, unknown> = {
           workspace_id: portalWorkspaceId,
           portal_customer_id: portalCustomer.id,
+          crm_company_id: stampedCrmCompanyId,
           fleet_id: body.fleet_id || null,
           status: "draft", // Always start as draft
           line_items,

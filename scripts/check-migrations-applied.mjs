@@ -64,7 +64,13 @@ function repoVersions() {
  *  script — which POSTs without an explicit version — get a synthesized
  *  `YYYYMMDDHHMMSS` timestamp in `version` and the POSTed snake_case body in
  *  `name`. We return both sets so callers can match a repo file against
- *  either historic path. */
+ *  either historic path.
+ *
+ *  Names are ALSO indexed with any leading `NNN_` digits stripped: MCP
+ *  applies are sometimes named after the full filename (`779_l8_rental_
+ *  rpc_lockdown`), which otherwise never matches the repo file's bare
+ *  snake_case name and leaves the check permanently red (the July 2026
+ *  L8.a failure mode). */
 async function fetchAppliedMigrations(projectRef, token) {
   const url = `https://api.supabase.com/v1/projects/${projectRef}/database/migrations`;
   const res = await fetch(url, {
@@ -83,7 +89,10 @@ async function fetchAppliedMigrations(projectRef, token) {
   const names = new Set();
   for (const row of body) {
     if (typeof row?.version === "string") versions.add(row.version);
-    if (typeof row?.name === "string") names.add(row.name);
+    if (typeof row?.name === "string") {
+      names.add(row.name);
+      names.add(row.name.replace(/^\d+_/, ""));
+    }
   }
   return { versions, names, total: body.length };
 }
