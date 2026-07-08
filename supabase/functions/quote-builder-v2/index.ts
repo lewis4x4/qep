@@ -2359,7 +2359,7 @@ async function handlePublicChatTurn(
   const admin = createAdminClient();
   const { data: quote, error: quoteErr } = await admin
     .from("quote_packages")
-    .select("id, status, expires_at, workspace_id, equipment, customer_name, customer_company, customer_total, amount_financed, financing_scenarios, branch_slug, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason, metadata")
+    .select("id, status, expires_at, workspace_id, equipment, customer_name, customer_company, net_total, amount_financed, financing_scenarios, branch_slug, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason, metadata")
     .eq("share_token", token)
     .maybeSingle();
   if (quoteErr) return safeJsonError("Failed to load quote", 500, origin);
@@ -2408,7 +2408,7 @@ Quote context:
 - Customer: ${typeof quote.customer_name === "string" && quote.customer_name ? quote.customer_name : "(unnamed)"}
 ${quote.customer_company ? `- Company: ${quote.customer_company}` : ""}
 - Primary equipment: ${machineLabel}
-- Customer total: ${typeof quote.customer_total === "number" ? `$${Math.round(quote.customer_total).toLocaleString()}` : "—"}
+- Customer total: ${typeof quote.net_total === "number" ? `$${Math.round(quote.net_total).toLocaleString()}` : "—"}
 ${scenarioSummary ? `- Financing options: ${scenarioSummary}` : ""}
 ${confirmedWhyThisMachine ? `- Confirmed Why this machine: ${confirmedWhyThisMachine}` : ""}
 ${branch ? `- Dealership: ${branch.name ?? "QEP"}${branch.phone ? `, ${branch.phone}` : ""}${branch.email ? `, ${branch.email}` : ""}` : ""}
@@ -2620,7 +2620,7 @@ async function handlePublicDepositCheckout(
   const admin = createAdminClient();
   const { data: quote, error: quoteErr } = await admin
     .from("quote_packages")
-    .select("id, workspace_id, deal_id, contact_id, customer_email, quote_number, status, expires_at, deposit_required_amount, customer_total, equipment_total, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
+    .select("id, workspace_id, deal_id, contact_id, customer_email, quote_number, status, expires_at, deposit_required_amount, net_total, equipment_total, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
     .eq("share_token", token)
     .maybeSingle();
   if (quoteErr) {
@@ -2668,7 +2668,7 @@ async function handlePublicDepositCheckout(
     return safeJsonError("Deposit amount is too small for checkout.", 409, origin);
   }
 
-  const equipmentValueRaw = Number(quote.customer_total ?? quote.equipment_total ?? requiredAmount);
+  const equipmentValueRaw = Number(quote.net_total ?? quote.equipment_total ?? requiredAmount);
   const equipmentValue = Number.isFinite(equipmentValueRaw) && equipmentValueRaw > 0 ? equipmentValueRaw : requiredAmount;
   const depositResult = await resolvePublicQuoteDeposit({
     admin,
@@ -3016,7 +3016,7 @@ async function handlePublicSocialProof(url: URL, origin: string | null): Promise
   const cutoff = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString();
   const { data: historical } = await admin
     .from("quote_packages")
-    .select("id, equipment, customer_total, status, created_at")
+    .select("id, equipment, net_total, status, created_at")
     .eq("workspace_id", typeof quote.workspace_id === "string" ? quote.workspace_id : "default")
     .in("status", ["accepted", "converted_to_deal", "sent", "viewed"])
     .gte("created_at", cutoff)
@@ -3031,7 +3031,7 @@ async function handlePublicSocialProof(url: URL, origin: string | null): Promise
       && rowModel.toLowerCase() === model.toLowerCase();
   });
   const totals = matchingDeals
-    .map((r) => Number((r as Record<string, unknown>).customer_total ?? 0))
+    .map((r) => Number((r as Record<string, unknown>).net_total ?? 0))
     .filter((n) => n > 0)
     .sort((a, b) => a - b);
 
