@@ -14,6 +14,7 @@ import {
 import { hasCachedAuthProfile } from "./lib/auth-recovery";
 import {
   canAccessFloorSurface,
+  canAccessMachineRecords,
   canAccessManagerAdminRoute,
   canAccessManagerAdminSurface,
   canAccessQrmSurface,
@@ -1671,7 +1672,7 @@ function App() {
               <Route
                 path="/fleet"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessMachineRecords(profile.role) ? (
                     <FleetMapPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2823,7 +2824,7 @@ function App() {
               <Route
                 path="/qrm/equipment/:equipmentId"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessMachineRecords(profile.role) ? (
                     <QrmEquipmentDetailPage userId={profile.id} userRole={profile.role} />
                   ) : (
                     <Navigate to="/dashboard" replace />

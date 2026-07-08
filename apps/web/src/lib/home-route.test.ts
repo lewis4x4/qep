@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   canAccessFloorSurface,
+  canAccessMachineRecords,
   canAccessManagerAdminRoute,
   canAccessManagerAdminSurface,
   canAccessQrmSurface,
@@ -75,6 +76,17 @@ describe("route surface access helpers", () => {
     expect(canAccessQrmSurface("admin")).toBe(true);
     expect(canAccessManagerAdminSurface("manager")).toBe(true);
     expect(canAccessManagerAdminSurface("admin")).toBe(true);
+  });
+
+  test("machine-record surfaces admit core sales/management roles only", () => {
+    for (const role of ["rep", "admin", "manager", "owner"]) {
+      expect(canAccessMachineRecords(role)).toBe(true);
+    }
+    // Floor operator roles have no qrm_equipment RLS policy yet — the
+    // routes stay closed and link sources must degrade (SerialFirstWidget).
+    for (const role of ["parts_counter", "service_writer", "technician", "dispatch", "finance_admin", "client_stakeholder", null, undefined, ""]) {
+      expect(canAccessMachineRecords(role)).toBe(false);
+    }
   });
 
   test("manager/admin route decisions redirect reps to homeRoute and allow manager/admin", () => {

@@ -38,6 +38,8 @@ import {
   X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/hooks/useAuth";
+import { canAccessMachineRecords } from "@/lib/home-route";
 import { normalizeEquipmentHits, type EquipmentHit } from "./floor-widget-row-normalizers";
 
 const MIN_QUERY_LEN = 3;
@@ -93,6 +95,11 @@ function formatDueDate(iso: string | null): { text: string; tone: "ok" | "soon" 
 export function SerialFirstWidget() {
   const [raw, setRaw] = useState("");
   const [debounced, setDebounced] = useState("");
+  // Floor operator roles (parts_counter, …) can hold this widget but are
+  // bounced from /fleet and /qrm/equipment/:id by the route guards — links
+  // must degrade to plain content for them, not silently redirect.
+  const { profile } = useAuth();
+  const canOpenRecords = canAccessMachineRecords(profile?.role);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(raw), DEBOUNCE_MS);
@@ -132,12 +139,14 @@ export function SerialFirstWidget() {
             Serial-first lookup
           </h3>
         </div>
-        <Link
-          to="/fleet"
-          className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground hover:text-[hsl(var(--qep-orange))]"
-        >
-          All machines
-        </Link>
+        {canOpenRecords && (
+          <Link
+            to="/fleet"
+            className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground hover:text-[hsl(var(--qep-orange))]"
+          >
+            All machines
+          </Link>
+        )}
       </div>
 
       {/* Search input — big, oversized, the widget's hero affordance */}
@@ -190,15 +199,22 @@ export function SerialFirstWidget() {
           <p className="text-xs text-muted-foreground">
             No match for{" "}
             <span className="font-mono font-semibold text-foreground">{debounced}</span>. Check
-            for extra characters, or{" "}
-            <Link to="/fleet" className="text-[hsl(var(--qep-orange))] hover:underline">
-              browse all machines
-            </Link>
+            for extra characters
+            {canOpenRecords ? (
+              <>
+                , or{" "}
+                <Link to="/fleet" className="text-[hsl(var(--qep-orange))] hover:underline">
+                  browse all machines
+                </Link>
+              </>
+            ) : (
+              " or try a shorter fragment of the serial"
+            )}
             .
           </p>
         )}
         {showResults && !isFetching && !isError && topHit && (
-          <MachineSnapshot hit={topHit} alternates={extraHits} />
+          <MachineSnapshot hit={topHit} alternates={extraHits} canOpenRecords={canOpenRecords} />
         )}
       </div>
     </div>
@@ -221,9 +237,11 @@ function EmptyHint({ hasInput, minLen }: { hasInput: boolean; minLen: number }) 
 function MachineSnapshot({
   hit,
   alternates,
+  canOpenRecords,
 }: {
   hit: EquipmentHit;
   alternates: EquipmentHit[];
+  canOpenRecords: boolean;
 }) {
   const displayName =
     hit.name ||
@@ -242,12 +260,14 @@ function MachineSnapshot({
             Serial · {hit.serial_number ?? "—"}
           </p>
         </div>
-        <Link
-          to={`/qrm/equipment/${hit.id}`}
-          className="shrink-0 rounded-md border border-[hsl(var(--qep-orange))]/40 bg-[hsl(var(--qep-orange))]/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--qep-orange))] transition-colors hover:bg-[hsl(var(--qep-orange))]/15"
-        >
-          Open record
-        </Link>
+        {canOpenRecords && (
+          <Link
+            to={`/qrm/equipment/${hit.id}`}
+            className="shrink-0 rounded-md border border-[hsl(var(--qep-orange))]/40 bg-[hsl(var(--qep-orange))]/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--qep-orange))] transition-colors hover:bg-[hsl(var(--qep-orange))]/15"
+          >
+            Open record
+          </Link>
+        )}
       </div>
 
       {/* Three-panel snapshot */}
@@ -321,21 +341,34 @@ function MachineSnapshot({
             {alternates.length} other match{alternates.length === 1 ? "" : "es"}
           </p>
           <ul className="mt-1 space-y-0.5">
-            {alternates.map((a) => (
-              <li key={a.id}>
-                <Link
-                  to={`/qrm/equipment/${a.id}`}
-                  className="flex items-center justify-between gap-2 text-[11px] text-foreground hover:text-[hsl(var(--qep-orange))]"
-                >
+            {alternates.map((a) => {
+              const label = (
+                <>
                   <span className="truncate">
                     {[a.year, a.make, a.model].filter(Boolean).join(" ") || a.name || "Machine"}
                   </span>
                   <span className="shrink-0 font-mono text-muted-foreground">
                     {a.serial_number}
                   </span>
-                </Link>
-              </li>
-            ))}
+                </>
+              );
+              return (
+                <li key={a.id}>
+                  {canOpenRecords ? (
+                    <Link
+                      to={`/qrm/equipment/${a.id}`}
+                      className="flex items-center justify-between gap-2 text-[11px] text-foreground hover:text-[hsl(var(--qep-orange))]"
+                    >
+                      {label}
+                    </Link>
+                  ) : (
+                    <div className="flex items-center justify-between gap-2 text-[11px] text-foreground">
+                      {label}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

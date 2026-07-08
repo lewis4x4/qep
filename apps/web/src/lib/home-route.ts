@@ -69,6 +69,25 @@ export function canAccessFloorSurface(userRole: string | null | undefined): bool
   return normalizeRole(userRole) !== "rep";
 }
 
+/** Machine-record surfaces: /fleet (map) and /qrm/equipment/:id (detail).
+ *
+ *  Deliberately limited to the core sales/management roles because the
+ *  floor operator roles (parts_counter, service_writer, technician,
+ *  dispatch) hold NO qrm_equipment RLS policy yet — routing them in would
+ *  render an empty map/detail, which reads as breakage. Surfaces that link
+ *  here (e.g. SerialFirstWidget) must check this same helper and degrade
+ *  to non-link content instead of letting the route guard bounce the user
+ *  to /dashboard. Widen this together with the RLS policies, not before. */
+export function canAccessMachineRecords(userRole: string | null | undefined): boolean {
+  const normalizedRole = normalizeRole(userRole);
+  return (
+    normalizedRole === "rep" ||
+    normalizedRole === "admin" ||
+    normalizedRole === "manager" ||
+    normalizedRole === "owner"
+  );
+}
+
 export function canAccessQrmSurface(userRole: string | null | undefined): boolean {
   const normalizedRole = normalizeRole(userRole);
   return normalizedRole === "owner" || normalizedRole === "admin" || normalizedRole === "manager";
