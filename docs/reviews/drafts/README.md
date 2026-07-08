@@ -11,8 +11,8 @@ Source: [2026-07-08 full-codebase review](../2026-07-08-full-codebase-review.md)
 
 ## Apply checklist (in order, after red-line)
 
-1. **Renumber + move**: rename each file to the then-current migration head (`NNN_qep_stream_m_revenue_convergence.sql`, `NNN+1_qep_stream_n_seam_completion.sql`) and move into `supabase/migrations/`. Note: `ALTER TYPE ... ADD VALUE` is irreversible — this is the point of no return for the enum labels.
-2. **Update the sync + audit tooling in the same commit** (CI fails otherwise):
+1. **Renumber + move, splitting enum from seed**: `ALTER TYPE ... ADD VALUE` cannot be *used* in the same transaction that adds it, and `db-push.mjs` wraps each migration file in one `BEGIN…COMMIT` — so each draft becomes **two** migration files: `NNN_qep_stream_m_enum.sql` (the `ALTER TYPE` + `COMMENT ON TYPE` only) and `NNN+1_qep_stream_m_revenue_convergence.sql` (the INSERT, with the draft's interior `BEGIN;`/`COMMIT;` removed — the runner supplies the transaction). Same split for Stream N. Note: `ALTER TYPE ... ADD VALUE` is irreversible — the enum file is the point of no return.
+2. **Update the sync + audit tooling in the same commit** (`bun run audit:roadmap-source-truth` now fails on any enum value not registered in `expectedStreams` — run it locally; it is not yet in the CI chain):
    - `roadmap-linear-sync/scripts/lib/status-map.mjs` → add `M: 'Stream M — Revenue Convergence'`, `N: 'Stream N — Seam Completion'` to `STREAM_PROJECT_NAMES`.
    - `roadmap-linear-sync/scripts/regen-unified-roadmap.mjs` → add M/N to `STREAM_LABELS`.
    - `scripts/check-roadmap-source-truth.mjs` → extend `expectedStreams`, `expectedProjectNames`, the two `stream: 'A' | … ` TS-union assertions (and the files they point at), and add seed-count checks for the new migrations (M: 7 rows, N: 9 N-rows + 5 L-rows).

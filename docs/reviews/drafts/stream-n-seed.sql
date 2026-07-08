@@ -1,8 +1,11 @@
 -- ============================================================================
 -- DRAFT — Stream N seed (Seam Completion) + Stream L9 rows. DO NOT APPLY FROM docs/.
--- At approval: renumber to the current migration head, move to
--- supabase/migrations/NNN_qep_stream_n_seam_completion.sql, and complete the
--- sync checklist in docs/reviews/drafts/README.md.
+-- At approval: SPLIT INTO TWO migration files (enum ADD VALUE cannot be used
+-- in the transaction that adds it, and db-push.mjs wraps each file in one
+-- BEGIN..COMMIT): NNN_qep_stream_n_enum.sql (ALTER TYPE + COMMENT ON TYPE
+-- only) and NNN+1_qep_stream_n_seam_completion.sql (the INSERTs incl. the
+-- L9 rows, dropping the interior BEGIN/COMMIT). Then complete the sync
+-- checklist in docs/reviews/drafts/README.md.
 --
 -- Purpose: promote the cross-module seam work from the 2026-07-08 full-codebase
 --          review into a first-class qep_roadmap_tasks stream. The review's

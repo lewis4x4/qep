@@ -38,9 +38,6 @@ interface InventoryMatch {
   year: number | null;
   condition: string | null;
   availability: string | null;
-  purchase_price: number | null;
-  current_market_value: number | null;
-  daily_rental_rate: number | null;
 }
 
 interface MarketValuation {
@@ -57,6 +54,7 @@ interface VisionResult {
   crm_matches: {
     inventory: InventoryMatch[];
     valuations: MarketValuation[];
+    degraded?: boolean;
   };
 }
 
@@ -316,12 +314,18 @@ export function EquipmentVision({ equipmentId, onAnalysisComplete }: EquipmentVi
           </Card>
 
           {/* Market data */}
-          {(result.crm_matches.valuations.length > 0 || result.crm_matches.inventory.length > 0) && (
+          {(result.crm_matches.valuations.length > 0 || result.crm_matches.inventory.length > 0 || result.crm_matches.degraded) && (
             <Card className="bg-white/5 border-white/10">
               <CardHeader className="pb-2 pt-3 px-4">
                 <CardTitle className="text-sm">Market & Inventory</CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-3 space-y-3">
+                {result.crm_matches.degraded && (
+                  <div className="flex items-center gap-2 text-xs text-amber-400">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    <span>Inventory/valuation lookup failed — matches may be incomplete.</span>
+                  </div>
+                )}
                 {result.crm_matches.valuations.length > 0 && (
                   <div>
                     <p className="text-xs font-medium text-foreground mb-1">Market valuations:</p>
@@ -343,8 +347,7 @@ export function EquipmentVision({ equipmentId, onAnalysisComplete }: EquipmentVi
                     {result.crm_matches.inventory.map((inv, i) => (
                       <div key={i} className="text-xs text-muted-foreground py-1 border-b border-white/5 last:border-0">
                         <span className="text-foreground">{inv.name}</span>
-                        {inv.current_market_value && <span className="ml-2">Value: ${inv.current_market_value.toLocaleString()}</span>}
-                        {inv.daily_rental_rate && <span className="ml-2">Rental: ${inv.daily_rental_rate.toLocaleString()}/day</span>}
+                        {inv.availability && <span className="ml-2">Status: {inv.availability}</span>}
                         {inv.condition && <span className="ml-2">Condition: {inv.condition}</span>}
                       </div>
                     ))}

@@ -24,6 +24,10 @@ from public.portal_customers pc
 where po.portal_customer_id = pc.id
   and po.crm_company_id is null
   and pc.crm_company_id is not null
+  -- mirror BOTH halves of parts_orders_enforce_customer_workspace(): the
+  -- trigger also re-validates portal_customer_id workspace on UPDATE, so a
+  -- workspace-drifted portal customer must skip rather than abort the run
+  and pc.workspace_id = po.workspace_id
   and exists (
     select 1 from public.crm_companies c
     where c.id = pc.crm_company_id

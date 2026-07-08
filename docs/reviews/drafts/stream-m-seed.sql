@@ -1,8 +1,11 @@
 -- ============================================================================
 -- DRAFT — Stream M seed (Revenue Convergence). DO NOT APPLY FROM docs/.
--- At approval: renumber to the current migration head (was 78X at draft time),
--- move to supabase/migrations/NNN_qep_stream_m_revenue_convergence.sql, and
--- complete the sync checklist in docs/reviews/drafts/README.md.
+-- At approval: SPLIT INTO TWO migration files (enum ADD VALUE cannot be used
+-- in the transaction that adds it, and db-push.mjs wraps each file in one
+-- BEGIN..COMMIT): NNN_qep_stream_m_enum.sql (ALTER TYPE + COMMENT ON TYPE
+-- only) and NNN+1_qep_stream_m_revenue_convergence.sql (the INSERT, dropping
+-- the interior BEGIN/COMMIT). Then complete the sync checklist in
+-- docs/reviews/drafts/README.md.
 --
 -- Purpose: promote the money-spine work from the 2026-07-08 full-codebase
 --          review into a first-class qep_roadmap_tasks stream, following the
