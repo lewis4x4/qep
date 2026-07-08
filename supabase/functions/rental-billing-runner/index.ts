@@ -25,6 +25,12 @@ import {
   type PriorInvoicesSummary,
   type ReturnChargesSnapshot,
 } from "../../../shared/rental-billing-core.ts";
+import {
+  mintRentalInvoiceNumber,
+  mirrorRentalInvoiceToAR,
+  resolveNumberingBranch,
+  resolveRentalTax,
+} from "../_shared/rental-finance.ts";
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
@@ -44,7 +50,15 @@ Deno.serve(async (req) => {
     const admin: any = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
     const today = new Date().toISOString().slice(0, 10);
-    const summary = { examined: 0, invoiced: 0, skipped: 0, failed: 0, total_billed_cents: 0 };
+    const summary = {
+      examined: 0,
+      invoiced: 0,
+      skipped: 0,
+      failed: 0,
+      mirror_skipped: 0,
+      total_billed_cents: 0,
+      total_tax_cents: 0,
+    };
 
     const { data: run, error: runError } = await admin
       .from("rental_billing_runs")
@@ -57,7 +71,7 @@ Deno.serve(async (req) => {
 
     const { data: contracts, error: contractsError } = await admin
       .from("rental_contracts")
-      .select("id, workspace_id, contract_number, contract_type, lifecycle_state, on_rent_at, off_rent_at, returned_at, agreed_daily_rate, agreed_weekly_rate, agreed_monthly_rate, delivery_fee_cents, pickup_fee_cents, damage_waiver_accepted, damage_waiver_rate_pct, deposit_status, deposit_amount, portal_customer_id, qrm_company_id")
+      .select("id, workspace_id, contract_number, contract_type, lifecycle_state, on_rent_at, off_rent_at, returned_at, agreed_daily_rate, agreed_weekly_rate, agreed_monthly_rate, delivery_fee_cents, pickup_fee_cents, damage_waiver_accepted, damage_waiver_rate_pct, deposit_status, deposit_amount, portal_customer_id, qrm_company_id, branch_id, ship_to_address_id, tax_sourcing_method")
       .in("lifecycle_state", ["on_rent", "returned"])
       .is("deleted_at", null)
       .limit(500);
@@ -122,16 +136,29 @@ Deno.serve(async (req) => {
           .maybeSingle();
         if (existing) { summary.skipped++; continue; }
 
-        const { data: numberData } = await admin.rpc("next_rental_invoice_number", {
-          p_workspace_id: contract.workspace_id,
-        });
-        const invoiceNumber = (numberData as string | null) ?? `RENT-${Date.now()}`;
+        // M4.1: shared branch-prefixed numbering (m655, 'rental' → R prefix)
+        // replaces the private next_rental_invoice_number sequence.
+        const branch = await resolveNumberingBranch(admin, contract.workspace_id, contract.branch_id);
+        const invoiceNumber = await mintRentalInvoiceNumber(admin, contract.workspace_id, branch);
 
         const c = plan.charges;
+
+        // M4.1: real county tax via the m666 machinery instead of tax_cents=0.
+        const periodLabel = `${plan.period_start} → ${plan.period_end}`;
+        const tax = await resolveRentalTax(
+          admin,
+          contract.workspace_id,
+          contract,
+          c.subtotal_cents,
+          branch,
+          periodLabel,
+        );
+        const totalCents = c.subtotal_cents + tax.taxCents;
+
         const depositCents = plan.kind === "final" && contract.deposit_status === "paid"
           ? Math.round((contract.deposit_amount ?? 0) * 100)
           : 0;
-        const depositApplied = Math.min(depositCents, c.subtotal_cents);
+        const depositApplied = Math.min(depositCents, totalCents);
 
         const { data: invoice, error: invoiceError } = await admin
           .from("rental_invoices")
@@ -153,16 +180,18 @@ Deno.serve(async (req) => {
             damage_charge_cents: c.damage_charge_cents,
             other_charge_cents: c.other_charge_cents,
             discount_cents: c.discount_cents,
-            // Tax is a per-workspace profile concern (owner obligation 5b):
-            // taxable computed here; rate resolution delegates to the
-            // jurisdiction machinery when the workspace profile is configured.
             taxable_amount_cents: c.subtotal_cents,
-            tax_cents: 0,
-            total_cents: c.subtotal_cents,
+            tax_cents: tax.taxCents,
+            total_cents: totalCents,
             amount_paid_cents: depositApplied,  // balance_cents is generated
             status: "posted",
             posted_at: new Date().toISOString(),
             due_date: today,
+            ship_to_address_id: tax.shipToAddressId,
+            tax_jurisdiction_id: tax.jurisdictionId,
+            tax_breakdown: tax.breakdown,
+            dr15_county_name: tax.county,
+            dr15_reporting_period: plan.period_end,
             metadata: {
               kind: plan.kind,
               billable_days: plan.billable_days,
@@ -170,15 +199,30 @@ Deno.serve(async (req) => {
               rate_optimizer_fired: plan.base.fired,
               beaten_alternative: plan.base.beaten_alternative,
               deposit_applied_cents: depositApplied,
-              tax_profile: "workspace-unresolved",
+              tax_profile: contract.tax_sourcing_method ?? "destination_ship_to",
             },
           })
           .select("id")
           .single();
         if (invoiceError || !invoice) throw new Error(invoiceError?.message ?? "invoice insert failed");
 
-        // AR mirror: requires a portal identity today (customer_invoices is
-        // portal-anchored); counter-only contracts note the skip.
+        if (tax.warning) {
+          await admin.rpc("enqueue_exception", {
+            p_source: "tax_failed",
+            p_title: `Rental invoice ${invoiceNumber} tax degraded (${tax.warning.split(":")[0]})`,
+            p_severity: "warn",
+            p_detail: tax.warning,
+            p_payload: { rental_invoice_id: invoice.id, rental_contract_id: contract.id, run_id: run.id },
+            p_entity_table: "rental_invoices",
+            p_entity_id: invoice.id,
+          });
+        }
+
+        // M4.1: unconditional AR mirror — company-anchored when portal
+        // identity is absent (qrm ids ARE the crm_company_id space via the
+        // compat view). A contract with neither anchor dead-letters loudly.
+        let portalCustomerId: string | null = null;
+        let crmCompanyId: string | null = (contract.qrm_company_id as string | null) ?? null;
         if (contract.portal_customer_id) {
           const { data: pc } = await admin
             .from("portal_customers")
@@ -186,22 +230,46 @@ Deno.serve(async (req) => {
             .eq("id", contract.portal_customer_id)
             .maybeSingle();
           if (pc) {
-            await admin.from("customer_invoices").insert({
-              workspace_id: contract.workspace_id,
-              portal_customer_id: pc.id,
-              crm_company_id: pc.crm_company_id,
-              invoice_number: invoiceNumber,
-              due_date: today,
-              description: `Rental ${plan.kind} invoice · ${contract.contract_number ?? contract.id} · ${plan.period_start} → ${plan.period_end}`,
-              amount: (c.subtotal_cents - depositApplied) / 100,
-              total: (c.subtotal_cents - depositApplied) / 100,
-              status: "pending",
-            });
+            portalCustomerId = pc.id as string;
+            crmCompanyId = crmCompanyId ?? ((pc.crm_company_id as string | null) ?? null);
+          }
+        }
+
+        if (!portalCustomerId && !crmCompanyId) {
+          summary.mirror_skipped++;
+          await admin.rpc("enqueue_exception", {
+            p_source: "rental_billing_failed",
+            p_title: `Rental invoice ${invoiceNumber} has no AR anchor — not mirrored`,
+            p_severity: "error",
+            p_detail: `Contract ${contract.contract_number ?? contract.id} carries neither portal_customer_id nor qrm_company_id; the invoice posted in rental_invoices but is invisible to AR aging until an anchor is set and the mirror is backfilled.`,
+            p_payload: { rental_invoice_id: invoice.id, rental_contract_id: contract.id, run_id: run.id },
+            p_entity_table: "rental_invoices",
+            p_entity_id: invoice.id,
+          });
+        } else {
+          const mirror = await mirrorRentalInvoiceToAR(admin, {
+            workspaceId: contract.workspace_id,
+            rentalInvoiceId: invoice.id as string,
+            invoiceNumber,
+            description: `Rental ${plan.kind} invoice · ${contract.contract_number ?? contract.id} · ${periodLabel}`,
+            portalCustomerId,
+            crmCompanyId,
+            amountDollars: c.subtotal_cents / 100,
+            taxDollars: tax.taxCents / 100,
+            amountPaidDollars: depositApplied / 100,
+            dueDate: today,
+            branchSlug: branch?.slug ?? null,
+            tax,
+            enqueueGl: true,
+          });
+          for (const warning of mirror.warnings) {
+            console.error(`rental mirror warning (${invoiceNumber}):`, warning);
           }
         }
 
         summary.invoiced++;
         summary.total_billed_cents += c.subtotal_cents;
+        summary.total_tax_cents += tax.taxCents;
       } catch (err) {
         summary.failed++;
         await admin.rpc("enqueue_exception", {

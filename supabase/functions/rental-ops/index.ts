@@ -2,6 +2,12 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
+import {
+  evaluateRentalRateFloor,
+  mintRentalInvoiceNumber,
+  resolveNumberingBranch,
+  type RateFloorEvaluation,
+} from "../_shared/rental-finance.ts";
 
 type BookingApprovalPayload = {
   action: "approve_booking";
@@ -10,6 +16,9 @@ type BookingApprovalPayload = {
   branch_id?: string | null;
   dealer_response?: string | null;
   deposit_amount?: number | string | null;
+  /** Below-book rates beyond the workspace discount threshold require an
+   * explicit manager override — recorded to the exception queue (M4.1). */
+  override_rate_floor?: boolean;
 };
 
 type BookingDeclinePayload = {
@@ -104,6 +113,9 @@ type CheckOutContractPayload = {
   /** Overbooking is allowed only via explicit manager override — recorded to
    * the exception queue (blueprint L3 policy). */
   override_overbook?: boolean;
+  /** Below-book rates beyond the workspace discount threshold require an
+   * explicit manager override — recorded to the exception queue (M4.1). */
+  override_rate_floor?: boolean;
 };
 
 async function consultAvailability(
@@ -123,6 +135,56 @@ async function consultAvailability(
   if (error) return { available: true, detail: { skipped: error.message } }; // fail-open: never block the counter on the checker itself
   const record = (data ?? {}) as Record<string, unknown>;
   return { available: record.available !== false, detail: record };
+}
+
+/**
+ * M4.1 rate floor (blueprint §9): agreed rates more than the workspace
+ * threshold below the rental_resolve_rates book either block (409) or pass
+ * with an explicit manager override recorded to the exception queue — the
+ * same shape as the overbook override. Returns a Response to short-circuit
+ * with, or null to proceed.
+ */
+async function enforceRateFloor(
+  // deno-lint-ignore no-explicit-any -- matches this module's untyped admin client convention
+  admin: any,
+  workspaceId: string,
+  contractId: string,
+  actorId: string,
+  actorRole: string,
+  evaluation: RateFloorEvaluation,
+  overrideRequested: boolean,
+  origin: string | null,
+): Promise<Response | null> {
+  if (!evaluation.belowFloor) return null;
+  if (!overrideRequested) {
+    return safeJsonError(
+      `Agreed rate is ${evaluation.discountPct?.toFixed(1)}% below the book rate (${evaluation.bookSource}); the workspace threshold is ${evaluation.thresholdPct}%. A manager may override with override_rate_floor.`,
+      409,
+      origin,
+    );
+  }
+  if (!["admin", "manager", "owner"].includes(actorRole)) {
+    return safeJsonError("Below-book rate override requires a manager or owner", 403, origin);
+  }
+  await admin.rpc("enqueue_exception", {
+    p_source: "rental_rate_floor_override",
+    p_title: "Below-book rental rate approved by manager override",
+    p_severity: "warn",
+    p_detail:
+      `Contract ${contractId}: agreed rate ${evaluation.discountPct?.toFixed(1)}% below book (threshold ${evaluation.thresholdPct}%), overridden by ${actorId}.`,
+    p_payload: {
+      contract_id: contractId,
+      actor_id: actorId,
+      discount_pct: evaluation.discountPct,
+      threshold_pct: evaluation.thresholdPct,
+      book_source: evaluation.bookSource,
+      comparison: evaluation.comparison,
+      workspace_id: workspaceId,
+    },
+    p_entity_table: "rental_contracts",
+    p_entity_id: contractId,
+  });
+  return null;
 }
 
 async function recordOverbookOverride(
@@ -285,6 +347,8 @@ async function createRentalInvoice(
       amount,
       total: amount,
       status: "pending",
+      invoice_type: "rental",
+      invoice_source_code: "RENTAL",
     })
     .select("id, status")
     .single() as Promise<{
@@ -693,7 +757,7 @@ Deno.serve(async (req) => {
 
       const { data: contract, error: contractError } = await admin
         .from("rental_contracts")
-        .select("id, lifecycle_state, equipment_id, assignment_status, requested_start_date, approved_start_date, requested_end_date, approved_end_date, estimate_daily_rate, estimate_weekly_rate, estimate_monthly_rate, agreed_daily_rate, agreed_weekly_rate, agreed_monthly_rate, workspace_id")
+        .select("id, lifecycle_state, equipment_id, assignment_status, requested_start_date, approved_start_date, requested_end_date, approved_end_date, estimate_daily_rate, estimate_weekly_rate, estimate_monthly_rate, agreed_daily_rate, agreed_weekly_rate, agreed_monthly_rate, workspace_id, qrm_company_id, portal_customer_id, branch_id")
         .eq("id", body.contract_id)
         .eq("workspace_id", workspaceId)
         .maybeSingle();
@@ -742,6 +806,44 @@ Deno.serve(async (req) => {
           }
         }
       }
+
+      // M4.1 rate floor: check-out locks in agreed_* (falling back to the
+      // estimates), so the book comparison happens here for counter flow.
+      let checkoutCompanyId = (contract.qrm_company_id as string | null) ?? null;
+      if (!checkoutCompanyId && contract.portal_customer_id) {
+        const { data: portalCustomer } = await admin
+          .from("portal_customers")
+          .select("crm_company_id")
+          .eq("id", contract.portal_customer_id)
+          .maybeSingle();
+        checkoutCompanyId = (portalCustomer?.crm_company_id as string | null) ?? null;
+      }
+      const checkoutRateFloor = await evaluateRentalRateFloor(admin, {
+        workspaceId,
+        agreedDaily: (contract.agreed_daily_rate ?? contract.estimate_daily_rate) == null
+          ? null
+          : Number(contract.agreed_daily_rate ?? contract.estimate_daily_rate),
+        agreedWeekly: (contract.agreed_weekly_rate ?? contract.estimate_weekly_rate) == null
+          ? null
+          : Number(contract.agreed_weekly_rate ?? contract.estimate_weekly_rate),
+        agreedMonthly: (contract.agreed_monthly_rate ?? contract.estimate_monthly_rate) == null
+          ? null
+          : Number(contract.agreed_monthly_rate ?? contract.estimate_monthly_rate),
+        equipmentId,
+        companyId: checkoutCompanyId,
+        branchId: (contract.branch_id as string | null) ?? null,
+      });
+      const checkoutRateFloorBlock = await enforceRateFloor(
+        admin,
+        workspaceId,
+        contract.id as string,
+        auth.userId,
+        auth.role,
+        checkoutRateFloor,
+        body.override_rate_floor === true,
+        origin,
+      );
+      if (checkoutRateFloorBlock) return checkoutRateFloorBlock;
 
       // Latest completed check-out inspection feeds the outbound meters.
       const { data: inspection } = await admin
@@ -982,19 +1084,41 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (customerError || !customer) return safeJsonError("Portal customer not found for this rental request", 404, origin);
 
+      // M4.1 rate floor: approval is where estimate_* becomes agreed_*.
+      const bookingBranchId = typeof body.branch_id === "string" && body.branch_id.trim() ? body.branch_id.trim() : null;
+      const rateFloor = await evaluateRentalRateFloor(admin, {
+        workspaceId,
+        agreedDaily: currentContract.estimate_daily_rate == null ? null : Number(currentContract.estimate_daily_rate),
+        agreedWeekly: currentContract.estimate_weekly_rate == null ? null : Number(currentContract.estimate_weekly_rate),
+        agreedMonthly: currentContract.estimate_monthly_rate == null ? null : Number(currentContract.estimate_monthly_rate),
+        equipmentId,
+        companyId: (customer.crm_company_id as string | null) ?? null,
+        branchId: bookingBranchId,
+      });
+      const rateFloorBlock = await enforceRateFloor(
+        admin,
+        workspaceId,
+        currentContract.id,
+        auth.userId,
+        auth.role,
+        rateFloor,
+        body.override_rate_floor === true,
+        origin,
+      );
+      if (rateFloorBlock) return rateFloorBlock;
+
       let depositInvoiceId: string | null = null;
       let status = "active";
       let depositStatus: string | null = "not_required";
 
       if (depositAmount > 0) {
-        const { data: depositNumber } = await admin.rpc("next_rental_invoice_number", {
-          p_workspace_id: workspaceId,
-        });
+        const numberingBranch = await resolveNumberingBranch(admin, workspaceId, bookingBranchId);
+        const depositNumber = await mintRentalInvoiceNumber(admin, workspaceId, numberingBranch);
         const invoice = await createRentalInvoice(
           admin,
           customer as PortalCustomerRow,
           "Rental deposit",
-          (depositNumber as string | null) ?? `RENT-${Date.now()}`,
+          depositNumber,
           depositAmount,
         );
         depositInvoiceId = invoice.id;
@@ -1063,7 +1187,7 @@ Deno.serve(async (req) => {
 
       const { data: contract, error: contractError } = await admin
         .from("rental_contracts")
-        .select("id, workspace_id, portal_customer_id, status")
+        .select("id, workspace_id, portal_customer_id, status, branch_id")
         .eq("id", currentExtension.rental_contract_id)
         .eq("workspace_id", workspaceId)
         .maybeSingle();
@@ -1081,14 +1205,17 @@ Deno.serve(async (req) => {
       let paymentStatus: string | null = "not_required";
 
       if (additionalCharge > 0) {
-        const { data: extensionNumber } = await admin.rpc("next_rental_invoice_number", {
-          p_workspace_id: workspaceId,
-        });
+        const extensionBranch = await resolveNumberingBranch(
+          admin,
+          workspaceId,
+          (contract.branch_id as string | null) ?? null,
+        );
+        const extensionNumber = await mintRentalInvoiceNumber(admin, workspaceId, extensionBranch);
         const invoice = await createRentalInvoice(
           admin,
           customer as PortalCustomerRow,
           "Rental extension charge",
-          (extensionNumber as string | null) ?? `EXT-${Date.now()}`,
+          extensionNumber,
           additionalCharge,
         );
         paymentInvoiceId = invoice.id;

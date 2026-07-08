@@ -32,6 +32,7 @@ const readySummary: QuickBooksConfigSummary = {
       misc_revenue_account_id: "299",
       tax_liability_account_id: "300",
       equipment_revenue_account_id: null,
+      rental_revenue_account_id: null,
     },
     credential_count: 4,
     account_mapping_count: 7,

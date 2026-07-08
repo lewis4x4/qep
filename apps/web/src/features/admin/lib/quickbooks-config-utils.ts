@@ -22,6 +22,7 @@ export type QuickBooksConfigSummary = {
       misc_revenue_account_id: string | null;
       tax_liability_account_id: string | null;
       equipment_revenue_account_id: string | null;
+      rental_revenue_account_id: string | null;
     };
     credential_count: number;
     account_mapping_count: number;
@@ -44,6 +45,7 @@ export type QuickBooksConfigDraft = {
   misc_revenue_account_id: string;
   tax_liability_account_id: string;
   equipment_revenue_account_id: string;
+  rental_revenue_account_id: string;
 };
 
 export function buildDraftFromSummary(summary: QuickBooksConfigSummary | null): QuickBooksConfigDraft {
@@ -61,6 +63,7 @@ export function buildDraftFromSummary(summary: QuickBooksConfigSummary | null): 
     misc_revenue_account_id: summary?.config.account_ids.misc_revenue_account_id ?? "",
     tax_liability_account_id: summary?.config.account_ids.tax_liability_account_id ?? "",
     equipment_revenue_account_id: summary?.config.account_ids.equipment_revenue_account_id ?? "",
+    rental_revenue_account_id: summary?.config.account_ids.rental_revenue_account_id ?? "",
   };
 }
 

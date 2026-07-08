@@ -20,6 +20,7 @@ export type QuickBooksCredentials = {
   // stay ready_for_sync; invoices of these types fall back to description
   // inference / misc revenue until the account is mapped.
   equipment_revenue_account_id?: string;
+  rental_revenue_account_id?: string;
 };
 
 export type QuickBooksConfigDraft = Partial<QuickBooksCredentials>;
@@ -58,6 +59,7 @@ export type QuickBooksConfigSummary = {
       misc_revenue_account_id: string | null;
       tax_liability_account_id: string | null;
       equipment_revenue_account_id: string | null;
+      rental_revenue_account_id: string | null;
     };
     credential_count: number;
     account_mapping_count: number;
@@ -116,6 +118,7 @@ function parseCredentials(raw: string): QuickBooksCredentials {
   }
 
   const equipmentRevenueAccountId = normalizeOptionalString(parsed.equipment_revenue_account_id);
+  const rentalRevenueAccountId = normalizeOptionalString(parsed.rental_revenue_account_id);
 
   return {
     client_id: String(parsed.client_id),
@@ -131,6 +134,7 @@ function parseCredentials(raw: string): QuickBooksCredentials {
     misc_revenue_account_id: String(parsed.misc_revenue_account_id),
     tax_liability_account_id: String(parsed.tax_liability_account_id),
     ...(equipmentRevenueAccountId ? { equipment_revenue_account_id: equipmentRevenueAccountId } : {}),
+    ...(rentalRevenueAccountId ? { rental_revenue_account_id: rentalRevenueAccountId } : {}),
   };
 }
 
@@ -157,6 +161,7 @@ function parseDraft(raw: string): QuickBooksConfigDraft {
     misc_revenue_account_id: normalizeOptionalString(parsed.misc_revenue_account_id) ?? undefined,
     tax_liability_account_id: normalizeOptionalString(parsed.tax_liability_account_id) ?? undefined,
     equipment_revenue_account_id: normalizeOptionalString(parsed.equipment_revenue_account_id) ?? undefined,
+    rental_revenue_account_id: normalizeOptionalString(parsed.rental_revenue_account_id) ?? undefined,
   };
 }
 
@@ -186,6 +191,7 @@ export function summarizeQuickBooksConfig(
   const accountIds = {
     ...coreAccountIds,
     equipment_revenue_account_id: draft?.equipment_revenue_account_id ?? null,
+    rental_revenue_account_id: draft?.rental_revenue_account_id ?? null,
   };
 
   const credentialCount = countTruthy([clientId, realmId, hasClientSecret, hasRefreshToken]);
@@ -307,6 +313,7 @@ export async function saveQuickBooksConfig(
     misc_revenue_account_id: normalizeOptionalString(input.misc_revenue_account_id) ?? summary.config.account_ids.misc_revenue_account_id ?? undefined,
     tax_liability_account_id: normalizeOptionalString(input.tax_liability_account_id) ?? summary.config.account_ids.tax_liability_account_id ?? undefined,
     equipment_revenue_account_id: normalizeOptionalString(input.equipment_revenue_account_id) ?? summary.config.account_ids.equipment_revenue_account_id ?? undefined,
+    rental_revenue_account_id: normalizeOptionalString(input.rental_revenue_account_id) ?? summary.config.account_ids.rental_revenue_account_id ?? undefined,
   };
 
   const nextEncrypted = await encryptCredential(JSON.stringify(merged), "quickbooks");
@@ -487,6 +494,9 @@ function inferRevenueAccount(
     return credentials.equipment_revenue_account_id ?? credentials.misc_revenue_account_id;
   }
   if (invoiceType === "parts") return credentials.parts_revenue_account_id;
+  if (invoiceType === "rental") {
+    return credentials.rental_revenue_account_id ?? credentials.misc_revenue_account_id;
+  }
   if (/^[a-z0-9-]+\s+—/i.test(description) || /^[a-z0-9-]+$/i.test(description.split(" ")[0] ?? "")) {
     return credentials.parts_revenue_account_id;
   }
