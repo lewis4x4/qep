@@ -15,6 +15,11 @@ export type QuickBooksCredentials = {
   shop_supplies_account_id: string;
   misc_revenue_account_id: string;
   tax_liability_account_id: string;
+  // Optional per-stream revenue accounts (Stream M, blueprint §5). Not part of
+  // the 7-account core-readiness contract so existing configured workspaces
+  // stay ready_for_sync; invoices of these types fall back to description
+  // inference / misc revenue until the account is mapped.
+  equipment_revenue_account_id?: string;
 };
 
 export type QuickBooksConfigDraft = Partial<QuickBooksCredentials>;
@@ -52,6 +57,7 @@ export type QuickBooksConfigSummary = {
       shop_supplies_account_id: string | null;
       misc_revenue_account_id: string | null;
       tax_liability_account_id: string | null;
+      equipment_revenue_account_id: string | null;
     };
     credential_count: number;
     account_mapping_count: number;
@@ -69,6 +75,7 @@ export type QuickBooksInvoiceContext = {
   description: string | null;
   service_job_id: string | null;
   crm_company_id: string | null;
+  invoice_type?: string | null;
   company_name?: string | null;
   line_items: Array<{
     id: string;
@@ -108,6 +115,8 @@ function parseCredentials(raw: string): QuickBooksCredentials {
     }
   }
 
+  const equipmentRevenueAccountId = normalizeOptionalString(parsed.equipment_revenue_account_id);
+
   return {
     client_id: String(parsed.client_id),
     client_secret: String(parsed.client_secret),
@@ -121,6 +130,7 @@ function parseCredentials(raw: string): QuickBooksCredentials {
     shop_supplies_account_id: String(parsed.shop_supplies_account_id),
     misc_revenue_account_id: String(parsed.misc_revenue_account_id),
     tax_liability_account_id: String(parsed.tax_liability_account_id),
+    ...(equipmentRevenueAccountId ? { equipment_revenue_account_id: equipmentRevenueAccountId } : {}),
   };
 }
 
@@ -146,6 +156,7 @@ function parseDraft(raw: string): QuickBooksConfigDraft {
     shop_supplies_account_id: normalizeOptionalString(parsed.shop_supplies_account_id) ?? undefined,
     misc_revenue_account_id: normalizeOptionalString(parsed.misc_revenue_account_id) ?? undefined,
     tax_liability_account_id: normalizeOptionalString(parsed.tax_liability_account_id) ?? undefined,
+    equipment_revenue_account_id: normalizeOptionalString(parsed.equipment_revenue_account_id) ?? undefined,
   };
 }
 
@@ -163,7 +174,7 @@ export function summarizeQuickBooksConfig(
   const hasClientSecret = typeof draft?.client_secret === "string" && draft.client_secret.trim().length > 0;
   const hasRefreshToken = typeof draft?.refresh_token === "string" && draft.refresh_token.trim().length > 0;
 
-  const accountIds = {
+  const coreAccountIds = {
     ar_account_id: draft?.ar_account_id ?? null,
     service_revenue_account_id: draft?.service_revenue_account_id ?? null,
     parts_revenue_account_id: draft?.parts_revenue_account_id ?? null,
@@ -172,9 +183,14 @@ export function summarizeQuickBooksConfig(
     misc_revenue_account_id: draft?.misc_revenue_account_id ?? null,
     tax_liability_account_id: draft?.tax_liability_account_id ?? null,
   };
+  const accountIds = {
+    ...coreAccountIds,
+    equipment_revenue_account_id: draft?.equipment_revenue_account_id ?? null,
+  };
 
   const credentialCount = countTruthy([clientId, realmId, hasClientSecret, hasRefreshToken]);
-  const accountMappingCount = countTruthy(Object.values(accountIds));
+  // Readiness stays a 7-core-account contract; per-stream accounts are additive.
+  const accountMappingCount = countTruthy(Object.values(coreAccountIds));
   const coreReady = credentialCount === 4;
   const readyForSync = coreReady && accountMappingCount === 7;
 
@@ -290,6 +306,7 @@ export async function saveQuickBooksConfig(
     shop_supplies_account_id: normalizeOptionalString(input.shop_supplies_account_id) ?? summary.config.account_ids.shop_supplies_account_id ?? undefined,
     misc_revenue_account_id: normalizeOptionalString(input.misc_revenue_account_id) ?? summary.config.account_ids.misc_revenue_account_id ?? undefined,
     tax_liability_account_id: normalizeOptionalString(input.tax_liability_account_id) ?? summary.config.account_ids.tax_liability_account_id ?? undefined,
+    equipment_revenue_account_id: normalizeOptionalString(input.equipment_revenue_account_id) ?? summary.config.account_ids.equipment_revenue_account_id ?? undefined,
   };
 
   const nextEncrypted = await encryptCredential(JSON.stringify(merged), "quickbooks");
@@ -457,12 +474,18 @@ export async function refreshQuickBooksAccessToken(
 function inferRevenueAccount(
   description: string,
   credentials: QuickBooksCredentials,
+  invoiceType?: string | null,
 ): string {
+  // Stream-typed routing wins over description inference (blueprint §5).
+  if (invoiceType === "equipment" && credentials.equipment_revenue_account_id) {
+    return credentials.equipment_revenue_account_id;
+  }
   const lower = description.toLowerCase();
   if (lower.includes("labor")) return credentials.service_revenue_account_id;
   if (lower.includes("haul") || lower.includes("transport")) return credentials.haul_revenue_account_id;
   if (lower.includes("shop supplies")) return credentials.shop_supplies_account_id;
   if (lower.includes("service total")) return credentials.service_revenue_account_id;
+  if (invoiceType === "equipment") return credentials.misc_revenue_account_id;
   if (/^[a-z0-9-]+\s+—/i.test(description) || /^[a-z0-9-]+$/i.test(description.split(" ")[0] ?? "")) {
     return credentials.parts_revenue_account_id;
   }
@@ -473,12 +496,17 @@ export function buildQuickBooksJournalEntry(
   invoice: QuickBooksInvoiceContext,
   credentials: QuickBooksCredentials,
 ): Record<string, unknown> {
-  const creditLines: QuickBooksSyncInvoiceLine[] = invoice.line_items.map((line) => ({
-    description: line.description,
-    amount: Number(line.line_total ?? line.quantity * line.unit_price),
-    accountId: inferRevenueAccount(line.description, credentials),
-    postingType: "Credit",
-  }));
+  // Negative lines (trade-in allowance on equipment invoices) post as debits
+  // against the same revenue account — QuickBooks rejects negative amounts.
+  const creditLines: QuickBooksSyncInvoiceLine[] = invoice.line_items.map((line) => {
+    const rawAmount = Number(line.line_total ?? line.quantity * line.unit_price);
+    return {
+      description: line.description,
+      amount: Math.abs(rawAmount),
+      accountId: inferRevenueAccount(line.description, credentials, invoice.invoice_type),
+      postingType: rawAmount < 0 ? "Debit" : "Credit",
+    };
+  });
 
   if ((invoice.tax ?? 0) > 0) {
     creditLines.push({
@@ -489,7 +517,10 @@ export function buildQuickBooksJournalEntry(
     });
   }
 
-  const debitTotal = creditLines.reduce((sum, line) => sum + line.amount, 0);
+  const debitTotal = creditLines.reduce(
+    (sum, line) => sum + (line.postingType === "Credit" ? line.amount : -line.amount),
+    0,
+  );
   const lines = [
     {
       Description: `QEP invoice ${invoice.invoice_number}`,

@@ -21,6 +21,7 @@ export type QuickBooksConfigSummary = {
       shop_supplies_account_id: string | null;
       misc_revenue_account_id: string | null;
       tax_liability_account_id: string | null;
+      equipment_revenue_account_id: string | null;
     };
     credential_count: number;
     account_mapping_count: number;
@@ -42,6 +43,7 @@ export type QuickBooksConfigDraft = {
   shop_supplies_account_id: string;
   misc_revenue_account_id: string;
   tax_liability_account_id: string;
+  equipment_revenue_account_id: string;
 };
 
 export function buildDraftFromSummary(summary: QuickBooksConfigSummary | null): QuickBooksConfigDraft {
@@ -58,6 +60,7 @@ export function buildDraftFromSummary(summary: QuickBooksConfigSummary | null): 
     shop_supplies_account_id: summary?.config.account_ids.shop_supplies_account_id ?? "",
     misc_revenue_account_id: summary?.config.account_ids.misc_revenue_account_id ?? "",
     tax_liability_account_id: summary?.config.account_ids.tax_liability_account_id ?? "",
+    equipment_revenue_account_id: summary?.config.account_ids.equipment_revenue_account_id ?? "",
   };
 }
 

@@ -126,6 +126,7 @@ export async function generateInvoiceForServiceJob(
       tax: 0,
       total,
       status: "pending",
+      invoice_type: "service",
       service_job_id: jobId,
       service_request_id: null,
     })

@@ -99,6 +99,7 @@
     "kb:role-access:verify": "bun ./scripts/verify/kb-role-aware-access.mjs",
     "kb:meeting-ingest:verify": "bun ./scripts/verify/kb-meeting-ingest.mjs",
     "test:rental-rate": "bun test ./shared/rental-rate-math.test.ts",
+    "test:equipment-invoice": "bun test ./shared/equipment-invoice-core.test.ts",
     "verify:rental-lockdown": "bun ./scripts/rental/verify-rpc-workspace-lockdown.mjs"
   },
   "devDependencies": {

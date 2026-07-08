@@ -117,6 +117,7 @@ function buildSavePayload(draft: QuickBooksConfigDraft): QuickBooksConfigDraft {
     shop_supplies_account_id: draft.shop_supplies_account_id.trim(),
     misc_revenue_account_id: draft.misc_revenue_account_id.trim(),
     tax_liability_account_id: draft.tax_liability_account_id.trim(),
+    equipment_revenue_account_id: draft.equipment_revenue_account_id.trim(),
   };
 }
 
@@ -427,6 +428,7 @@ export function QuickBooksGlSyncPage() {
                 <Field label="Shop supplies" value={draft.shop_supplies_account_id} onChange={(value) => setDraftField("shop_supplies_account_id", value)} placeholder="e.g. 203" />
                 <Field label="Misc revenue" value={draft.misc_revenue_account_id} onChange={(value) => setDraftField("misc_revenue_account_id", value)} placeholder="e.g. 299" />
                 <Field label="Tax liability" value={draft.tax_liability_account_id} onChange={(value) => setDraftField("tax_liability_account_id", value)} placeholder="e.g. 300" />
+                <Field label="Equipment revenue (optional)" value={draft.equipment_revenue_account_id} onChange={(value) => setDraftField("equipment_revenue_account_id", value)} placeholder="e.g. 204" />
               </div>
             </section>
           </div>

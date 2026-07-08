@@ -31,6 +31,7 @@ const readySummary: QuickBooksConfigSummary = {
       shop_supplies_account_id: "203",
       misc_revenue_account_id: "299",
       tax_liability_account_id: "300",
+      equipment_revenue_account_id: null,
     },
     credential_count: 4,
     account_mapping_count: 7,

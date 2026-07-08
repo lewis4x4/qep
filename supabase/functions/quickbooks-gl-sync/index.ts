@@ -37,7 +37,7 @@ async function loadInvoice(
     };
   })
     .from("customer_invoices")
-    .select("id, invoice_number, invoice_date, total, tax, description, service_job_id, crm_company_id")
+    .select("id, invoice_number, invoice_date, total, tax, description, service_job_id, crm_company_id, invoice_type")
     .eq("id", invoiceId)
     .single();
   if (error || !invoice) throw new Error("Invoice not found");
@@ -75,6 +75,7 @@ async function loadInvoice(
     description: invoice.description as string | null,
     service_job_id: invoice.service_job_id as string | null,
     crm_company_id: invoice.crm_company_id as string | null,
+    invoice_type: (invoice.invoice_type as string | null) ?? null,
     company_name: companyName,
     line_items: (lineItems ?? []).map((row) => ({
       id: row.id as string,
