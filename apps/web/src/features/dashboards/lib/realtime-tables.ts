@@ -12,28 +12,35 @@
 
 export type IronRoleKey = "iron_manager" | "iron_advisor" | "iron_woman" | "iron_man";
 
-/** Tables an Iron role dashboard queries — any INSERT/UPDATE/DELETE invalidates the cache. */
+/** Tables an Iron role dashboard queries — any INSERT/UPDATE/DELETE invalidates the cache.
+ *
+ * These must be BASE TABLE names, not views: `crm_deals`/`crm_equipment` are
+ * compatibility views over `qrm_deals`/`qrm_equipment`, and postgres_changes
+ * events carry the base-table name from the WAL — a subscription on a view
+ * name never fires (views can't join the realtime publication at all).
+ * Dashboard queries still read the views; only these invalidation listeners
+ * need the underlying tables. */
 export function tablesForIronRole(role: IronRoleKey): string[] {
   switch (role) {
     case "iron_manager":
       return [
-        "crm_deals",
+        "qrm_deals",
         "prospecting_kpis",
         "demos",
         "trade_valuations",
-        "crm_equipment",
+        "qrm_equipment",
         "manufacturer_incentives",
         "qrm_predictions",
       ];
     case "iron_advisor":
       return [
-        "crm_deals",
+        "qrm_deals",
         "follow_up_touchpoints",
         "prospecting_kpis",
       ];
     case "iron_woman":
       return [
-        "crm_deals",
+        "qrm_deals",
         "deposits",
         "equipment_intake",
       ];
