@@ -731,6 +731,7 @@ export function OwnerLargeDealsWidget() {
         `,
         )
         .gte("amount", 250000)
+        .not("hubspot_deal_id", "is", null)
         .is("deleted_at", null)
         .order("amount", { ascending: false })
         .limit(8);

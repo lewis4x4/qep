@@ -2409,6 +2409,12 @@ async function main() {
     return;
   }
 
+  if (["auth-users", "seed", "reseed", "baseline-local"].includes(command)) {
+    throw new Error(
+      "CRM demo seeding is disabled. Live and shared environments must use imported source data only.",
+    );
+  }
+
   if (command === "auth-users") {
     const admin = createAdminClient();
     await ensureDemoUsers(admin);

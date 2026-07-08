@@ -1155,6 +1155,16 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Unsupported action" }, 400, ch);
     }
 
+    if (action === "seed") {
+      return jsonResponse(
+        {
+          error: "Demo seeding is disabled for live environments. Use imported source data only.",
+        },
+        410,
+        ch,
+      );
+    }
+
     const voiceSummary = await purgeVoiceCaptures();
     await resetDemoData();
 

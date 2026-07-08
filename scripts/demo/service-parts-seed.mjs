@@ -2232,15 +2232,16 @@ async function main() {
     return;
   }
 
+  if (cmd === "seed") {
+    throw new Error(
+      "Service/parts demo seeding is disabled. Live and shared environments must use imported source data only.",
+    );
+  }
+
   const admin = createAdmin();
 
   if (cmd === "reset") {
     await resetServicePartsData(admin);
-    return;
-  }
-
-  if (cmd === "seed") {
-    await seedServicePartsData(admin, { scenario });
     return;
   }
 

@@ -29,6 +29,13 @@ const argv = process.argv.slice(2);
 const scenarioArg = argv.filter((a) => a.startsWith("--scenario="));
 const cmd = argv.find((a) => !a.startsWith("--")) ?? "seed";
 
+if (cmd === "seed" || cmd === "baseline-local") {
+  console.error(
+    "Full demo seeding is disabled. Live and shared environments must use imported source data only.",
+  );
+  process.exit(1);
+}
+
 if (cmd === "baseline-local") {
   run("bun", ["./scripts/demo/crm-demo-data.mjs", "seed"], {
     QEP_DEMO_PREFER_LOCAL: "1",

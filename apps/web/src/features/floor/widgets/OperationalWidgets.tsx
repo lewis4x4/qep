@@ -697,17 +697,20 @@ async function fetchRevenuePace(): Promise<{
       .from("qrm_deals")
       .select("amount")
       .in("stage_id", safeIds)
+      .not("hubspot_deal_id", "is", null)
       .gte("closed_at", monthStartISO)
       .is("deleted_at", null),
     supabase
       .from("qrm_deals")
       .select("amount")
       .in("stage_id", safeIds)
+      .not("hubspot_deal_id", "is", null)
       .gte("closed_at", dayStartISO)
       .is("deleted_at", null),
     supabase
       .from("qrm_deals")
       .select("amount")
+      .not("hubspot_deal_id", "is", null)
       .is("deleted_at", null)
       .is("closed_at", null),
   ]);

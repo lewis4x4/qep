@@ -134,11 +134,13 @@ async function fetchBuPulse(): Promise<BuPulseData> {
       .from("qrm_deals")
       .select("amount")
       .in("stage_id", safeClosedWon)
+      .not("hubspot_deal_id", "is", null)
       .gte("closed_at", monthStartISO)
       .is("deleted_at", null),
     supabase
       .from("qrm_deals")
       .select("id", { count: "exact", head: true })
+      .not("hubspot_deal_id", "is", null)
       .is("deleted_at", null)
       .is("closed_at", null),
     supabase

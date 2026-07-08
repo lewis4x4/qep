@@ -55,6 +55,11 @@ async function main() {
   if (action !== "seed" && action !== "reset") {
     throw new Error('Usage: bun ./scripts/demo/demo-admin.mjs [seed|reset]');
   }
+  if (action === "seed") {
+    throw new Error(
+      "Demo seeding is disabled. Live and shared environments must use imported source data only.",
+    );
+  }
 
   const projectUrl =
     process.env.SUPABASE_URL ??
