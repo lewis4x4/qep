@@ -44,6 +44,9 @@ const QrmDealEditorSheet = lazy(() =>
 const QrmDealEquipmentSection = lazy(() =>
   import("../components/QrmDealEquipmentSection").then((m) => ({ default: m.QrmDealEquipmentSection }))
 );
+const QrmDealPlaybookSection = lazy(() =>
+  import("../components/QrmDealPlaybookSection").then((m) => ({ default: m.QrmDealPlaybookSection }))
+);
 const QrmDealUpdateCard = lazy(() =>
   import("../components/QrmDealUpdateCard").then((m) => ({ default: m.QrmDealUpdateCard }))
 );
@@ -823,6 +826,10 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
 
           <Suspense fallback={<DeckSurface className="h-32 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>}>
             <QrmDealEquipmentSection dealId={dealId} companyId={dealQueryData?.companyId ?? null} />
+          </Suspense>
+
+          <Suspense fallback={<DeckSurface className="h-20 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>}>
+            <QrmDealPlaybookSection dealId={dealId!} />
           </Suspense>
 
           <DeckSurface>

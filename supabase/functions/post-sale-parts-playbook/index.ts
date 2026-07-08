@@ -23,6 +23,7 @@ import {
   optionsResponse, safeJsonError, safeJsonOk,
 } from "../_shared/safe-cors.ts";
 import { requireServiceUser } from "../_shared/service-auth.ts";
+import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { embedText, formatVectorLiteral } from "../_shared/openai-embeddings.ts";
 
@@ -114,7 +115,9 @@ Deno.serve(async (req) => {
     let callerRole: string | null = null;
     let callerWorkspace: string | null = null;
 
-    if (authHeader === `Bearer ${serviceKey}`) {
+    if (authHeader === `Bearer ${serviceKey}` || isServiceRoleCaller(req)) {
+      // Bearer service key (manual invoke) or x-internal-service-secret
+      // (N2.1 pg_cron batch — see migration 795).
       supabase = createClient(supabaseUrl, serviceKey);
       callerRole = "service_role";
     } else {
@@ -328,7 +331,7 @@ async function generateOne(
       }),
     );
 
-    const grounded = settled.filter((r): r is Record<string, unknown> => r !== null);
+    const grounded = settled.filter((r) => r != null) as Array<Record<string, unknown>>;
     const winTotal = grounded.reduce(
       (sum, r) => sum + (Number(r.total) || 0),
       0,

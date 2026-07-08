@@ -515,7 +515,7 @@ Deno.serve(async (req) => {
       ? body.order_source.trim()
       : "counter";
     const orderSource =
-      ["counter", "phone", "email", "online", "transfer"].includes(srcRaw)
+      ["counter", "phone", "email", "online", "transfer", "quote"].includes(srcRaw)
         ? srcRaw
         : "counter";
 
@@ -786,7 +786,7 @@ Deno.serve(async (req) => {
     }
     if (typeof body.order_source === "string") {
       const src = body.order_source.trim();
-      if (["counter", "phone", "email", "online", "transfer"].includes(src)) {
+      if (["counter", "phone", "email", "online", "transfer", "quote"].includes(src)) {
         patch.order_source = src;
       }
     }

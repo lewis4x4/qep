@@ -21,6 +21,10 @@ import { sendResendEmail } from "../_shared/resend-email.ts";
 import { computeQuoteDocumentHash } from "../_shared/quote-document-hash.ts";
 import { quoteManagerApproval } from "../_shared/flow-workflows/quote-manager-approval.ts";
 import {
+  applyGovernedPartPricing,
+  materializePartsOrderFromQuote,
+} from "../_shared/quote-parts-materializer.ts";
+import {
   createR2GetUrl,
   createR2PutUrl,
   headR2Object,
@@ -524,8 +528,17 @@ async function syncQuotePackageLineItems(input: {
   workspaceId: string;
   requestedBy: string;
   body: Record<string, unknown>;
+  crmCompanyId?: string | null;
 }): Promise<{ rows: Array<Record<string, unknown>>; error: string | null }> {
   const normalizedLineItems = normalizeQuotePackageLineItems(input.body);
+  // N2.1 governed pricing: part-type lines carry the same price the counter
+  // would charge (parts_resolve_priced_line canon). Best-effort — an
+  // unresolvable part keeps the rep's price with a provenance stamp.
+  try {
+    await applyGovernedPartPricing(input.admin, input.crmCompanyId ?? null, normalizedLineItems);
+  } catch (err) {
+    console.error("quote part pricing governance pass failed:", err);
+  }
   const requestedCatalogIds = [...new Set(normalizedLineItems
     .map((row) => row.catalog_entry_id)
     .filter((value): value is string => typeof value === "string" && UUID_RE.test(value)))];
@@ -2963,6 +2976,18 @@ async function handlePublicAccept(
     documentHash,
     repUserId: resolvedRepUserId,
   });
+
+  // N2.1: accepted part lines become a staged counter order. Best-effort —
+  // acceptance never blocks on materialization; idempotent per package (the
+  // retry short-circuit above never reaches this point twice with a create).
+  try {
+    const staged = await materializePartsOrderFromQuote(admin, quote.id);
+    if (staged.status === "created") {
+      console.log(`quote ${quote.id}: staged parts order ${staged.partsOrderId} (${staged.lineCount} lines)`);
+    }
+  } catch (err) {
+    console.error("quote parts materialization (public accept):", err);
+  }
 
   return safeJsonOk({
     signature_id: sigRow?.id ?? null,
@@ -7356,12 +7381,22 @@ Deno.serve(async (req) => {
 
       const workspaceId = typeof data.workspace_id === "string" ? data.workspace_id : "default";
       let partialSaveWarning: string | null = null;
+      let saveCompanyId: string | null = null;
+      if (typeof data.deal_id === "string" && data.deal_id) {
+        const { data: saveDeal } = await admin
+          .from("qrm_deals")
+          .select("company_id")
+          .eq("id", data.deal_id)
+          .maybeSingle();
+        saveCompanyId = (saveDeal?.company_id as string | null) ?? null;
+      }
       const syncedLineItems = await syncQuotePackageLineItems({
         admin,
         quotePackageId: String(data.id),
         workspaceId,
         requestedBy: user.id,
         body,
+        crmCompanyId: saveCompanyId,
       });
       if (syncedLineItems.error) {
         console.error("quote line item sync error:", syncedLineItems.error);
@@ -8398,6 +8433,13 @@ Deno.serve(async (req) => {
         target: QUOTE_PIPELINE_STAGE_TARGETS.salesOrderSigned,
         source: "quote_signature_accept",
       });
+
+      // N2.1: staff-signed acceptance stages the counter order too.
+      try {
+        await materializePartsOrderFromQuote(createAdminClient(), String(body.quote_package_id));
+      } catch (err) {
+        console.error("quote parts materialization (staff sign):", err);
+      }
 
       return safeJsonOk({ signature: data, document_hash: documentHash }, origin, 201);
     }
