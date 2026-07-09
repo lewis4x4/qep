@@ -3,6 +3,7 @@ import {
   classifyPersona,
   computeCustomerDnaMetrics,
   type CrmDealSignal,
+  type CustomerStreamSignals,
   type DealHistorySignal,
 } from "./customer-dna-logic.ts";
 import {
@@ -49,6 +50,9 @@ export async function refreshCustomerProfileSnapshot(
         ),
         customer_name: customerName,
         company_name: null,
+        // N4.1: stamp the company anchor at birth — unanchored profiles are
+        // invisible to Account 360, health scoring, and stream rollups.
+        crm_company_id: contact?.primary_company_id ?? null,
         metadata: {
           data_badges: ["DEMO"],
           persona_reasoning: "Profile created from partial identifiers.",
@@ -90,14 +94,23 @@ export async function refreshCustomerProfileSnapshot(
     .order("deal_date", { ascending: false })
     .limit(250);
 
+  // N4.1: the company anchor drives deal + stream signals. Prefer the stored
+  // profile anchor, fall back to the resolved contact's primary company, and
+  // backfill the profile row when it was created before stamping existed.
+  const companyId = (profileRow.crm_company_id as string | null) ??
+    contact?.primary_company_id ?? null;
+
   const crmDeals: CrmDealSignal[] = [];
-  if (contact?.id) {
-    const { data: crmDealsData } = await adminClient
+  if (companyId || contact?.id) {
+    let dealsQuery = adminClient
       .from("crm_deals")
       .select("amount, created_at, crm_deal_stages!inner(is_closed_won)")
-      .eq("primary_contact_id", contact.id)
       .is("deleted_at", null)
       .limit(250);
+    dealsQuery = companyId
+      ? dealsQuery.eq("company_id", companyId)
+      : dealsQuery.eq("primary_contact_id", contact!.id);
+    const { data: crmDealsData } = await dealsQuery;
 
     for (const row of crmDealsData ?? []) {
       const record = row as Record<string, unknown>;
@@ -117,9 +130,80 @@ export async function refreshCustomerProfileSnapshot(
     }
   }
 
+  // N4.1: fold the non-deal streams into the DNA on the company anchor.
+  let streams: CustomerStreamSignals | undefined;
+  if (companyId) {
+    const [directParts, portalIds] = await Promise.all([
+      adminClient
+        .from("parts_orders")
+        .select("total, created_at")
+        .eq("crm_company_id", companyId)
+        .limit(1000),
+      adminClient
+        .from("portal_customers")
+        .select("id")
+        .eq("crm_company_id", companyId),
+    ]);
+    const portalIdList = (portalIds.data ?? []).map((r) => r.id as string);
+    const portalParts = portalIdList.length > 0
+      ? await adminClient
+        .from("parts_orders")
+        .select("total, created_at")
+        .in("portal_customer_id", portalIdList)
+        .limit(1000)
+      : { data: [] as Array<{ total: number | null; created_at: string }> };
+
+    const [serviceInvoices, rentalContracts] = await Promise.all([
+      adminClient
+        .from("customer_invoices")
+        .select("total, invoice_date, invoice_type, service_job_id, status")
+        .eq("crm_company_id", companyId)
+        .neq("status", "void")
+        .limit(1000),
+      // Billed rental history is a financial fact — include invoices from
+      // soft-deleted contracts; only deleted invoices are excluded below.
+      adminClient
+        .from("rental_contracts")
+        .select("id")
+        .eq("qrm_company_id", companyId),
+    ]);
+    const contractIds = (rentalContracts.data ?? []).map((r) => r.id as string);
+    const rentalInvoices = contractIds.length > 0
+      ? await adminClient
+        .from("rental_invoices")
+        .select("total_cents, period_start, status")
+        .in("rental_contract_id", contractIds)
+        .neq("status", "void")
+        .is("deleted_at", null)
+        .limit(1000)
+      : { data: [] as Array<{ total_cents: number | null; period_start: string; status: string }> };
+
+    const partsRows = [...(directParts.data ?? []), ...(portalParts.data ?? [])];
+    const serviceRows = (serviceInvoices.data ?? []).filter((r) =>
+      r.invoice_type === "service" || r.service_job_id != null
+    );
+    const rentalRows = rentalInvoices.data ?? [];
+
+    const activityDates = [
+      ...partsRows.map((r) => r.created_at),
+      ...serviceRows.map((r) => r.invoice_date),
+      ...rentalRows.map((r) => r.period_start),
+    ].filter((d): d is string => typeof d === "string");
+
+    streams = {
+      partsLifetimeTotal: partsRows.reduce((s, r) => s + (r.total ?? 0), 0),
+      serviceLifetimeTotal: serviceRows.reduce((s, r) => s + (r.total ?? 0), 0),
+      rentalLifetimeTotal: rentalRows.reduce((s, r) => s + (r.total_cents ?? 0), 0) / 100,
+      lastActivityAt: activityDates.length > 0
+        ? activityDates.sort((a, b) => Date.parse(b) - Date.parse(a))[0]
+        : null,
+    };
+  }
+
   const metrics = computeCustomerDnaMetrics(
     (historyData ?? []) as DealHistorySignal[],
     crmDeals,
+    streams,
   );
   const persona = classifyPersona(metrics);
   const { data: modelRow } = await adminClient
@@ -143,6 +227,12 @@ export async function refreshCustomerProfileSnapshot(
     refresh_status: "fresh",
     refresh_job_id: null,
     source: params.isServiceRole ? "service" : "user",
+    lifetime_value_breakdown: {
+      deals: metrics.dealLifetimeValue,
+      parts: metrics.partsLifetimeValue,
+      service: metrics.serviceLifetimeValue,
+      rental: metrics.rentalLifetimeValue,
+    },
   };
 
   const { data: updated, error: updateError } = await adminClient
@@ -152,6 +242,7 @@ export async function refreshCustomerProfileSnapshot(
       persona_confidence: persona.confidence,
       persona_model_version: (modelRow?.model_version as string | null) ?? "v1",
       lifetime_value: metrics.totalLifetimeValue,
+      crm_company_id: (profileRow.crm_company_id as string | null) ?? companyId,
       total_deals: metrics.totalDeals,
       avg_deal_size: metrics.avgDealSize,
       avg_discount_pct: metrics.avgDiscountPct,

@@ -78,6 +78,32 @@ export interface Account360PartsRollup {
   }>;
 }
 
+export interface Account360RentalRollup {
+  contract_count: number;
+  open_contract_count: number;
+  lifetime_billed: number;
+  open_balance: number;
+  recent_invoices: Array<{
+    id: string;
+    invoice_number: string | null;
+    status: string;
+    invoice_date: string;
+    due_date: string | null;
+    total_cents: number;
+    balance_cents: number;
+    rental_contract_id: string;
+  }>;
+}
+
+export interface Account360ValueSummary {
+  equipment_lifetime: number;
+  parts_lifetime: number;
+  service_lifetime: number;
+  rental_lifetime: number;
+  other_lifetime: number;
+  total_customer_value: number;
+}
+
 export interface Account360Invoice {
   id: string;
   invoice_number: string;
@@ -114,7 +140,9 @@ export interface Account360Response {
   open_quotes: Account360OpenQuote[];
   service: Account360ServiceJob[];
   parts: Account360PartsRollup;
+  rental: Account360RentalRollup | null;
   invoices: Account360Invoice[];
+  value_summary: Account360ValueSummary | null;
   health: Account360HealthDelta | null;
   ar_block: Account360ARBlock | null;
 }

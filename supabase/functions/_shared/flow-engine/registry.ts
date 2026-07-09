@@ -435,6 +435,66 @@ const open_internal_service_job: FlowAction = {
   },
 };
 
+/* ─── 15. link_customer_fleet (N4.1 customer-truth seam) ────────────────── */
+
+const link_customer_fleet: FlowAction = {
+  key: "link_customer_fleet",
+  description:
+    "Closed-won deal with a subject unit → create/link the customer_fleet row (un-starves ~12 fleet consumers)",
+  affects_modules: ["qrm", "parts", "service"],
+  idempotency_key_template: "fleet:${params.equipment_id}:${event.event_id}",
+  async execute(params, ctx, deps) {
+    if (deps.dry_run) return dryRunSkip(deps, "link_customer_fleet");
+    const p = resolveParams(params, ctx);
+    if (!p.equipment_id) return { status: "skipped", reason: "no equipment_id in params" };
+    if (!p.company_id) return { status: "skipped", reason: "no company_id in params" };
+
+    const { data: portalId, error: identityErr } = await deps.admin.rpc(
+      "qep_find_or_create_portal_identity",
+      { p_workspace_id: deps.workspace_id, p_crm_company_id: p.company_id },
+    );
+    if (identityErr) return { status: "failed", error: identityErr.message, retryable: true };
+    if (!portalId) return { status: "skipped", reason: "no portal identity resolvable for company" };
+
+    const { data: unit, error: unitErr } = await deps.admin
+      .from("qrm_equipment")
+      .select("make, model, year, serial_number, engine_hours, warranty_expires_on")
+      .eq("id", p.equipment_id)
+      .maybeSingle();
+    if (unitErr) return { status: "failed", error: unitErr.message, retryable: true };
+    if (!unit) return { status: "skipped", reason: "subject equipment not found" };
+
+    const closedAt = typeof p.closed_at === "string" && p.closed_at.length > 0
+      ? p.closed_at.slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+
+    const { data: fleetRow, error: fleetErr } = await deps.admin
+      .from("customer_fleet")
+      .upsert({
+        workspace_id: deps.workspace_id,
+        portal_customer_id: portalId,
+        equipment_id: p.equipment_id,
+        make: unit.make ?? "Unknown",
+        model: unit.model ?? "Unknown",
+        year: unit.year ?? null,
+        serial_number: unit.serial_number ?? null,
+        current_hours: unit.engine_hours ?? null,
+        purchase_date: closedAt,
+        purchase_deal_id: p.deal_id ?? null,
+        warranty_expiry: unit.warranty_expires_on ?? null,
+        warranty_type: unit.warranty_expires_on ? "standard" : null,
+        is_active: true,
+      }, { onConflict: "workspace_id,equipment_id" })
+      .select("id")
+      .single();
+    if (fleetErr) return { status: "failed", error: fleetErr.message, retryable: true };
+    return {
+      status: "succeeded",
+      result: { customer_fleet_id: fleetRow?.id, portal_customer_id: portalId },
+    };
+  },
+};
+
 /* ─── Registry export ───────────────────────────────────────────────────── */
 
 export const ACTION_REGISTRY: Record<string, FlowAction> = {
@@ -453,6 +513,8 @@ export const ACTION_REGISTRY: Record<string, FlowAction> = {
   // Stream L / L4 rental seam actions
   create_traffic_ticket,
   open_internal_service_job,
+  // N4.1 customer-truth seam
+  link_customer_fleet,
   // Wave 7 Iron Companion actions (6 v1 flows)
   ...IRON_ACTION_REGISTRY,
 };

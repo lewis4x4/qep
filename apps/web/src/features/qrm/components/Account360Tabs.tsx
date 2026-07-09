@@ -330,6 +330,92 @@ export function AccountPartsTab({ parts }: { parts: Account360Response["parts"] 
   );
 }
 
+/* ── Rental tab (N4.1) ──────────────────────────────────────────── */
+
+export function AccountRentalTab({ rental }: { rental: Account360Response["rental"] }) {
+  if (!rental || rental.contract_count === 0) {
+    return (
+      <Card className="p-3">
+        <p className="text-xs text-muted-foreground">No rental history on this account yet.</p>
+      </Card>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <Card className="p-3">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Lifetime rental billed</p>
+          <p className="mt-1 text-2xl font-bold text-sky-400 tabular-nums">
+            ${(rental.lifetime_billed ?? 0).toLocaleString()}
+          </p>
+        </Card>
+        <Card className="p-3">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Open rental balance</p>
+          <p className={`mt-1 text-2xl font-bold tabular-nums ${rental.open_balance > 0 ? "text-amber-400" : "text-foreground"}`}>
+            ${(rental.open_balance ?? 0).toLocaleString()}
+          </p>
+        </Card>
+        <Card className="p-3">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Contracts</p>
+          <p className="mt-1 text-2xl font-bold text-foreground tabular-nums">{rental.contract_count}</p>
+        </Card>
+        <Card className="p-3">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Open contracts</p>
+          <p className="mt-1 text-2xl font-bold text-foreground tabular-nums">{rental.open_contract_count}</p>
+        </Card>
+      </div>
+      <div>
+        <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Recent rental invoices</p>
+        {rental.recent_invoices.length === 0 ? (
+          <Card className="p-3"><p className="text-xs text-muted-foreground">No rental invoices yet.</p></Card>
+        ) : (
+          <div className="space-y-1.5">
+            {rental.recent_invoices.map((ri) => (
+              <Card key={ri.id} className="p-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-foreground">{ri.invoice_number ?? ri.id.slice(0, 8)}</span>
+                  <span className="font-bold text-foreground tabular-nums">
+                    ${((ri.total_cents ?? 0) / 100).toLocaleString()}
+                  </span>
+                </div>
+                <div className="mt-0.5 flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>{new Date(ri.invoice_date).toLocaleDateString()}</span>
+                  <span className={ri.balance_cents > 0 ? "text-amber-400" : ""}>
+                    {ri.balance_cents > 0
+                      ? `$${(ri.balance_cents / 100).toLocaleString()} open`
+                      : "settled"}
+                  </span>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Total customer value pill (N4.1) ───────────────────────────── */
+
+export function AccountValuePill({ value }: { value: Account360Response["value_summary"] }) {
+  if (!value || value.total_customer_value <= 0) return null;
+  const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+  const title = [
+    `Equipment $${value.equipment_lifetime.toLocaleString()}`,
+    `Parts $${value.parts_lifetime.toLocaleString()}`,
+    `Service $${value.service_lifetime.toLocaleString()}`,
+    `Rental $${value.rental_lifetime.toLocaleString()}`,
+  ].join(" · ");
+  return (
+    <span
+      title={title}
+      className="inline-flex min-h-[32px] items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 text-xs font-semibold text-emerald-400 tabular-nums"
+    >
+      LTV ${compact.format(value.total_customer_value)}
+    </span>
+  );
+}
+
 /* ── Invoices / AR tab ──────────────────────────────────────────── */
 
 export function AccountARTab({ invoices, arBlock }: { invoices: Account360Invoice[]; arBlock: Account360Response["ar_block"] }) {

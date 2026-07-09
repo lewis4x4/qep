@@ -13,6 +13,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 import { requireServiceUser } from "../_shared/service-auth.ts";
+import { refreshCustomerProfileSnapshot } from "../_shared/customer-profile-refresh.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req) => {
@@ -41,7 +42,7 @@ Deno.serve(async (req) => {
     if (!isServiceRole) {
       // User path — canonical ES256-safe JWT auth. Narrow to manager/owner
       // since health score refresh is a sensitive aggregate operation.
-      const auth = await requireServiceUser(authHeader, origin);
+      const auth = await requireServiceUser(authHeader ?? null, origin);
       if (!auth.ok) return auth.response;
       if (!["manager", "owner"].includes(auth.role)) {
         return safeJsonError("Health score refresh requires manager or owner role", 403, origin);
@@ -94,10 +95,65 @@ Deno.serve(async (req) => {
         p_workspace_id: "default",
       });
 
+      // N4.1 lifecycle DNA sweep: refresh company-anchored profiles whose
+      // company had cross-stream activity since the last daily run, so
+      // lifetime value and personas move on parts/rental/AR events — not
+      // just DGE page views. 36h window overlaps runs; direct calls, no
+      // separate job-queue drain needed.
+      let dnaRefreshed = 0;
+      let dnaFailed = 0;
+      try {
+        const since = new Date(Date.now() - 36 * 3600 * 1000).toISOString();
+        const [parts, invoices, deals, rentalInv] = await Promise.all([
+          supabaseAdmin.from("parts_orders").select("crm_company_id").gt("created_at", since).not("crm_company_id", "is", null).limit(500),
+          supabaseAdmin.from("customer_invoices").select("crm_company_id").gt("created_at", since).not("crm_company_id", "is", null).limit(500),
+          supabaseAdmin.from("crm_deals").select("company_id").gt("updated_at", since).not("company_id", "is", null).limit(500),
+          supabaseAdmin.from("rental_invoices").select("rental_contract_id").gt("created_at", since).limit(500),
+        ]);
+        const activeCompanies = new Set<string>();
+        for (const r of parts.data ?? []) activeCompanies.add(r.crm_company_id as string);
+        for (const r of invoices.data ?? []) activeCompanies.add(r.crm_company_id as string);
+        for (const r of deals.data ?? []) activeCompanies.add(r.company_id as string);
+        const contractIds = [...new Set((rentalInv.data ?? []).map((r) => r.rental_contract_id as string))];
+        if (contractIds.length > 0) {
+          const { data: contracts } = await supabaseAdmin
+            .from("rental_contracts")
+            .select("qrm_company_id")
+            .in("id", contractIds)
+            .not("qrm_company_id", "is", null);
+          for (const r of contracts ?? []) activeCompanies.add(r.qrm_company_id as string);
+        }
+
+        if (activeCompanies.size > 0) {
+          const { data: activeProfiles } = await supabaseAdmin
+            .from("customer_profiles_extended")
+            .select("id")
+            .in("crm_company_id", [...activeCompanies].slice(0, 200))
+            .limit(50);
+          for (const profile of activeProfiles ?? []) {
+            try {
+              await refreshCustomerProfileSnapshot(supabaseAdmin, {
+                lookup: { customer_profiles_extended_id: profile.id as string },
+                actorRole: "owner",
+                actorUserId: null,
+                isServiceRole: true,
+              });
+              dnaRefreshed++;
+            } catch (_err) {
+              dnaFailed++;
+            }
+          }
+        }
+      } catch (err) {
+        console.error("health-score-refresh: DNA sweep failed:", err);
+      }
+
       return safeJsonOk({
         ok: true,
         scores_refreshed: scoresRefreshed,
         alerts_generated: alertErr ? 0 : (alertCount ?? 0),
+        dna_refreshed: dnaRefreshed,
+        dna_failed: dnaFailed,
       }, origin);
     }
 

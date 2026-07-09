@@ -22,10 +22,25 @@ export interface CrmDealSignal {
   stage_is_closed_won: boolean;
 }
 
+/**
+ * N4.1: lifetime signals from the non-deal revenue streams, gathered on the
+ * profile's company anchor. All values are dollars (not cents).
+ */
+export interface CustomerStreamSignals {
+  partsLifetimeTotal: number;
+  serviceLifetimeTotal: number;
+  rentalLifetimeTotal: number;
+  lastActivityAt: string | null;
+}
+
 export interface CustomerDnaMetrics {
   totalDeals: number;
   wonDeals: number;
   totalLifetimeValue: number;
+  dealLifetimeValue: number;
+  partsLifetimeValue: number;
+  serviceLifetimeValue: number;
+  rentalLifetimeValue: number;
   avgDealSize: number | null;
   avgDiscountPct: number | null;
   avgDaysToClose: number | null;
@@ -70,6 +85,7 @@ function confidenceFromSignals(
 export function computeCustomerDnaMetrics(
   dealHistory: DealHistorySignal[],
   crmDeals: CrmDealSignal[],
+  streams?: CustomerStreamSignals,
 ): CustomerDnaMetrics {
   const totalDeals = dealHistory.length > 0
     ? dealHistory.length
@@ -88,10 +104,18 @@ export function computeCustomerDnaMetrics(
     .map((deal) => deal.amount)
     .filter((value): value is number => typeof value === "number");
 
-  const totalLifetimeValue =
+  const dealLifetimeValue =
     (lifetimeValuesFromHistory.length > 0
       ? lifetimeValuesFromHistory
       : lifetimeValuesFromCrm).reduce((sum, value) => sum + value, 0);
+
+  // N4.1: lifetime value spans all four streams when the caller supplies the
+  // company-anchored parts/service/rental totals; deal-only otherwise.
+  const partsLifetimeValue = streams?.partsLifetimeTotal ?? 0;
+  const serviceLifetimeValue = streams?.serviceLifetimeTotal ?? 0;
+  const rentalLifetimeValue = streams?.rentalLifetimeTotal ?? 0;
+  const totalLifetimeValue = dealLifetimeValue + partsLifetimeValue +
+    serviceLifetimeValue + rentalLifetimeValue;
 
   const discountValues = dealHistory
     .map((deal) => deal.discount_pct)
@@ -145,8 +169,12 @@ export function computeCustomerDnaMetrics(
     totalDeals,
     wonDeals,
     totalLifetimeValue: Number(totalLifetimeValue.toFixed(2)),
+    dealLifetimeValue: Number(dealLifetimeValue.toFixed(2)),
+    partsLifetimeValue: Number(partsLifetimeValue.toFixed(2)),
+    serviceLifetimeValue: Number(serviceLifetimeValue.toFixed(2)),
+    rentalLifetimeValue: Number(rentalLifetimeValue.toFixed(2)),
     avgDealSize: wonDeals > 0
-      ? Number((totalLifetimeValue / wonDeals).toFixed(2))
+      ? Number((dealLifetimeValue / wonDeals).toFixed(2))
       : null,
     avgDiscountPct: avgDiscountPct === null
       ? null
@@ -164,7 +192,11 @@ export function computeCustomerDnaMetrics(
       ? null
       : Number(financingRate.toFixed(2)),
     priceSensitivityScore,
-    lastInteractionAt: latestDate([...historyDates, ...crmDates]),
+    lastInteractionAt: latestDate([
+      ...historyDates,
+      ...crmDates,
+      ...(streams?.lastActivityAt ? [streams.lastActivityAt] : []),
+    ]),
   };
 }
 

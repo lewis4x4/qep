@@ -35,6 +35,7 @@ import { rentalNearingEnd } from "../_shared/flow-workflows/rental-nearing-end.t
 import { competitorSignalFromVoice } from "../_shared/flow-workflows/competitor-signal-from-voice.ts";
 import { quoteManagerApproval } from "../_shared/flow-workflows/quote-manager-approval.ts";
 import { dealDepositMakeReady } from "../_shared/flow-workflows/deal-deposit-make-ready.ts";
+import { dealClosedWonFleet } from "../_shared/flow-workflows/deal-closed-won-fleet.ts";
 import { IRON_FLOW_DEFINITIONS } from "../_shared/flow-workflows/iron-flows.ts";
 import { RENTAL_FLOW_DEFINITIONS } from "../_shared/flow-workflows/rental-lifecycle-flows.ts";
 
@@ -53,6 +54,8 @@ const REGISTERED_WORKFLOWS: FlowWorkflowDefinition[] = [
   quoteManagerApproval,
   // N1.1 sales↔service: Deposit Collected → pdi_new_prep make-ready WO
   dealDepositMakeReady,
+  // N4.1 customer truth: closed won + subject unit → customer_fleet row
+  dealClosedWonFleet,
   // Wave 7 Iron Companion conversational flows (6 v1 flows)
   ...IRON_FLOW_DEFINITIONS,
   // Stream L / L4 rental lifecycle flows (7 flows; rental-nearing-end above)

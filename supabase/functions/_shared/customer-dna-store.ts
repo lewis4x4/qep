@@ -16,6 +16,7 @@ export interface CrmContactRow {
   email: string | null;
   hubspot_contact_id: string | null;
   dge_customer_profile_id: string | null;
+  primary_company_id: string | null;
 }
 
 export function cleanString(value: unknown): string | null {
@@ -45,7 +46,7 @@ export async function resolveContactByLookup(
     const { data } = await adminClient
       .from("crm_contacts")
       .select(
-        "id, first_name, last_name, email, hubspot_contact_id, dge_customer_profile_id",
+        "id, first_name, last_name, email, hubspot_contact_id, dge_customer_profile_id, primary_company_id",
       )
       .eq("hubspot_contact_id", hubspotId)
       .is("deleted_at", null)
@@ -60,7 +61,7 @@ export async function resolveContactByLookup(
     const { data } = await adminClient
       .from("crm_contacts")
       .select(
-        "id, first_name, last_name, email, hubspot_contact_id, dge_customer_profile_id",
+        "id, first_name, last_name, email, hubspot_contact_id, dge_customer_profile_id, primary_company_id",
       )
       .ilike("email", email)
       .is("deleted_at", null)

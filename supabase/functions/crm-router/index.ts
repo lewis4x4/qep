@@ -48,6 +48,7 @@ import {
   createCompany,
   createCompanyShipTo,
   createContact,
+  createPortalIdentity,
   deliverActivity,
   patchActivity,
   patchCompany,
@@ -86,6 +87,7 @@ import {
   type ActivityPatchPayload,
   type CompanyShipToPayload,
   type CompanyUpsertPayload,
+  type PortalIdentityPayload,
   type CommunicationTargetPayload,
   type ContactUpsertPayload,
   type CustomFieldDefinitionPayload,
@@ -301,6 +303,33 @@ function mapError(origin: string | null, error: unknown): Response {
       status: 409,
       code: "VALIDATION_ERROR",
       message: "Pause or cancel live follow-up enrollments before archiving this deal.",
+    });
+  }
+
+  if (message === "VALIDATION_PORTAL_CONTACT_REQUIRED") {
+    return crmFail({
+      origin,
+      status: 400,
+      code: "VALIDATION_ERROR",
+      message: "Pick a CRM contact to create the portal identity from.",
+    });
+  }
+
+  if (message === "VALIDATION_PORTAL_CONTACT_COMPANY_REQUIRED") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "Link the contact to a company first — portal identities must be company-anchored.",
+    });
+  }
+
+  if (message === "VALIDATION_PORTAL_CONTACT_EMAIL_REQUIRED") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "The contact needs an email address before a portal identity can be created.",
     });
   }
 
@@ -740,6 +769,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const body = await readJsonBody<ContactUpsertPayload>(req);
       const contact = await patchContact(ctx, segments[2], body);
       return crmOk({ contact }, { origin });
+    }
+
+    if (
+      segments[1] === "portal-identities" &&
+      req.method === "POST" &&
+      segments.length === 2
+    ) {
+      requireElevated(ctx);
+      const body = await readJsonBody<PortalIdentityPayload>(req);
+      const identity = await createPortalIdentity(ctx, body);
+      return crmOk({ identity }, { origin, status: 201 });
     }
 
     if (

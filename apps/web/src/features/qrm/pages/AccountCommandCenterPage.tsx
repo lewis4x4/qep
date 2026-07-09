@@ -18,7 +18,9 @@ import {
   AccountNextBestActions,
   AccountPartsTab,
   AccountQuotesTab,
+  AccountRentalTab,
   AccountServiceTab,
+  AccountValuePill,
 } from "../components/Account360Tabs";
 import { HealthScorePill } from "../../nervous-system/components/HealthScorePill";
 import { HealthScoreDrawer } from "../../nervous-system/components/HealthScoreDrawer";
@@ -104,7 +106,7 @@ function buildAccountActivityEmptyStateCue(data: Account360Response, timelineHre
 export function AccountCommandCenterPage() {
   const { accountId } = useParams<{ accountId: string }>();
   const { profile, user } = useAuth();
-  const [tab, setTab] = useState<"commercial" | "fleet" | "quotes" | "service" | "parts" | "ar" | "intellidealer" | "lifecycle">("commercial");
+  const [tab, setTab] = useState<"commercial" | "fleet" | "quotes" | "service" | "parts" | "rental" | "ar" | "intellidealer" | "lifecycle">("commercial");
   const [healthDrawerOpen, setHealthDrawerOpen] = useState(false);
 
   const account360Query = useQuery({
@@ -164,6 +166,7 @@ export function AccountCommandCenterPage() {
           crumb={{ surface: "GRAPH", lens: "COMMAND", count: accountId?.slice(0, 8) }}
         />
         <div className="flex items-center gap-2">
+          <AccountValuePill value={data.value_summary} />
           <HealthScorePill
             score={data.health?.current_score != null ? Number(data.health.current_score) : null}
             delta7d={data.health?.delta_7d != null ? Number(data.health.delta_7d) : null}
@@ -196,6 +199,7 @@ export function AccountCommandCenterPage() {
                   { key: "quotes", label: `Quotes (${data.open_quotes.length})` },
                   { key: "service", label: `Service (${data.service.length})` },
                   { key: "parts", label: "Parts" },
+                  { key: "rental", label: `Rental (${data.rental?.contract_count ?? 0})` },
                   { key: "ar", label: `AR (${data.invoices.length})` },
                   { key: "intellidealer", label: "IntelliDealer" },
                   { key: "lifecycle", label: "Lifecycle" },
@@ -227,6 +231,7 @@ export function AccountCommandCenterPage() {
               {tab === "quotes" && <AccountQuotesTab quotes={data.open_quotes} />}
               {tab === "service" && <AccountServiceTab service={data.service} />}
               {tab === "parts" && <AccountPartsTab parts={data.parts} />}
+              {tab === "rental" && <AccountRentalTab rental={data.rental} />}
               {tab === "ar" && <AccountARTab invoices={data.invoices} arBlock={data.ar_block} />}
               {tab === "intellidealer" && <AccountIntelliDealerTab companyId={accountId} />}
               {tab === "lifecycle" && (

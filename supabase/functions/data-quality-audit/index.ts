@@ -19,7 +19,7 @@
  *
  * Auth: service_role (cron) or manager/owner (manual)
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
@@ -33,7 +33,8 @@ interface AuditResult {
   suggested_action: string;
 }
 
-async function runAudit(admin: ReturnType<typeof createClient>): Promise<AuditResult[]> {
+// deno-lint-ignore no-explicit-any
+async function runAudit(admin: SupabaseClient<any>): Promise<AuditResult[]> {
   const results: AuditResult[] = [];
 
   // 1. Equipment without owner linkage
@@ -124,6 +125,23 @@ async function runAudit(admin: ReturnType<typeof createClient>): Promise<AuditRe
       open_count: orphanDeals,
       severity: "warning",
       suggested_action: "Link deals to their parent company and primary contact.",
+    });
+  }
+
+  // 5b. Portal identities without company anchor (N4.1: unlinked identities
+  // are invisible to fleet, parts, and rental rollups)
+  const { count: unlinkedPortal } = await admin
+    .from("portal_customers")
+    .select("*", { count: "exact", head: true })
+    .is("crm_company_id", null);
+  if (unlinkedPortal && unlinkedPortal > 0) {
+    results.push({
+      issue_class: "portal_identities_unlinked",
+      issue_description: "Portal identities without a company anchor",
+      open_count: unlinkedPortal,
+      severity: "warning",
+      suggested_action:
+        "Link each portal identity to its CRM company (crm_company_id) so fleet, parts, and rental activity roll up to the account.",
     });
   }
 

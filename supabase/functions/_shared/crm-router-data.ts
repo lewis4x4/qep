@@ -1547,6 +1547,93 @@ export async function patchContact(
   };
 }
 
+export interface PortalIdentityPayload {
+  crmContactId?: string;
+  portalRole?: "viewer" | "manager" | "admin";
+  sendInvite?: boolean;
+}
+
+/**
+ * N4.1: admin workflow for portal identities. Before this, only demo seeds
+ * ever created portal_customers rows. crm_company_id is mandatory — an
+ * unlinked portal identity is invisible to fleet, parts, and rental rollups.
+ * The auth invite degrades to 'skipped' when email delivery is unavailable
+ * (zero-blocking rule); the identity row still lands.
+ */
+export async function createPortalIdentity(
+  ctx: RouterCtx,
+  payload: PortalIdentityPayload,
+): Promise<unknown> {
+  const contactId = cleanText(payload.crmContactId ?? null);
+  if (!contactId || !isUuid(contactId)) {
+    throw new Error("VALIDATION_PORTAL_CONTACT_REQUIRED");
+  }
+
+  const { data: contact, error: contactErr } = await ctx.admin
+    .from("crm_contacts")
+    .select("id, first_name, last_name, email, primary_company_id")
+    .eq("id", contactId)
+    .eq("workspace_id", ctx.workspaceId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (contactErr) throw contactErr;
+  if (!contact) throw new Error("NOT_FOUND");
+  if (!contact.primary_company_id) {
+    throw new Error("VALIDATION_PORTAL_CONTACT_COMPANY_REQUIRED");
+  }
+  const email = cleanText(contact.email);
+  if (!email) throw new Error("VALIDATION_PORTAL_CONTACT_EMAIL_REQUIRED");
+
+  const portalRole = payload.portalRole && ["viewer", "manager", "admin"].includes(payload.portalRole)
+    ? payload.portalRole
+    : "viewer";
+
+  const { data: identity, error: identityErr } = await ctx.admin
+    .from("portal_customers")
+    .upsert({
+      workspace_id: ctx.workspaceId,
+      crm_contact_id: contact.id,
+      crm_company_id: contact.primary_company_id,
+      first_name: contact.first_name ?? "Portal",
+      last_name: contact.last_name ?? "User",
+      email,
+      portal_role: portalRole,
+      is_active: true,
+    }, { onConflict: "workspace_id,email" })
+    .select("id, auth_user_id, email, crm_company_id, crm_contact_id, portal_role, is_active")
+    .single();
+  if (identityErr) throw identityErr;
+
+  let inviteStatus: "sent" | "skipped" | "already_linked" = "skipped";
+  if (payload.sendInvite === true) {
+    if (identity.auth_user_id) {
+      inviteStatus = "already_linked";
+    } else {
+      const { data: invite, error: inviteErr } = await ctx.admin.auth.admin
+        .inviteUserByEmail(email);
+      if (!inviteErr && invite?.user?.id) {
+        await ctx.admin
+          .from("portal_customers")
+          .update({ auth_user_id: invite.user.id })
+          .eq("id", identity.id)
+          .is("auth_user_id", null);
+        inviteStatus = "sent";
+      }
+    }
+  }
+
+  return {
+    id: identity.id,
+    email: identity.email,
+    crmCompanyId: identity.crm_company_id,
+    crmContactId: identity.crm_contact_id,
+    portalRole: identity.portal_role,
+    isActive: identity.is_active,
+    authUserId: identity.auth_user_id,
+    inviteStatus,
+  };
+}
+
 export async function createCompany(
   ctx: RouterCtx,
   payload: CompanyUpsertPayload,
