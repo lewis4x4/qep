@@ -60,6 +60,12 @@ export default defineConfig({
             org: process.env.SENTRY_ORG!,
             project: process.env.SENTRY_PROJECT!,
             authToken: process.env.SENTRY_AUTH_TOKEN!,
+            // Sourcemap upload is telemetry, not a build gate — a stale
+            // token or Sentry outage must not fail CI (the April 2026
+            // CI break coincided with these secrets being added).
+            errorHandler: (err) => {
+              console.warn("[sentry-vite-plugin] non-fatal:", err?.message ?? err);
+            },
           }),
         ]
       : []),
