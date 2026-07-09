@@ -2,18 +2,24 @@
  * Dispatches SMS/email for service_customer_notifications rows.
  * Marks delivered only on HTTP success so failed sends stay retryable.
  * Cron or manual invoke with service role.
+ *
+ * Rows are claimed atomically via claim_service_customer_notifications
+ * (m802: FOR UPDATE SKIP LOCKED + a 5-minute lease) — concurrent
+ * invocations can never pick up the same undelivered row, so a slow
+ * provider call or an overlapping manual run cannot double-send. A row
+ * whose send fails becomes claimable again when its lease expires.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { logServiceCronRun } from "../_shared/service-cron-run.ts";
+import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { status: 200 });
 
-  const authHeader = req.headers.get("Authorization")?.trim();
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!authHeader || authHeader !== `Bearer ${serviceKey}`) {
+  if (!isServiceRoleCaller(req)) {
     return safeJsonError("Unauthorized", 401, null);
   }
 
@@ -36,13 +42,12 @@ Deno.serve(async (req) => {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey!);
 
     // Invariant: email/sms rows must have a recipient (queued upstream by lifecycle notify).
-    const { data: pending } = await supabase
-      .from("service_customer_notifications")
-      .select("id, job_id, channel, recipient, notification_type, metadata")
-      .in("channel", ["sms", "email"])
-      .not("recipient", "is", null)
-      .is("metadata->>delivered", null)
-      .limit(25);
+    const { data: pending, error: claimError } = await supabase
+      .rpc("claim_service_customer_notifications", {
+        p_limit: 25,
+        p_lease_seconds: 300,
+      });
+    if (claimError) throw claimError;
 
     let sms_sent = 0;
     let email_sent = 0;

@@ -26,6 +26,7 @@ import {
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
 import { requireServiceUser } from "../_shared/service-auth.ts";
+import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { logServiceCronRun } from "../_shared/service-cron-run.ts";
 
@@ -55,8 +56,8 @@ Deno.serve(async (req) => {
     let supabase: SupabaseClient;
     let calledBy: string;
 
-    if (authHeader === `Bearer ${serviceKey}`) {
-      // Service-role cron path
+    if (isServiceRoleCaller(req)) {
+      // Service-role / vault-secret cron path
       supabase = createClient(supabaseUrl, serviceKey);
       calledBy = "cron";
     } else {

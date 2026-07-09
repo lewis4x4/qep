@@ -6,6 +6,12 @@ on:
   schedule:
     - cron: "0 6 * * *"
 
+# shell: bash enables pipefail so a non-2xx from curl fails the run
+# (see service-cron.yml — the pipe to head masked 401s until N5.1).
+defaults:
+  run:
+    shell: bash
+
 jobs:
   jobcode-learner:
     runs-on: ubuntu-latest

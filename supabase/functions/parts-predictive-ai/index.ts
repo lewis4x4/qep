@@ -21,6 +21,7 @@ import {
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
 import { requireServiceUser } from "../_shared/service-auth.ts";
+import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { embedText, formatVectorLiteral } from "../_shared/openai-embeddings.ts";
 
@@ -117,7 +118,7 @@ Deno.serve(async (req) => {
     let supabase: SupabaseClient;
     let calledBy: string;
 
-    if (authHeader === `Bearer ${serviceKey}`) {
+    if (isServiceRoleCaller(req)) {
       supabase = createClient(supabaseUrl, serviceKey);
       calledBy = "cron";
     } else {

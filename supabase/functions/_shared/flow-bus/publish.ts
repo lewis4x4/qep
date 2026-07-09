@@ -1,22 +1,38 @@
 /**
- * QRM Flow Bus — publish helper (Phase 0 P0.4).
+ * QRM Flow Bus — publish helper.
  *
- * Publishes events to the `flow_events` table (migration 209). Handles
- * idempotency via the table's `(workspace_id, idempotency_key)` partial
- * unique index — duplicate publishes return the existing event id with
- * `deduped: true`.
+ * REPOINTED (N5.1 / m802): this helper used to insert into the m209
+ * `flow_events` table ("Bus B") — a write-only bus with zero readers.
+ * It now publishes onto the live event fabric via the `emit_event()` RPC
+ * (analytics_events + pg_notify), which the flow-runner consumes through
+ * the `flow_pending_events` view. `flow_events` is deprecated: rows are
+ * kept as history, but nothing writes or reads it anymore.
  *
- * Uses an admin/service-role Supabase client for inserts (the `flow_events`
- * RLS policy gates inserts to service-role only). Callers should pass an
- * admin client, NOT a caller (user-context) client.
+ * The public API (`publishFlowEvent`, `validatePublishInput`, input/result
+ * types) is unchanged so the seven existing call sites did not move:
+ * anomaly-scan, nudge-scheduler, qrm-command-center, follow-up-engine,
+ * deal-timing-scan, _shared/parts-invoice, _shared/equipment-invoice.
  *
- * Pure helpers (`buildEventRow`, `validatePublishInput`) are exported and
- * tested independently from the DB-bound `publishFlowEvent` function.
+ * Field mapping:
+ *   • eventType/sourceModule → emit_event p_event_type/p_source_module
+ *   • entity: first of dealId → equipmentId → customerId → companyId →
+ *     sourceRecordId becomes (p_entity_type, p_entity_id)
+ *   • ADD-033 advisory fields + the id fields are folded into p_payload —
+ *     `company_id`/`deal_id` keys matter: flow_resolve_context hydrates
+ *     workflow context from them
+ *   • idempotencyKey → payload.idempotency_key + a pre-emit dedupe probe
+ *     against analytics_events (expression index idx_ae_flow_idempotency_key,
+ *     m802). The probe is read-then-write, not constraint-backed: a
+ *     concurrent same-key race can double-emit. Acceptable — these are
+ *     advisory signals and workflow actions dedupe via
+ *     flow_action_idempotency.
+ *
+ * Pure helpers (`buildEmitEventArgs`, `validatePublishInput`) are exported
+ * and tested independently from the DB-bound `publishFlowEvent` function.
  */
 
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import type {
-  FlowEventInsertRow,
   PublishFlowEventInput,
   PublishFlowEventResult,
 } from "./types.ts";
@@ -75,191 +91,159 @@ export function validatePublishInput(input: PublishFlowEventInput): void {
   }
 }
 
-// ─── Row builder (pure) ───────────────────────────────────────────────────
+// ─── emit_event args builder (pure) ──────────────────────────────────────
+
+/** Named-arg shape for the `emit_event` RPC (mig 196 signature). */
+export interface EmitEventArgs {
+  p_event_type: string;
+  p_source_module: string;
+  p_entity_type: string | null;
+  p_entity_id: string | null;
+  p_payload: Record<string, unknown>;
+  p_workspace_id: string;
+  p_correlation_id: string | null;
+  p_parent_event_id: string | null;
+  p_actor_type: string;
+  p_actor_id: string | null;
+}
 
 /**
- * Convert a camelCase `PublishFlowEventInput` into the snake_case insert
- * row shape expected by PostgREST. Drops `undefined` fields so the database
- * supplies its own defaults (event_id, status, payload, created_at, etc.).
+ * Convert a camelCase `PublishFlowEventInput` into named args for the
+ * `emit_event` RPC. Entity precedence picks the most specific id; every
+ * id + advisory field is folded into the payload so nothing the old bus
+ * carried is lost, and `flow_resolve_context` can hydrate from
+ * `company_id`/`deal_id`. Existing payload keys are never overwritten.
  *
  * Pure function — no IO, no side effects. Tested directly.
  */
-export function buildEventRow(input: PublishFlowEventInput): FlowEventInsertRow {
-  const row: FlowEventInsertRow = {
-    workspace_id: input.workspaceId,
-    event_type: input.eventType,
-    source_module: input.sourceModule,
+export function buildEmitEventArgs(input: PublishFlowEventInput): EmitEventArgs {
+  let entityType: string | null = null;
+  let entityId: string | null = null;
+  if (input.dealId) {
+    entityType = "deal";
+    entityId = input.dealId;
+  } else if (input.equipmentId) {
+    entityType = "equipment";
+    entityId = input.equipmentId;
+  } else if (input.customerId) {
+    entityType = "customer";
+    entityId = input.customerId;
+  } else if (input.companyId) {
+    entityType = "company";
+    entityId = input.companyId;
+  } else if (input.sourceRecordId) {
+    entityType = "record";
+    entityId = input.sourceRecordId;
+  }
+
+  const payload: Record<string, unknown> = { ...(input.payload ?? {}) };
+  const fold = (key: string, value: unknown) => {
+    if (value !== undefined && !(key in payload)) payload[key] = value;
   };
+  fold("source_record_id", input.sourceRecordId);
+  fold("customer_id", input.customerId);
+  fold("company_id", input.companyId);
+  fold("equipment_id", input.equipmentId);
+  fold("deal_id", input.dealId);
+  fold("severity", input.severity);
+  fold("commercial_relevance", input.commercialRelevance);
+  fold("suggested_owner", input.suggestedOwner);
+  fold("required_action", input.requiredAction);
+  fold("recommended_deadline", input.recommendedDeadline);
+  fold("draft_message", input.draftMessage);
+  fold("escalation_rule", input.escalationRule);
+  fold("status", input.status);
+  fold("idempotency_key", input.idempotencyKey);
 
-  // ADD-033 fields (only set if supplied — let DB defaults handle the rest)
-  if (input.eventId !== undefined) row.event_id = input.eventId;
-  if (input.sourceRecordId !== undefined) row.source_record_id = input.sourceRecordId;
-  if (input.customerId !== undefined) row.customer_id = input.customerId;
-  if (input.companyId !== undefined) row.company_id = input.companyId;
-  if (input.equipmentId !== undefined) row.equipment_id = input.equipmentId;
-  if (input.dealId !== undefined) row.deal_id = input.dealId;
-  if (input.severity !== undefined) row.severity = input.severity;
-  if (input.commercialRelevance !== undefined) {
-    row.commercial_relevance = input.commercialRelevance;
-  }
-  if (input.suggestedOwner !== undefined) row.suggested_owner = input.suggestedOwner;
-  if (input.requiredAction !== undefined) row.required_action = input.requiredAction;
-  if (input.recommendedDeadline !== undefined) {
-    row.recommended_deadline = input.recommendedDeadline;
-  }
-  if (input.draftMessage !== undefined) row.draft_message = input.draftMessage;
-  if (input.escalationRule !== undefined) row.escalation_rule = input.escalationRule;
-  if (input.status !== undefined) row.status = input.status;
-
-  // Bus-specific fields
-  if (input.payload !== undefined) row.payload = input.payload;
-  if (input.idempotencyKey !== undefined) row.idempotency_key = input.idempotencyKey;
-  if (input.correlationId !== undefined) row.correlation_id = input.correlationId;
-  if (input.parentEventId !== undefined) row.parent_event_id = input.parentEventId;
-
-  return row;
+  return {
+    p_event_type: input.eventType,
+    p_source_module: input.sourceModule,
+    p_entity_type: entityType,
+    p_entity_id: entityId,
+    p_payload: payload,
+    p_workspace_id: input.workspaceId,
+    p_correlation_id: input.correlationId ?? null,
+    p_parent_event_id: input.parentEventId ?? null,
+    p_actor_type: "system",
+    p_actor_id: null,
+  };
 }
 
-// ─── Postgres unique-violation detection ──────────────────────────────────
+// ─── Selectable subset for the dedupe probe ───────────────────────────────
 
-/**
- * Constraint name created by migration 209 for the bus idempotency partial
- * unique index. The publish helper ONLY treats unique violations on this
- * specific constraint as bus dedup hits — every other unique violation is
- * surfaced as a real error so future schema changes (e.g. a UNIQUE on
- * event_id) don't silently corrupt dedupe semantics.
- */
-const BUS_IDEMPOTENCY_CONSTRAINT_NAME = "idx_flow_events_idempotency_uq";
-
-/**
- * Detect a unique-constraint violation that specifically came from the bus
- * idempotency partial index. Two checks combined:
- *
- *   1. SQLSTATE 23505 (PostgreSQL canonical unique_violation), AND
- *   2. The error message names the specific constraint
- *      `idx_flow_events_idempotency_uq`.
- *
- * Without the second check, ANY 23505 from a different unique constraint
- * (existing or future) would be falsely treated as a bus dedup hit. The
- * fallback (no error.code) requires both the canonical "duplicate key value
- * violates unique constraint" phrase AND the specific constraint name —
- * still strict.
- */
-function isBusIdempotencyViolation(error: { code?: string; message?: string } | null): boolean {
-  if (!error) return false;
-  const msg = (error.message ?? "").toLowerCase();
-  const matchesIdempotencyConstraint = msg.includes(BUS_IDEMPOTENCY_CONSTRAINT_NAME);
-
-  // Authoritative path: SQLSTATE present + constraint name confirmed.
-  if (error.code === "23505") {
-    return matchesIdempotencyConstraint;
-  }
-
-  // Fallback path: SQLSTATE missing (some client variants don't surface it),
-  // but the message clearly names the bus constraint AND uses the canonical
-  // PostgreSQL phrasing. Both conditions must hold.
-  return matchesIdempotencyConstraint && msg.includes("duplicate key value violates");
-}
-
-// ─── Selectable subset for the dedupe SELECT path ────────────────────────
-
-interface DedupeRow {
-  id: string;
+interface ProbeRow {
   event_id: string;
-  published_at: string;
+  occurred_at: string;
 }
 
 // ─── Main publish entrypoint (DB-bound) ──────────────────────────────────
 
 /**
- * Publish a flow event to the bus. Inserts into `flow_events` and returns
- * the resulting event id + row id + published timestamp + a `deduped` flag.
+ * Publish a flow event onto the live fabric. Calls the `emit_event` RPC
+ * (inserts into `analytics_events` with `flow_event_type` set and fires
+ * `pg_notify('flow_event')`) and returns the event id + published
+ * timestamp + a `deduped` flag.
  *
- * If `idempotencyKey` was supplied AND a row with the same `(workspaceId,
- * idempotencyKey)` already exists, the function catches the unique-
- * violation, looks up the existing row, and returns its identifiers with
- * `deduped: true`. Race-safe via the unique constraint.
+ * If `idempotencyKey` was supplied, an existing event with the same
+ * `(workspace_id, flow_event_type, properties->>'idempotency_key')` is
+ * returned with `deduped: true` instead of emitting a duplicate.
  *
- * The dedupe path ONLY triggers on violations of the specific bus
- * idempotency constraint (`idx_flow_events_idempotency_uq`). Violations of
- * any other unique constraint are surfaced as real errors so future schema
- * changes don't silently corrupt dedupe semantics.
- *
- * @param client  An admin/service-role Supabase client. The `flow_events`
- *                RLS policy gates inserts to service-role only.
+ * @param client  An admin/service-role Supabase client (`emit_event` is
+ *                SECURITY DEFINER; analytics_events inserts are
+ *                service-role territory).
  * @param input   The publish input (camelCase), validated via
  *                `validatePublishInput`.
- * @returns       PublishFlowEventResult with eventId, rowId, publishedAt,
- *                and deduped flag.
+ * @returns       PublishFlowEventResult with eventId, rowId (same value —
+ *                analytics_events is keyed by event_id), publishedAt, and
+ *                deduped flag.
  * @throws        FlowBusValidationError on bad input.
- * @throws        Error on any non-validation DB error (network, RLS, etc.)
- *                including unique violations on constraints OTHER than the
- *                bus idempotency partial index.
+ * @throws        Error on any DB error (probe failure or emit_event RPC
+ *                failure).
  */
 export async function publishFlowEvent(
   client: SupabaseClient,
   input: PublishFlowEventInput,
 ): Promise<PublishFlowEventResult> {
   validatePublishInput(input);
-  const row = buildEventRow(input);
+  const args = buildEmitEventArgs(input);
 
-  // Fast path: insert and return immediately.
-  const insertRes = await client
-    .from("flow_events")
-    .insert(row)
-    .select("id, event_id, published_at")
-    .maybeSingle();
-
-  if (!insertRes.error && insertRes.data) {
-    const data = insertRes.data as DedupeRow;
-    return {
-      eventId: data.event_id,
-      rowId: data.id,
-      publishedAt: data.published_at,
-      deduped: false,
-    };
-  }
-
-  // Dedupe path: unique violation on the SPECIFIC bus idempotency constraint.
-  // Other unique violations are NOT treated as dedupe — they propagate as
-  // real errors so future schema changes don't corrupt dedupe semantics.
-  if (isBusIdempotencyViolation(insertRes.error)) {
-    if (!input.idempotencyKey) {
-      // Defensive: a unique violation on the idempotency constraint without
-      // an idempotency_key shouldn't happen given the partial index, but if
-      // it does, surface the error rather than silently swallow it.
-      throw new Error(
-        `flow_events insert failed with bus idempotency violation but no idempotencyKey supplied: ${insertRes.error?.message}`,
-      );
-    }
-    const lookupRes = await client
-      .from("flow_events")
-      .select("id, event_id, published_at")
+  if (input.idempotencyKey) {
+    const probe = await client
+      .from("analytics_events")
+      .select("event_id, occurred_at")
       .eq("workspace_id", input.workspaceId)
-      .eq("idempotency_key", input.idempotencyKey)
+      .eq("flow_event_type", input.eventType)
+      .eq("properties->>idempotency_key", input.idempotencyKey)
+      .limit(1)
       .maybeSingle();
 
-    if (lookupRes.error || !lookupRes.data) {
+    if (probe.error) {
       throw new Error(
-        `flow_events dedupe lookup failed for idempotency_key='${input.idempotencyKey}': ${
-          lookupRes.error?.message ?? "no row returned"
-        }`,
+        `flow event dedupe probe failed for idempotency_key='${input.idempotencyKey}': ${probe.error.message}`,
       );
     }
-    const existing = lookupRes.data as DedupeRow;
-    return {
-      eventId: existing.event_id,
-      rowId: existing.id,
-      publishedAt: existing.published_at,
-      deduped: true,
-    };
+    if (probe.data) {
+      const existing = probe.data as ProbeRow;
+      return {
+        eventId: existing.event_id,
+        rowId: existing.event_id,
+        publishedAt: existing.occurred_at,
+        deduped: true,
+      };
+    }
   }
 
-  // Non-validation, non-bus-dedupe error — propagate.
-  // This explicitly INCLUDES unique violations on constraints OTHER than
-  // the bus idempotency partial index (e.g. future UNIQUE constraints on
-  // event_id, or violations from other tables in the same transaction).
-  throw new Error(
-    `flow_events insert failed: ${insertRes.error?.message ?? "unknown error"}`,
-  );
+  const rpc = await client.rpc("emit_event", args);
+  if (rpc.error || typeof rpc.data !== "string") {
+    throw new Error(
+      `emit_event failed for '${input.eventType}': ${rpc.error?.message ?? "no event id returned"}`,
+    );
+  }
+
+  return {
+    eventId: rpc.data,
+    rowId: rpc.data,
+    publishedAt: new Date().toISOString(),
+    deduped: false,
+  };
 }

@@ -1,17 +1,18 @@
 /**
- * Deno tests for the QRM Flow Bus publish helper (Phase 0 P0.4).
+ * Deno tests for the QRM Flow Bus publish helper (repointed in N5.1/m802
+ * from the deprecated flow_events table to the emit_event() RPC).
  *
  * Run with:
  *   deno test supabase/functions/_shared/flow-bus/publish.test.ts
  *
- * Pure-function tests pin the row builder + validation contract. A small
- * mocked-client section verifies the dedupe round-trip + error propagation
- * without needing a real database.
+ * Pure-function tests pin the emit_event args builder + validation
+ * contract. A small mocked-client section verifies the dedupe probe
+ * round-trip + error propagation without needing a real database.
  */
 
 import { assert, assertEquals, assertRejects, assertThrows } from "jsr:@std/assert@1";
 import {
-  buildEventRow,
+  buildEmitEventArgs,
   FlowBusValidationError,
   publishFlowEvent,
   validatePublishInput,
@@ -136,28 +137,29 @@ Deno.test("validatePublishInput rejects invalid status", () => {
   );
 });
 
-// ─── buildEventRow ────────────────────────────────────────────────────────
+// ─── buildEmitEventArgs ───────────────────────────────────────────────────
 
-Deno.test("buildEventRow returns minimal row for minimal input", () => {
-  const row = buildEventRow({
+Deno.test("buildEmitEventArgs maps a minimal input to emit_event named args", () => {
+  const args = buildEmitEventArgs({
     workspaceId: "default",
     eventType: "deal.stalled",
     sourceModule: "anomaly-scan",
   });
-  assertEquals(row.workspace_id, "default");
-  assertEquals(row.event_type, "deal.stalled");
-  assertEquals(row.source_module, "anomaly-scan");
-  // Optional fields are undefined — DB defaults will fill them
-  assertEquals(row.event_id, undefined);
-  assertEquals(row.deal_id, undefined);
-  assertEquals(row.severity, undefined);
-  assertEquals(row.status, undefined);
+  assertEquals(args.p_event_type, "deal.stalled");
+  assertEquals(args.p_source_module, "anomaly-scan");
+  assertEquals(args.p_workspace_id, "default");
+  assertEquals(args.p_entity_type, null);
+  assertEquals(args.p_entity_id, null);
+  assertEquals(args.p_payload, {});
+  assertEquals(args.p_correlation_id, null);
+  assertEquals(args.p_parent_event_id, null);
+  assertEquals(args.p_actor_type, "system");
+  assertEquals(args.p_actor_id, null);
 });
 
-Deno.test("buildEventRow populates ALL 17 ADD-033 fields when supplied", () => {
-  const input: PublishFlowEventInput = {
+Deno.test("buildEmitEventArgs entity precedence: deal wins over every other id", () => {
+  const args = buildEmitEventArgs({
     workspaceId: "default",
-    eventId: "00000000-0000-0000-0000-000000000001",
     eventType: "deal.blocked",
     sourceModule: "anomaly-scan",
     sourceRecordId: "11111111-1111-1111-1111-111111111111",
@@ -165,79 +167,89 @@ Deno.test("buildEventRow populates ALL 17 ADD-033 fields when supplied", () => {
     companyId: "33333333-3333-3333-3333-333333333333",
     equipmentId: "44444444-4444-4444-4444-444444444444",
     dealId: "55555555-5555-5555-5555-555555555555",
+  });
+  assertEquals(args.p_entity_type, "deal");
+  assertEquals(args.p_entity_id, "55555555-5555-5555-5555-555555555555");
+});
+
+Deno.test("buildEmitEventArgs entity precedence: company then record fallback", () => {
+  const companyOnly = buildEmitEventArgs({
+    workspaceId: "default",
+    eventType: "parts_order.invoiced",
+    sourceModule: "parts-order-manager",
+    companyId: "33333333-3333-3333-3333-333333333333",
+  });
+  assertEquals(companyOnly.p_entity_type, "company");
+  assertEquals(companyOnly.p_entity_id, "33333333-3333-3333-3333-333333333333");
+
+  const recordOnly = buildEmitEventArgs({
+    workspaceId: "default",
+    eventType: "deal_timing.alert_generated",
+    sourceModule: "deal-timing-scan",
+    sourceRecordId: "11111111-1111-1111-1111-111111111111",
+  });
+  assertEquals(recordOnly.p_entity_type, "record");
+  assertEquals(recordOnly.p_entity_id, "11111111-1111-1111-1111-111111111111");
+});
+
+Deno.test("buildEmitEventArgs folds ids + advisory fields into payload for flow_resolve_context", () => {
+  const args = buildEmitEventArgs({
+    workspaceId: "default",
+    eventType: "deal.invoiced",
+    sourceModule: "equipment-invoice-runner",
+    dealId: "55555555-5555-5555-5555-555555555555",
+    companyId: "33333333-3333-3333-3333-333333333333",
     severity: "critical",
     commercialRelevance: "high",
     suggestedOwner: "66666666-6666-6666-6666-666666666666",
     requiredAction: "Resolve deposit blocker before quote expires.",
     recommendedDeadline: "2026-04-15T17:00:00.000Z",
-    draftMessage: "Hi Marie, just confirming the deposit timing on your Yanmar order...",
+    draftMessage: "Hi Marie, just confirming the deposit timing...",
     escalationRule: "manager_after_24h",
     status: "pending",
-  };
-  const row = buildEventRow(input);
-  // ADD-033 #1
-  assertEquals(row.event_id, "00000000-0000-0000-0000-000000000001");
-  // #2
-  assertEquals(row.event_type, "deal.blocked");
-  // #3
-  assertEquals(row.source_module, "anomaly-scan");
-  // #4
-  assertEquals(row.source_record_id, "11111111-1111-1111-1111-111111111111");
-  // #5
-  assertEquals(row.customer_id, "22222222-2222-2222-2222-222222222222");
-  // #6
-  assertEquals(row.company_id, "33333333-3333-3333-3333-333333333333");
-  // #7
-  assertEquals(row.equipment_id, "44444444-4444-4444-4444-444444444444");
-  // #8
-  assertEquals(row.deal_id, "55555555-5555-5555-5555-555555555555");
-  // #9
-  assertEquals(row.severity, "critical");
-  // #10
-  assertEquals(row.commercial_relevance, "high");
-  // #11
-  assertEquals(row.suggested_owner, "66666666-6666-6666-6666-666666666666");
-  // #12
-  assertEquals(row.required_action, "Resolve deposit blocker before quote expires.");
-  // #13
-  assertEquals(row.recommended_deadline, "2026-04-15T17:00:00.000Z");
-  // #14
-  assertEquals(row.draft_message, "Hi Marie, just confirming the deposit timing on your Yanmar order...");
-  // #15
-  assertEquals(row.escalation_rule, "manager_after_24h");
-  // #16
-  assertEquals(row.status, "pending");
-  // #17 (created_at) — populated by DB default, not by buildEventRow
-});
-
-Deno.test("buildEventRow includes bus-specific fields when supplied", () => {
-  const row = buildEventRow({
-    workspaceId: "default",
-    eventType: "follow_up.due",
-    sourceModule: "follow-up-engine",
-    payload: { touchpoint_id: "abc", cadence_id: "def" },
-    idempotencyKey: "follow_up.due:abc",
-    correlationId: "77777777-7777-7777-7777-777777777777",
-    parentEventId: "88888888-8888-8888-8888-888888888888",
+    idempotencyKey: "deal.invoiced:abc",
+    payload: { invoice_id: "inv-1" },
   });
-  assertEquals(row.payload, { touchpoint_id: "abc", cadence_id: "def" });
-  assertEquals(row.idempotency_key, "follow_up.due:abc");
-  assertEquals(row.correlation_id, "77777777-7777-7777-7777-777777777777");
-  assertEquals(row.parent_event_id, "88888888-8888-8888-8888-888888888888");
+  // flow_resolve_context hydrates from these two keys — they must exist.
+  assertEquals(args.p_payload.company_id, "33333333-3333-3333-3333-333333333333");
+  assertEquals(args.p_payload.deal_id, "55555555-5555-5555-5555-555555555555");
+  // Original payload survives.
+  assertEquals(args.p_payload.invoice_id, "inv-1");
+  // Advisory fields carried.
+  assertEquals(args.p_payload.severity, "critical");
+  assertEquals(args.p_payload.commercial_relevance, "high");
+  assertEquals(args.p_payload.suggested_owner, "66666666-6666-6666-6666-666666666666");
+  assertEquals(args.p_payload.required_action, "Resolve deposit blocker before quote expires.");
+  assertEquals(args.p_payload.recommended_deadline, "2026-04-15T17:00:00.000Z");
+  assertEquals(args.p_payload.draft_message, "Hi Marie, just confirming the deposit timing...");
+  assertEquals(args.p_payload.escalation_rule, "manager_after_24h");
+  assertEquals(args.p_payload.status, "pending");
+  assertEquals(args.p_payload.idempotency_key, "deal.invoiced:abc");
 });
 
-Deno.test("buildEventRow does NOT include undefined optional fields", () => {
-  const row = buildEventRow({
+Deno.test("buildEmitEventArgs never overwrites caller-supplied payload keys", () => {
+  const args = buildEmitEventArgs({
+    workspaceId: "default",
+    eventType: "anomaly.detected",
+    sourceModule: "anomaly-scan",
+    companyId: "33333333-3333-3333-3333-333333333333",
+    payload: { company_id: "explicit-wins", severity: "from-payload" },
+    severity: "low",
+  });
+  assertEquals(args.p_payload.company_id, "explicit-wins");
+  assertEquals(args.p_payload.severity, "from-payload");
+});
+
+Deno.test("buildEmitEventArgs omits undefined optional fields from payload", () => {
+  const args = buildEmitEventArgs({
     workspaceId: "default",
     eventType: "deal.stalled",
     sourceModule: "anomaly-scan",
     severity: "high",
-    // dealId NOT supplied
   });
-  // severity is set
-  assertEquals(row.severity, "high");
-  // dealId is NOT in the row at all (so DB default — null — applies)
-  assert(!("deal_id" in row), "deal_id should not be present when not supplied");
+  assertEquals(args.p_payload.severity, "high");
+  assert(!("deal_id" in args.p_payload), "deal_id should not be present when not supplied");
+  assert(!("idempotency_key" in args.p_payload), "idempotency_key should not be present when not supplied");
 });
 
 // ─── Mocked-client tests for publishFlowEvent ────────────────────────────
@@ -248,19 +260,18 @@ interface MockResponse<T> {
 }
 
 interface MockClientCall {
-  table: string;
-  op: "insert" | "select";
+  op: "probe" | "rpc";
   args: unknown[];
 }
 
 /**
- * Minimal Supabase client mock for testing publish round-trips. Records
- * every call so tests can assert call patterns. Returns canned responses
- * configured per test.
+ * Minimal Supabase client mock for the repointed publish round-trips.
+ * Records every call so tests can assert call patterns. Returns canned
+ * responses configured per test.
  */
 function makeMockClient(canned: {
-  insertResult?: MockResponse<{ id: string; event_id: string; published_at: string }>;
-  lookupResult?: MockResponse<{ id: string; event_id: string; published_at: string }>;
+  probeResult?: MockResponse<{ event_id: string; occurred_at: string }>;
+  rpcResult?: MockResponse<string>;
 }): {
   // deno-lint-ignore no-explicit-any
   client: any;
@@ -268,51 +279,37 @@ function makeMockClient(canned: {
 } {
   const calls: MockClientCall[] = [];
 
-  const insertChain = {
-    select: (_cols: string) => ({
-      maybeSingle: () =>
-        Promise.resolve(
-          canned.insertResult ?? { data: null, error: { message: "no insertResult configured" } },
-        ),
-    }),
-  };
-
-  const lookupChain = {
-    eq: (_col: string, _val: unknown) => lookupChain,
+  const probeChain = {
+    select: (_cols: string) => probeChain,
+    eq: (_col: string, _val: unknown) => probeChain,
+    limit: (_n: number) => probeChain,
     maybeSingle: () =>
       Promise.resolve(
-        canned.lookupResult ?? { data: null, error: { message: "no lookupResult configured" } },
+        canned.probeResult ?? { data: null, error: null },
       ),
   };
 
-  const fromTable = (table: string) => ({
-    insert: (row: unknown) => {
-      calls.push({ table, op: "insert", args: [row] });
-      return insertChain;
-    },
-    select: (cols: string) => {
-      calls.push({ table, op: "select", args: [cols] });
-      return lookupChain;
-    },
-  });
-
   return {
-    // deno-lint-ignore no-explicit-any
-    client: { from: fromTable } as any,
+    client: {
+      from: (table: string) => {
+        calls.push({ op: "probe", args: [table] });
+        return probeChain;
+      },
+      rpc: (fn: string, args: unknown) => {
+        calls.push({ op: "rpc", args: [fn, args] });
+        return Promise.resolve(
+          canned.rpcResult ?? { data: null, error: { message: "no rpcResult configured" } },
+        );
+      },
+      // deno-lint-ignore no-explicit-any
+    } as any,
     calls,
   };
 }
 
-Deno.test("publishFlowEvent fast path: returns insert result with deduped=false", async () => {
-  const { client } = makeMockClient({
-    insertResult: {
-      data: {
-        id: "row-1",
-        event_id: "ev-1",
-        published_at: "2026-04-08T20:00:00.000Z",
-      },
-      error: null,
-    },
+Deno.test("publishFlowEvent emits via emit_event RPC and returns deduped=false", async () => {
+  const { client, calls } = makeMockClient({
+    rpcResult: { data: "ev-1", error: null },
   });
   const result = await publishFlowEvent(client, {
     workspaceId: "default",
@@ -320,26 +317,18 @@ Deno.test("publishFlowEvent fast path: returns insert result with deduped=false"
     sourceModule: "anomaly-scan",
   });
   assertEquals(result.eventId, "ev-1");
-  assertEquals(result.rowId, "row-1");
-  assertEquals(result.publishedAt, "2026-04-08T20:00:00.000Z");
+  assertEquals(result.rowId, "ev-1");
   assertEquals(result.deduped, false);
+  // No idempotencyKey → no probe; exactly one rpc call to emit_event.
+  assertEquals(calls.length, 1);
+  assertEquals(calls[0].op, "rpc");
+  assertEquals(calls[0].args[0], "emit_event");
 });
 
-Deno.test("publishFlowEvent dedupe path: 23505 on bus idempotency constraint triggers lookup, returns deduped=true", async () => {
-  const { client } = makeMockClient({
-    insertResult: {
-      data: null,
-      error: {
-        code: "23505",
-        message: "duplicate key value violates unique constraint idx_flow_events_idempotency_uq",
-      },
-    },
-    lookupResult: {
-      data: {
-        id: "existing-row",
-        event_id: "existing-event",
-        published_at: "2026-04-07T12:00:00.000Z",
-      },
+Deno.test("publishFlowEvent dedupe probe hit returns existing event with deduped=true and skips the RPC", async () => {
+  const { client, calls } = makeMockClient({
+    probeResult: {
+      data: { event_id: "existing-event", occurred_at: "2026-04-07T12:00:00.000Z" },
       error: null,
     },
   });
@@ -350,39 +339,27 @@ Deno.test("publishFlowEvent dedupe path: 23505 on bus idempotency constraint tri
     idempotencyKey: "deal.stalled:deal-abc",
   });
   assertEquals(result.eventId, "existing-event");
-  assertEquals(result.rowId, "existing-row");
+  assertEquals(result.rowId, "existing-event");
   assertEquals(result.publishedAt, "2026-04-07T12:00:00.000Z");
   assertEquals(result.deduped, true);
+  // Probe only — the emit RPC must not fire on a dedupe hit.
+  assertEquals(calls.filter((c) => c.op === "rpc").length, 0);
 });
 
-Deno.test("publishFlowEvent dedupe path: bus violation without SQLSTATE code (fallback) still triggers", async () => {
-  // Some Supabase client variants don't surface error.code. The fallback
-  // path requires both the canonical 'duplicate key value violates' phrase
-  // AND the bus constraint name.
-  const { client } = makeMockClient({
-    insertResult: {
-      data: null,
-      error: {
-        // No code field
-        message: "duplicate key value violates unique constraint idx_flow_events_idempotency_uq",
-      },
-    },
-    lookupResult: {
-      data: {
-        id: "existing-row",
-        event_id: "existing-event",
-        published_at: "2026-04-07T12:00:00.000Z",
-      },
-      error: null,
-    },
+Deno.test("publishFlowEvent probe miss falls through to the RPC", async () => {
+  const { client, calls } = makeMockClient({
+    probeResult: { data: null, error: null },
+    rpcResult: { data: "ev-2", error: null },
   });
   const result = await publishFlowEvent(client, {
     workspaceId: "default",
     eventType: "deal.stalled",
     sourceModule: "anomaly-scan",
-    idempotencyKey: "deal.stalled:deal-abc",
+    idempotencyKey: "deal.stalled:deal-xyz",
   });
-  assertEquals(result.deduped, true);
+  assertEquals(result.eventId, "ev-2");
+  assertEquals(result.deduped, false);
+  assertEquals(calls.filter((c) => c.op === "rpc").length, 1);
 });
 
 Deno.test("publishFlowEvent rejects validation errors before DB call", async () => {
@@ -401,64 +378,11 @@ Deno.test("publishFlowEvent rejects validation errors before DB call", async () 
   assertEquals(calls.length, 0);
 });
 
-Deno.test("publishFlowEvent propagates non-dedupe DB errors", async () => {
+Deno.test("publishFlowEvent propagates probe errors", async () => {
   const { client } = makeMockClient({
-    insertResult: {
+    probeResult: {
       data: null,
-      error: {
-        code: "42501",
-        message: "permission denied for table flow_events",
-      },
-    },
-  });
-  await assertRejects(
-    () =>
-      publishFlowEvent(client, {
-        workspaceId: "default",
-        eventType: "deal.stalled",
-        sourceModule: "anomaly-scan",
-      }),
-    Error,
-    "permission denied",
-  );
-});
-
-Deno.test("publishFlowEvent throws if bus idempotency violation hit but no idempotencyKey was supplied", async () => {
-  const { client } = makeMockClient({
-    insertResult: {
-      data: null,
-      error: {
-        code: "23505",
-        message: "duplicate key value violates unique constraint idx_flow_events_idempotency_uq",
-      },
-    },
-  });
-  await assertRejects(
-    () =>
-      publishFlowEvent(client, {
-        workspaceId: "default",
-        eventType: "deal.stalled",
-        sourceModule: "anomaly-scan",
-        // no idempotencyKey
-      }),
-    Error,
-    "bus idempotency violation but no idempotencyKey supplied",
-  );
-});
-
-Deno.test("publishFlowEvent does NOT treat 23505 from a different constraint as bus dedupe (P1 fix)", async () => {
-  // This is the bug the P1 fix addresses: a 23505 from any OTHER unique
-  // constraint (e.g. a future UNIQUE on event_id, or a constraint on a
-  // different table that happens to be in the same transaction) must
-  // NOT be silently treated as a bus idempotency dedup. The publish helper
-  // must surface it as a real error.
-  const { client } = makeMockClient({
-    insertResult: {
-      data: null,
-      error: {
-        code: "23505",
-        message: "duplicate key value violates unique constraint flow_event_types_workspace_id_name_key",
-      },
+      error: { code: "42501", message: "permission denied for table analytics_events" },
     },
   });
   await assertRejects(
@@ -470,22 +394,13 @@ Deno.test("publishFlowEvent does NOT treat 23505 from a different constraint as 
         idempotencyKey: "deal.stalled:abc",
       }),
     Error,
-    "flow_events insert failed",
+    "dedupe probe failed",
   );
 });
 
-Deno.test("publishFlowEvent does NOT treat 23505 with no constraint name in message as bus dedupe (P1 fix)", async () => {
-  // Defensive: if the error message doesn't contain the specific bus
-  // constraint name, the helper must NOT assume it's a bus dedupe even
-  // though the SQLSTATE is 23505.
+Deno.test("publishFlowEvent propagates emit_event RPC errors", async () => {
   const { client } = makeMockClient({
-    insertResult: {
-      data: null,
-      error: {
-        code: "23505",
-        message: "duplicate key value violates unique constraint",
-      },
-    },
+    rpcResult: { data: null, error: { message: "function emit_event does not exist" } },
   });
   await assertRejects(
     () =>
@@ -493,9 +408,24 @@ Deno.test("publishFlowEvent does NOT treat 23505 with no constraint name in mess
         workspaceId: "default",
         eventType: "deal.stalled",
         sourceModule: "anomaly-scan",
-        idempotencyKey: "deal.stalled:abc",
       }),
     Error,
-    "flow_events insert failed",
+    "emit_event failed",
+  );
+});
+
+Deno.test("publishFlowEvent throws when the RPC returns no event id", async () => {
+  const { client } = makeMockClient({
+    rpcResult: { data: null, error: null },
+  });
+  await assertRejects(
+    () =>
+      publishFlowEvent(client, {
+        workspaceId: "default",
+        eventType: "deal.stalled",
+        sourceModule: "anomaly-scan",
+      }),
+    Error,
+    "no event id returned",
   );
 });

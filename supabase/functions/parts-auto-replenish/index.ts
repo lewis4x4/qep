@@ -12,6 +12,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { logServiceCronRun } from "../_shared/service-cron-run.ts";
+import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 const VENDOR_SCORE_WEIGHTS = {
@@ -106,9 +107,8 @@ Deno.serve(async (req) => {
   const startMs = Date.now();
 
   try {
-    const authHeader = req.headers.get("Authorization")?.trim();
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!authHeader || authHeader !== `Bearer ${serviceKey}`) {
+    if (!isServiceRoleCaller(req)) {
       return safeJsonError("Unauthorized — service role required", 401, null);
     }
 
@@ -461,6 +461,7 @@ Deno.serve(async (req) => {
       let scheduledFor: string | null = null;
       let status = "pending";
       if (bestVendorId) {
+        const now = new Date();
         const nextOrderDate = resolveScheduledFor(bestVendorId, item.branch_id, now);
         if (nextOrderDate && nextOrderDate.toDateString() !== now.toDateString()) {
           scheduledFor = nextOrderDate.toISOString().slice(0, 10);

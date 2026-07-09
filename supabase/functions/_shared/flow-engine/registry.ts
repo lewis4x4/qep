@@ -51,21 +51,65 @@ const create_task: FlowAction = {
   async execute(params, ctx, deps) {
     if (deps.dry_run) return dryRunSkip(deps, "create_task");
     const p = resolveParams(params, ctx);
+    // crm_activities has no subject/due_at/assigned_to columns (N5.1 fix —
+    // this insert 42703'd on every run since Slice 1). Text goes in body,
+    // extras ride in metadata, matching every other crm_activities writer.
+    // activity_type is the crm_activity_type enum — workflow labels outside
+    // it (e.g. "follow_up") coerce to 'task', original label kept in metadata.
+    const CRM_ACTIVITY_TYPES = new Set(["note", "call", "email", "meeting", "task", "sms"]);
+    const requestedType = typeof p.activity_type === "string" ? p.activity_type : "task";
+    const subject = typeof p.subject === "string" && p.subject.trim().length > 0
+      ? p.subject.trim()
+      : "Flow-generated task";
+    const bodyText = typeof p.body === "string" && p.body.trim().length > 0
+      ? `${subject}\n\n${p.body.trim()}`
+      : subject;
+    // crm_activities_check demands EXACTLY ONE of contact/deal/company.
+    // Params win; otherwise anchor from the resolved context (deal first).
+    const anchor = pickActivityAnchor(p, ctx);
+    if (!anchor) {
+      return {
+        status: "failed",
+        error: "create_task requires one of deal_id/contact_id/company_id (params or resolved context)",
+        retryable: false,
+      };
+    }
     const { data, error } = await deps.admin.from("crm_activities").insert({
       workspace_id: deps.workspace_id,
-      activity_type: p.activity_type ?? "task",
-      subject: p.subject ?? "Flow-generated task",
-      body: p.body ?? null,
-      due_at: p.due_at ?? null,
-      deal_id: p.deal_id ?? null,
-      contact_id: p.contact_id ?? null,
-      company_id: p.company_id ?? null,
-      assigned_to: p.assigned_to ?? null,
+      activity_type: CRM_ACTIVITY_TYPES.has(requestedType) ? requestedType : "task",
+      body: bodyText,
+      ...anchor,
+      metadata: {
+        source: "flow-engine",
+        subject,
+        requested_activity_type: requestedType,
+        due_at: p.due_at ?? null,
+        assigned_to: p.assigned_to ?? null,
+      },
     }).select("id").maybeSingle();
     if (error) return { status: "failed", error: error.message, retryable: true };
     return { status: "succeeded", result: { activity_id: data?.id } };
   },
 };
+
+/**
+ * crm_activities_check requires exactly one of contact_id / deal_id /
+ * company_id. Explicit params take precedence (deal > contact > company);
+ * with no params, fall back to the resolved flow context.
+ */
+function pickActivityAnchor(
+  p: Record<string, unknown>,
+  ctx: FlowContext,
+): Record<string, string> | null {
+  if (typeof p.deal_id === "string" && p.deal_id) return { deal_id: p.deal_id };
+  if (typeof p.contact_id === "string" && p.contact_id) return { contact_id: p.contact_id };
+  if (typeof p.company_id === "string" && p.company_id) return { company_id: p.company_id };
+  const ctxDealId = (ctx.deal as Record<string, unknown> | null)?.id;
+  if (typeof ctxDealId === "string" && ctxDealId) return { deal_id: ctxDealId };
+  const ctxCompanyId = (ctx.company as Record<string, unknown> | null)?.id;
+  if (typeof ctxCompanyId === "string" && ctxCompanyId) return { company_id: ctxCompanyId };
+  return null;
+}
 
 /* ─── 2. create_note ────────────────────────────────────────────────────── */
 
@@ -77,14 +121,28 @@ const create_note: FlowAction = {
   async execute(params, ctx, deps) {
     if (deps.dry_run) return dryRunSkip(deps, "create_note");
     const p = resolveParams(params, ctx);
+    // crm_activities has no subject column (N5.1 fix, same 42703 as
+    // create_task) — fold it into body, keep it in metadata.
+    const subject = typeof p.subject === "string" && p.subject.trim().length > 0
+      ? p.subject.trim()
+      : "Flow note";
+    const bodyText = typeof p.body === "string" && p.body.trim().length > 0
+      ? `${subject}\n\n${p.body.trim()}`
+      : subject;
+    const anchor = pickActivityAnchor(p, ctx);
+    if (!anchor) {
+      return {
+        status: "failed",
+        error: "create_note requires one of deal_id/contact_id/company_id (params or resolved context)",
+        retryable: false,
+      };
+    }
     const { data, error } = await deps.admin.from("crm_activities").insert({
       workspace_id: deps.workspace_id,
       activity_type: "note",
-      subject: p.subject ?? "Flow note",
-      body: p.body ?? "",
-      deal_id: p.deal_id ?? null,
-      contact_id: p.contact_id ?? null,
-      company_id: p.company_id ?? null,
+      body: bodyText,
+      ...anchor,
+      metadata: { source: "flow-engine", subject },
     }).select("id").maybeSingle();
     if (error) return { status: "failed", error: error.message, retryable: true };
     return { status: "succeeded", result: { note_id: data?.id } };
@@ -179,18 +237,24 @@ const tag_account: FlowAction = {
   async execute(params, ctx, deps) {
     if (deps.dry_run) return dryRunSkip(deps, "tag_account");
     const p = resolveParams(params, ctx);
+    // crm_companies has no tags column (N5.1 fix — this action 42703'd on
+    // every run). Tags live in metadata->'tags', the same place
+    // flow_resolve_context derives customer_tier from (m802).
     const { data: existing, error: readErr } = await deps.admin
       .from("crm_companies")
-      .select("tags")
+      .select("metadata")
       .eq("id", p.company_id)
       .maybeSingle();
     if (readErr) return { status: "failed", error: readErr.message, retryable: true };
-    const tags = Array.isArray(existing?.tags) ? existing.tags : [];
+    const metadata = (existing?.metadata && typeof existing.metadata === "object")
+      ? existing.metadata as Record<string, unknown>
+      : {};
+    const tags = Array.isArray(metadata.tags) ? metadata.tags : [];
     if (tags.includes(p.tag)) {
       return { status: "skipped", reason: "tag already present" };
     }
     const { error } = await deps.admin.from("crm_companies").update({
-      tags: [...tags, p.tag],
+      metadata: { ...metadata, tags: [...tags, p.tag] },
     }).eq("id", p.company_id);
     if (error) return { status: "failed", error: error.message, retryable: true };
     return { status: "succeeded", result: { company_id: p.company_id, tag: p.tag } };

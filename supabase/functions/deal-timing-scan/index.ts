@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
     if (!isServiceRole) {
       // User path — canonical ES256-safe JWT auth. Narrow to manager/owner
       // since deal timing scans mutate workspace-wide alert state.
-      const auth = await requireServiceUser(authHeader, origin);
+      const auth = await requireServiceUser(authHeader ?? null, origin);
       if (!auth.ok) return auth.response;
       if (!["manager", "owner"].includes(auth.role)) {
         return safeJsonError("Deal timing requires manager or owner role", 403, origin);

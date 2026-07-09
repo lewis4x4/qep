@@ -69,6 +69,9 @@ Required before closing a delivery slice:
 3. `bun run build` in `apps/web`
 4. Edge function and contract tests for touched surfaces
 5. Role/workspace security checks for modified flows
+6. Deploy every touched edge function and verify version freshness
+   (`list_edge_functions` → `updated_at` must be minutes old). A slice whose
+   functions ship undeployed is not closed.
 
 ## Working Rules
 

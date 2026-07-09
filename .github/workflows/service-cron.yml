@@ -12,6 +12,13 @@ concurrency:
   group: service-cron
   cancel-in-progress: false
 
+# Explicit `shell: bash` turns on pipefail — without it, `curl -f | head`
+# reports head's exit code and a 401 from every worker still shows a green
+# run (which is exactly how this workflow 401'd invisibly until N5.1).
+defaults:
+  run:
+    shell: bash
+
 jobs:
   run-workers:
     runs-on: ubuntu-latest
