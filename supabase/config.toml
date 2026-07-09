@@ -634,6 +634,9 @@ verify_jwt = false
 [functions.rental-ops]
 verify_jwt = false
 
+[functions.rental-quote-public]
+verify_jwt = false
+
 [functions.rental-billing-runner]
 verify_jwt = false
 
