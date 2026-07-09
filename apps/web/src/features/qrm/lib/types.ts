@@ -283,6 +283,8 @@ export interface QrmQuoteUpsertInput {
 export interface QrmDealBoardListInput {
   cursor?: string | null;
   limit?: number;
+  /** Pre-resolved open stage ids — pass when paging so each page doesn't re-fetch crm_deal_stages. */
+  openStageIds?: string[];
 }
 
 export type QrmFollowUpReminderSource = "pipeline_quick" | "deal_detail" | "voice" | "system";

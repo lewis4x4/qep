@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,12 +16,13 @@ import { PartsSubNav } from "../components/PartsSubNav";
 import { CatalogSearchBar } from "../components/CatalogSearchBar";
 import { PartCrossRefPanel } from "../components/PartCrossRefPanel";
 import { PartCommandPanel, type BranchCell } from "../components/PartCommandPanel";
-import { usePartsCatalog, type CatalogRow } from "../hooks/usePartsCatalog";
+import type { CatalogRow } from "../hooks/usePartsCatalog";
 import { useAuth } from "@/hooks/useAuth";
 import { useMyWorkspaceId } from "@/hooks/useMyWorkspaceId";
 import type { Database } from "@/lib/database.types";
 
 const ELEVATED_ROLES = ["admin", "manager", "owner"];
+const PAGE_SIZE = 100;
 
 const STATUS_DOT: Record<string, string> = {
   stockout: "bg-red-500",
@@ -30,16 +31,52 @@ const STATUS_DOT: Record<string, string> = {
   healthy: "bg-green-500",
 };
 
-function coalesceRow(rows: CatalogRow[]): CatalogRow {
-  return rows.reduce((acc, r) => ({
-    ...acc,
-    description: acc.description ?? r.description,
-    category: acc.category ?? r.category,
-    manufacturer: acc.manufacturer ?? r.manufacturer,
-    list_price: acc.list_price ?? r.list_price,
-    cost_price: acc.cost_price ?? r.cost_price,
-    updated_at: acc.updated_at > r.updated_at ? acc.updated_at : r.updated_at,
-  }));
+/**
+ * N7.1 (RF-011): server-paginated catalog row from list_parts_catalog_page.
+ * The dedup across multi-branch duplicates, the inventory/reorder/forecast
+ * joins, and the worst-stock-status ranking all happen in the RPC — the
+ * old page pulled four whole tables to the browser and was silently
+ * truncated at PostgREST max_rows=1000 (the catalog is past 4k rows).
+ */
+interface CatalogPageRow {
+  id: string;
+  part_number: string;
+  description: string | null;
+  category: string | null;
+  manufacturer: string | null;
+  list_price: number | null;
+  cost_price: number | null;
+  updated_at: string;
+  variant_count: number;
+  total_qty: number;
+  branch_count: number;
+  worst_status: string | null;
+  total_count: number;
+}
+
+interface BranchDetailRow {
+  branch_id: string;
+  qty: number | null;
+  bin: string | null;
+  reorder_point: number | null;
+  velocity: number | null;
+  days_to_stockout: number | null;
+  stock_status: string | null;
+  forecast_qty: number | null;
+  forecast_risk: string | null;
+}
+
+function toCatalogRow(row: CatalogPageRow): CatalogRow {
+  return {
+    id: row.id,
+    part_number: row.part_number,
+    description: row.description,
+    category: row.category,
+    manufacturer: row.manufacturer,
+    list_price: row.list_price,
+    cost_price: row.cost_price,
+    updated_at: row.updated_at,
+  } as CatalogRow;
 }
 
 export function PartsCatalogPage() {
@@ -49,97 +86,12 @@ export function PartsCatalogPage() {
   const workspaceId = workspaceQ.data;
 
   const qc = useQueryClient();
-  const catQ = usePartsCatalog();
-
-  const invTotals = useQuery({
-    queryKey: ["parts-inventory-totals-by-part"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("parts_inventory")
-        .select("part_number, qty_on_hand, branch_id, bin_location")
-        .is("deleted_at", null);
-      if (error) throw error;
-
-      const reorderMap = new Map<string, { reorder_point: number; consumption_velocity: number }>();
-      try {
-        const { data: rpData } = await supabase
-          .from("parts_reorder_profiles")
-          .select("branch_id, part_number, reorder_point, consumption_velocity");
-        if (rpData) {
-          for (const rp of rpData) {
-            const rpKey = `${(rp.part_number as string).toLowerCase()}:${rp.branch_id}`;
-            reorderMap.set(rpKey, {
-              reorder_point: Number(rp.reorder_point) || 0,
-              consumption_velocity: Number(rp.consumption_velocity) || 0,
-            });
-          }
-        }
-      } catch { /* pre-migration-136 — ignore */ }
-
-      const forecastMap = new Map<string, { predicted_qty: number; stockout_risk: string }>();
-      try {
-        const nextMonth = new Date();
-        nextMonth.setMonth(nextMonth.getMonth() + 1);
-        nextMonth.setDate(1);
-        const monthStr = nextMonth.toISOString().slice(0, 10);
-        const { data: fcData } = await supabase
-          .from("parts_demand_forecasts")
-          .select("part_number, branch_id, predicted_qty, stockout_risk")
-          .eq("forecast_month", monthStr);
-        if (fcData) {
-          for (const fc of fcData) {
-            const fcKey = `${(fc.part_number as string).toLowerCase()}:${fc.branch_id}`;
-            forecastMap.set(fcKey, {
-              predicted_qty: Number(fc.predicted_qty) || 0,
-              stockout_risk: fc.stockout_risk as string,
-            });
-          }
-        }
-      } catch { /* pre-migration-137 — ignore */ }
-
-      const totals = new Map<string, number>();
-      const byBranch = new Map<string, Map<string, BranchCell>>();
-      for (const r of data ?? []) {
-        const k = r.part_number.toLowerCase();
-        totals.set(k, (totals.get(k) ?? 0) + r.qty_on_hand);
-        if (!byBranch.has(k)) byBranch.set(k, new Map());
-        const bm = byBranch.get(k)!;
-        const prev = bm.get(r.branch_id);
-        const qty = (prev?.qty ?? 0) + r.qty_on_hand;
-        const bin =
-          [r.bin_location?.trim(), prev?.bin?.trim()].find((b) => b && b.length > 0) ?? null;
-
-        const rpKey = `${k}:${r.branch_id}`;
-        const rp = reorderMap.get(rpKey);
-        const reorderPoint = rp?.reorder_point ?? null;
-        const velocity = rp?.consumption_velocity ?? null;
-        const daysToStockout = velocity && velocity > 0 ? Math.round(qty / velocity * 10) / 10 : null;
-        let stockStatus: string | null = null;
-        if (reorderPoint != null) {
-          if (qty <= 0) stockStatus = "stockout";
-          else if (qty <= Math.ceil(reorderPoint * 0.5)) stockStatus = "critical";
-          else if (qty <= reorderPoint) stockStatus = "reorder";
-          else stockStatus = "healthy";
-        }
-        const fc = forecastMap.get(rpKey);
-        bm.set(r.branch_id, {
-          qty,
-          bin,
-          reorderPoint,
-          velocity,
-          daysToStockout,
-          stockStatus,
-          forecastQty: fc?.predicted_qty ?? null,
-          forecastRisk: fc?.stockout_risk ?? null,
-        });
-      }
-      return { totals, byBranch };
-    },
-    staleTime: 30_000,
-  });
 
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+  const [debouncedCategory, setDebouncedCategory] = useState("");
+  const [page, setPage] = useState(0);
   const [creating, setCreating] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -155,53 +107,41 @@ export function PartsCatalogPage() {
     cost_price: "",
   });
 
-  const stockTotals = invTotals.data?.totals ?? new Map<string, number>();
-  const stockByBranch =
-    invTotals.data?.byBranch ?? new Map<string, Map<string, BranchCell>>();
-
-  // Collapse multi-branch catalog duplicates (migration 257 uniques on
-  // (workspace, co, div, branch, part#), so a single part_number can appear
-  // multiple times). Group by part_number and keep the richest row.
-  const deduped = useMemo(() => {
-    const rows = catQ.data ?? [];
-    const byPn = new Map<string, CatalogRow[]>();
-    for (const r of rows) {
-      const key = r.part_number.toLowerCase();
-      if (!byPn.has(key)) byPn.set(key, []);
-      byPn.get(key)!.push(r);
-    }
-    const result: Array<{ canonical: CatalogRow; variantCount: number }> = [];
-    for (const group of byPn.values()) {
-      result.push({ canonical: coalesceRow(group), variantCount: group.length });
-    }
-    result.sort((a, b) => a.canonical.part_number.localeCompare(b.canonical.part_number));
-    return result;
-  }, [catQ.data]);
-
-  const filtered = useMemo(() => {
-    let rows = deduped;
-    const term = q.trim().toLowerCase();
-    if (term) {
-      rows = rows.filter(
-        ({ canonical: r }) =>
-          r.part_number.toLowerCase().includes(term) ||
-          (r.description ?? "").toLowerCase().includes(term) ||
-          (r.manufacturer ?? "").toLowerCase().includes(term),
-      );
-    }
-    if (category.trim()) {
-      const c = category.trim().toLowerCase();
-      rows = rows.filter(({ canonical: r }) => (r.category ?? "").toLowerCase().includes(c));
-    }
-    return rows;
-  }, [deduped, q, category]);
-
-  // Keep focus index within bounds as the filter changes
   useEffect(() => {
-    if (focusIndex >= filtered.length) {
-      setFocusIndex(Math.max(0, filtered.length - 1));
+    const timer = window.setTimeout(() => {
+      setDebouncedQ(q.trim());
+      setDebouncedCategory(category.trim());
+      setPage(0);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [q, category]);
+
+  const catalogPage = useQuery({
+    queryKey: ["parts-catalog-page", debouncedQ, debouncedCategory, page],
+    queryFn: async (): Promise<CatalogPageRow[]> => {
+      const { data, error } = await supabase.rpc("list_parts_catalog_page", {
+        p_search: debouncedQ || null,
+        p_category: debouncedCategory || null,
+        p_limit: PAGE_SIZE,
+        p_offset: page * PAGE_SIZE,
+      });
+      if (error) throw error;
+      return (data ?? []) as CatalogPageRow[];
+    },
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+
+  const rows = useMemo(() => catalogPage.data ?? [], [catalogPage.data]);
+  const totalCount = rows[0]?.total_count ?? 0;
+  const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+  // Keep focus index within bounds as the page changes
+  useEffect(() => {
+    if (focusIndex >= rows.length) {
+      setFocusIndex(Math.max(0, rows.length - 1));
     }
-  }, [filtered.length, focusIndex]);
+  }, [rows.length, focusIndex]);
 
   const upsert = useMutation({
     mutationFn: async (payload: Database["public"]["Tables"]["parts_catalog"]["Insert"]) => {
@@ -212,7 +152,7 @@ export function PartsCatalogPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["parts-catalog"] });
+      qc.invalidateQueries({ queryKey: ["parts-catalog-page"] });
       setNewPart({
         part_number: "",
         description: "",
@@ -240,22 +180,54 @@ export function PartsCatalogPage() {
     });
   };
 
-  const openPart = useCallback((row: CatalogRow) => {
-    setSelectedId(row.id);
+  const openPart = useCallback((rowId: string) => {
+    setSelectedId(rowId);
     setPanelOpen(true);
   }, []);
 
+  const selectedPageRow = useMemo(
+    () => rows.find((r) => r.id === selectedId) ?? null,
+    [rows, selectedId],
+  );
   const selectedRow = useMemo(
-    () => filtered.find((r) => r.canonical.id === selectedId)?.canonical ?? null,
-    [filtered, selectedId],
+    () => (selectedPageRow ? toCatalogRow(selectedPageRow) : null),
+    [selectedPageRow],
   );
 
-  const selectedBranches = selectedRow
-    ? stockByBranch.get(selectedRow.part_number.toLowerCase())
-    : undefined;
-  const selectedTotal = selectedRow
-    ? stockTotals.get(selectedRow.part_number.toLowerCase()) ?? 0
-    : 0;
+  // Per-branch detail loads on demand when the command panel opens —
+  // the old page pre-joined every branch of every part in the browser.
+  const branchDetail = useQuery({
+    queryKey: ["parts-catalog-branches", selectedPageRow?.part_number ?? null],
+    enabled: panelOpen && Boolean(selectedPageRow),
+    queryFn: async (): Promise<BranchDetailRow[]> => {
+      const { data, error } = await supabase.rpc("get_part_branch_detail", {
+        p_part_number: selectedPageRow!.part_number,
+      });
+      if (error) throw error;
+      return (data ?? []) as BranchDetailRow[];
+    },
+    staleTime: 30_000,
+  });
+
+  const selectedBranches = useMemo(() => {
+    if (!branchDetail.data) return undefined;
+    const map = new Map<string, BranchCell>();
+    for (const row of branchDetail.data) {
+      map.set(row.branch_id, {
+        qty: Number(row.qty ?? 0),
+        bin: row.bin,
+        reorderPoint: row.reorder_point != null ? Number(row.reorder_point) : null,
+        velocity: row.velocity != null ? Number(row.velocity) : null,
+        daysToStockout: row.days_to_stockout != null ? Number(row.days_to_stockout) : null,
+        stockStatus: row.stock_status,
+        forecastQty: row.forecast_qty != null ? Number(row.forecast_qty) : null,
+        forecastRisk: row.forecast_risk,
+      });
+    }
+    return map;
+  }, [branchDetail.data]);
+
+  const selectedTotal = selectedPageRow ? Number(selectedPageRow.total_qty ?? 0) : 0;
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -278,21 +250,21 @@ export function PartsCatalogPage() {
 
       if (e.key === "ArrowDown" || e.key === "j") {
         e.preventDefault();
-        setFocusIndex((i) => Math.min(filtered.length - 1, i + 1));
+        setFocusIndex((i) => Math.min(rows.length - 1, i + 1));
       } else if (e.key === "ArrowUp" || e.key === "k") {
         e.preventDefault();
         setFocusIndex((i) => Math.max(0, i - 1));
       } else if (e.key === "Enter") {
-        const row = filtered[focusIndex]?.canonical;
+        const row = rows[focusIndex];
         if (row) {
           e.preventDefault();
-          openPart(row);
+          openPart(row.id);
         }
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [filtered, focusIndex, openPart, panelOpen]);
+  }, [rows, focusIndex, openPart, panelOpen]);
 
   // Scroll focused row into view
   useEffect(() => {
@@ -378,13 +350,7 @@ export function PartsCatalogPage() {
         </Card>
       )}
 
-      {invTotals.isError && (
-        <Card className="p-3 text-sm text-destructive border-destructive/40">
-          {(invTotals.error as Error)?.message ?? "Could not load stock totals."}
-        </Card>
-      )}
-
-      {catQ.isLoading ? (
+      {catalogPage.isLoading ? (
         <div className="flex justify-center py-16" role="status" aria-live="polite" aria-busy="true">
           <span className="sr-only">Loading catalog</span>
           <div
@@ -392,102 +358,123 @@ export function PartsCatalogPage() {
             aria-hidden
           />
         </div>
-      ) : catQ.isError ? (
+      ) : catalogPage.isError ? (
         <Card className="p-4 text-sm text-destructive">
-          {(catQ.error as Error)?.message ?? "Failed to load catalog."}
+          {(catalogPage.error as Error)?.message ?? "Failed to load catalog."}
         </Card>
-      ) : filtered.length === 0 ? (
+      ) : rows.length === 0 ? (
         <Card className="p-6 text-sm text-muted-foreground text-center">
           No parts match the current filters.
         </Card>
       ) : (
-        <Card className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Part #</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Mfr</TableHead>
-                <TableHead className="text-right">List</TableHead>
-                <TableHead className="text-right">Stock</TableHead>
-                <TableHead className="text-right">Branches</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody ref={tableRef}>
-              {filtered.map(({ canonical: row, variantCount }, idx) => {
-                const pk = row.part_number.toLowerCase();
-                const total = stockTotals.get(pk);
-                const branches = stockByBranch.get(pk);
-                const branchCount = branches?.size ?? 0;
-                const worstStatus = branches
-                  ? [...branches.values()]
-                      .map((b) => b.stockStatus)
-                      .reduce<string | null>((worst, s) => {
-                        const rank = (x: string | null) =>
-                          x === "stockout" ? 4 : x === "critical" ? 3 : x === "reorder" ? 2 : x === "healthy" ? 1 : 0;
-                        return rank(s) > rank(worst) ? s : worst;
-                      }, null)
-                  : null;
-                const isFocused = idx === focusIndex;
-                return (
-                  <TableRow
-                    key={row.id}
-                    data-row-index={idx}
-                    tabIndex={0}
-                    onClick={() => openPart(row)}
-                    onFocus={() => setFocusIndex(idx)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        openPart(row);
-                      }
-                    }}
-                    aria-label={`Open ${row.part_number}`}
-                    className={`cursor-pointer transition-colors outline-none hover:bg-accent/40 focus-visible:bg-accent/60 ${
-                      isFocused ? "bg-accent/30 ring-1 ring-primary/40 ring-inset" : ""
-                    }`}
-                  >
-                    <TableCell className="font-mono text-sm">
-                      <div className="flex items-center gap-1.5">
-                        {worstStatus && (
-                          <span
-                            className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
-                              STATUS_DOT[worstStatus] ?? "bg-muted-foreground/30"
-                            }`}
-                            aria-label={`Stock ${worstStatus}`}
-                          />
-                        )}
-                        {row.part_number}
-                      </div>
-                      {isFocused && (
-                        <div className="mt-0.5">
-                          <PartCrossRefPanel partNumber={row.part_number} compact />
+        <>
+          <Card className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Part #</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Mfr</TableHead>
+                  <TableHead className="text-right">List</TableHead>
+                  <TableHead className="text-right">Stock</TableHead>
+                  <TableHead className="text-right">Branches</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody ref={tableRef}>
+                {rows.map((row, idx) => {
+                  const worstStatus = row.worst_status;
+                  const isFocused = idx === focusIndex;
+                  return (
+                    <TableRow
+                      key={row.id}
+                      data-row-index={idx}
+                      tabIndex={0}
+                      onClick={() => openPart(row.id)}
+                      onFocus={() => setFocusIndex(idx)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openPart(row.id);
+                        }
+                      }}
+                      aria-label={`Open ${row.part_number}`}
+                      className={`cursor-pointer transition-colors outline-none hover:bg-accent/40 focus-visible:bg-accent/60 ${
+                        isFocused ? "bg-accent/30 ring-1 ring-primary/40 ring-inset" : ""
+                      }`}
+                    >
+                      <TableCell className="font-mono text-sm">
+                        <div className="flex items-center gap-1.5">
+                          {worstStatus && (
+                            <span
+                              className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
+                                STATUS_DOT[worstStatus] ?? "bg-muted-foreground/30"
+                              }`}
+                              aria-label={`Stock ${worstStatus}`}
+                            />
+                          )}
+                          {row.part_number}
                         </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm max-w-[240px] truncate">
-                      {row.description ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {row.category ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-xs">{row.manufacturer ?? "—"}</TableCell>
-                    <TableCell className="text-right text-sm tabular-nums">
-                      {row.list_price != null ? `$${Number(row.list_price).toFixed(2)}` : "—"}
-                    </TableCell>
-                    <TableCell className="text-right text-sm tabular-nums">
-                      {total != null ? total : "—"}
-                    </TableCell>
-                    <TableCell className="text-right text-xs text-muted-foreground tabular-nums">
-                      {branchCount > 0 ? branchCount : variantCount > 1 ? `${variantCount}×` : "—"}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </Card>
+                        {isFocused && (
+                          <div className="mt-0.5">
+                            <PartCrossRefPanel partNumber={row.part_number} compact />
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm max-w-[240px] truncate">
+                        {row.description ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {row.category ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-xs">{row.manufacturer ?? "—"}</TableCell>
+                      <TableCell className="text-right text-sm tabular-nums">
+                        {row.list_price != null ? `$${Number(row.list_price).toFixed(2)}` : "—"}
+                      </TableCell>
+                      <TableCell className="text-right text-sm tabular-nums">
+                        {row.branch_count > 0 ? Number(row.total_qty) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground tabular-nums">
+                        {row.branch_count > 0
+                          ? row.branch_count
+                          : row.variant_count > 1
+                            ? `${row.variant_count}×`
+                            : "—"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </Card>
+
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              {totalCount.toLocaleString()} parts · page {page + 1} of {pageCount}
+              {catalogPage.isFetching ? " · refreshing…" : ""}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={page === 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+              >
+                Previous
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={page + 1 >= pageCount}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        </>
       )}
 
       <PartCommandPanel

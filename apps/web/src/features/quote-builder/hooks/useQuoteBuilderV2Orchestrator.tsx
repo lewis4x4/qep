@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams, useSearchParams } from "react-router-dom";
 import type { QuoteFinancingRequest, QuotePackageCatalogKind } from "../lib/quote-api";
@@ -34,7 +34,13 @@ import { useQuoteBuilderCatalogAdds } from "../hooks/useQuoteBuilderCatalogAdds"
 import { useQuoteBuilderReadiness } from "../hooks/useQuoteBuilderReadiness";
 import { QuoteBuilderV2PageView } from "../components/QuoteBuilderV2PageView";
 import { buildQuoteBuilderPageShellProps } from "../lib/build-quote-builder-page-shell-props";
-import { QuoteBuilderIntelligencePanelHost } from "../components/QuoteBuilderIntelligencePanelHost";
+// N7.1: the intelligence panel is not needed for first paint — lazy-loading
+// it keeps its hook/component graph out of the 500KB QuoteBuilderV2Page chunk.
+const QuoteBuilderIntelligencePanelHost = lazy(() =>
+  import("../components/QuoteBuilderIntelligencePanelHost").then((m) => ({
+    default: m.QuoteBuilderIntelligencePanelHost,
+  })),
+);
 import { QUOTE_TAX_PROFILES } from "../lib/quote-tax-profiles";
 import { useQuoteBuilderRecommendedMachine } from "../hooks/useQuoteBuilderRecommendedMachine";
 import { useQuoteBuilderIntelligenceContext } from "../hooks/useQuoteBuilderIntelligenceContext";
@@ -819,6 +825,7 @@ export function useQuoteBuilderV2Orchestrator() {
   });
 
   const intelligencePanel = (
+    <Suspense fallback={<div className="min-h-[160px] animate-pulse rounded-lg border border-border/50 bg-muted/10" aria-hidden />}>
     <QuoteBuilderIntelligencePanelHost
       draft={draft}
       financingInput={financingInput}
@@ -838,6 +845,7 @@ export function useQuoteBuilderV2Orchestrator() {
         setCatalogBrowserOpen(true);
       }}
     />
+    </Suspense>
   );
 
     const stepRouterProps = useQuoteBuilderOrchestratorStepRouterGroups({

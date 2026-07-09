@@ -23,7 +23,7 @@ import { PipelineFiltersBar } from "../components/PipelineFiltersBar";
 import { PipelineManagerSummary } from "../components/PipelineManagerSummary";
 import { PipelineQueryStatus } from "../components/PipelineQueryStatus";
 import { PipelineSwimLanesBoard } from "../components/PipelineSwimLanesBoard";
-import { listCrmDealStages, listCrmWeightedOpenDeals } from "../lib/qrm-api";
+import { getCrmWeightedPipelineTotals, listCrmDealStages } from "../lib/qrm-api";
 import {
   updateDealNextFollowUp,
   fetchOpenDealsFirstPage,
@@ -110,9 +110,11 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
     return map;
   }, [healthProfiles]);
 
-  const weightedDealsQuery = useQuery({
-    queryKey: ["crm", "pipeline", "weighted-open-deals"],
-    queryFn: listCrmWeightedOpenDeals,
+  // N7.1: the summary strip only needs three scalars — the RPC reduces
+  // crm_deals_weighted server-side instead of shipping every row here.
+  const weightedTotalsQuery = useQuery({
+    queryKey: ["crm", "pipeline", "weighted-totals"],
+    queryFn: getCrmWeightedPipelineTotals,
     enabled: isElevated,
     staleTime: 30_000,
   });
@@ -134,17 +136,11 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
   const isLoading = dealsQuery.isLoading || stagesQuery.isLoading;
   const hasError = dealsQuery.isError || stagesQuery.isError;
 
-  const weightedTotals = useMemo(() => {
-    return (weightedDealsQuery.data ?? []).reduce(
-      (acc, deal) => {
-        acc.openDeals += 1;
-        acc.pipelineAmount += deal.amount ?? 0;
-        acc.weightedPipeline += deal.weightedAmount ?? 0;
-        return acc;
-      },
-      { openDeals: 0, pipelineAmount: 0, weightedPipeline: 0 },
-    );
-  }, [weightedDealsQuery.data]);
+  const weightedTotals = useMemo(
+    () =>
+      weightedTotalsQuery.data ?? { openDeals: 0, pipelineAmount: 0, weightedPipeline: 0 },
+    [weightedTotalsQuery.data],
+  );
 
   const clearSelection = useCallback(() => setSelectedDealIds(new Set()), []);
 
@@ -194,7 +190,7 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
     });
   }
 
-  const showWeightedMetrics = isElevated && !weightedDealsQuery.isLoading;
+  const showWeightedMetrics = isElevated && !weightedTotalsQuery.isLoading;
   const showStageDistribution = isElevated && stageSummary.length > 0;
   const attentionCount = urgencyEvaluation.counts.attention;
   const overdueCount = urgencyEvaluation.counts.overdue_follow_up;

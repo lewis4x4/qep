@@ -662,70 +662,25 @@ export function PartsInventoryHealthFloorWidget() {
   );
 }
 
-const CLOSED_WON_STAGE_NAMES = [
-  "Invoice Closed",
-  "Post-Sale Follow-Up",
-  "Sales Order Signed",
-  "Deposit Collected",
-];
-
+/**
+ * N7.1: the floor_pulse_kpis RPC (m804) replaces the 3 whole-table
+ * qrm_deals pulls this widget summed in JS. equipment_mtd doubles as the
+ * MTD pace figure (identical definition).
+ */
 async function fetchRevenuePace(): Promise<{
   mtd: number;
   today: number;
   pipeline: number;
   at_risk: number;
 }> {
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
-  const monthStartISO = monthStart.toISOString();
-
-  const dayStart = new Date();
-  dayStart.setHours(0, 0, 0, 0);
-  const dayStartISO = dayStart.toISOString();
-
-  const { data: stages, error: stagesError } = await supabase
-    .from("qrm_deal_stages")
-    .select("id, name")
-    .in("name", CLOSED_WON_STAGE_NAMES);
-  if (stagesError) throw new Error(stagesError.message);
-  const closedWonIds = (stages ?? []).map((s) => s.id);
-  const safeIds = closedWonIds.length ? closedWonIds : ["00000000-0000-0000-0000-000000000000"];
-
-  const [mtdRes, todayRes, pipelineRes] = await Promise.all([
-    supabase
-      .from("qrm_deals")
-      .select("amount")
-      .in("stage_id", safeIds)
-      .not("hubspot_deal_id", "is", null)
-      .gte("closed_at", monthStartISO)
-      .is("deleted_at", null),
-    supabase
-      .from("qrm_deals")
-      .select("amount")
-      .in("stage_id", safeIds)
-      .not("hubspot_deal_id", "is", null)
-      .gte("closed_at", dayStartISO)
-      .is("deleted_at", null),
-    supabase
-      .from("qrm_deals")
-      .select("amount")
-      .not("hubspot_deal_id", "is", null)
-      .is("deleted_at", null)
-      .is("closed_at", null),
-  ]);
-
-  if (mtdRes.error) throw new Error(mtdRes.error.message);
-  if (todayRes.error) throw new Error(todayRes.error.message);
-  if (pipelineRes.error) throw new Error(pipelineRes.error.message);
-
-  const sum = (rows: { amount: number | null }[] | null) =>
-    (rows ?? []).reduce((acc, row) => acc + Number(row.amount ?? 0), 0);
-
+  const { data, error } = await supabase.rpc("floor_pulse_kpis");
+  if (error) throw new Error(error.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("Pulse KPIs unavailable for this role.");
   return {
-    mtd: sum(mtdRes.data),
-    today: sum(todayRes.data),
-    pipeline: sum(pipelineRes.data),
+    mtd: Number(row.equipment_mtd ?? 0),
+    today: Number(row.pace_today ?? 0),
+    pipeline: Number(row.pace_pipeline ?? 0),
     at_risk: 0,
   };
 }

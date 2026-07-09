@@ -1,4 +1,11 @@
-import { useEffect, useMemo } from "react";
+import { Suspense, useEffect, useMemo } from "react";
+
+// N7.1: registry widgets are React.lazy — each widget is its own chunk, so
+// a parts_counter never downloads owner/manager widget code. This is the
+// shared loading frame while a widget chunk streams in.
+const WIDGET_FALLBACK = (
+  <div className="min-h-[120px] animate-pulse rounded-xl border border-white/10 bg-white/[0.02]" aria-hidden />
+);
 import { Link } from "react-router-dom";
 import type { UserRole } from "@/lib/database.types";
 import { getEffectiveIronRole, type IronRole } from "@/features/qrm/lib/iron-roles";
@@ -175,7 +182,7 @@ export function FloorPage({
     const descriptor = resolveFloorWidget(firstWidget.id);
     if (!descriptor) return null;
     const Component = descriptor.component;
-    return <Component />;
+    return <Suspense fallback={WIDGET_FALLBACK}><Component /></Suspense>;
   }, [activeRole, layout.widgets]);
 
   const roleWidgets = useMemo(
@@ -356,7 +363,7 @@ function OwnerFloorGrid({
     const descriptor = resolveFloorWidget(widget.id);
     if (!descriptor) return null;
     const Component = descriptor.component;
-    return <Component />;
+    return <Suspense fallback={WIDGET_FALLBACK}><Component /></Suspense>;
   };
 
   return (
@@ -411,7 +418,7 @@ function AdvisorFloorGrid({
     const descriptor = resolveFloorWidget(widget.id);
     if (!descriptor) return null;
     const Component = descriptor.component;
-    return <Component />;
+    return <Suspense fallback={WIDGET_FALLBACK}><Component /></Suspense>;
   };
 
   return (
@@ -468,7 +475,7 @@ function ManagerFloorGrid({
     const descriptor = resolveFloorWidget(widget.id);
     if (!descriptor) return null;
     const Component = descriptor.component;
-    return <Component />;
+    return <Suspense fallback={WIDGET_FALLBACK}><Component /></Suspense>;
   };
 
   return (
@@ -538,7 +545,9 @@ function RoleWidgetGrid({
                 Attention · {widget.attention.reason}
               </div>
             ) : null}
-            <Component />
+            <Suspense fallback={WIDGET_FALLBACK}>
+              <Component />
+            </Suspense>
           </div>
         );
       })}

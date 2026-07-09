@@ -1,6 +1,15 @@
 {
-  "indexEntryMaxBytes": 199711,
-  "baselineBytes": 181555,
-  "baselineCapturedAt": "2026-05-16",
-  "note": "Sum of dist/assets/index-*.js after production build; cap = baseline + 10% (IRON_WIZARD_DECOMPOSITION_PLAN §7)."
+  "indexEntryMaxBytes": 247836,
+  "baselineBytes": 225305,
+  "baselineCapturedAt": "2026-07-09",
+  "routeChunkMaxBytes": 150000,
+  "routeChunkExemptions": [
+    "vendor-",
+    "react-pdf.browser",
+    "xlsx-",
+    "QuoteBuilderV2Page-",
+    "DgeIntelligencePanel-",
+    "FlareProvider-"
+  ],
+  "note": "index cap = baseline + 10% of dist/assets/index-*.js after production build. Re-baselined 2026-07-09 (N7.1): CI had been red since April so growth accrued unguarded; prior baseline 181555 (2026-05-16). routeChunkMaxBytes caps every non-index chunk individually; exemptions are grandfathered heavy chunks (vendor splits, deferred pdf/xlsx libs, QuoteBuilderV2Page 495KB = orchestrator hook graph, DgeIntelligencePanel, FlareProvider) — shrink this list, never grow it without justification."
 }

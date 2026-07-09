@@ -370,6 +370,7 @@ async function listDealNames(dealIds: string[]): Promise<Map<string, string>> {
 export {
   getCrmDeal,
   getCrmDealLossFields,
+  getCrmWeightedPipelineTotals,
   listCrmDealStages,
   listCrmOpenDealsForBoard,
   listCrmWeightedOpenDeals,

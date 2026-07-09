@@ -9,9 +9,9 @@
  *   Service:    MTD invoice $, % on SLA
  *   Rentals:    active contract count, monthly run-rate $
  *
- * Queries pull from the already-seeded tables (customer_invoices,
- * service_jobs, service_tat_metrics, rental_contracts, qrm_deals,
- * parts_inventory, parts_catalog). Backed by migration 389+390.
+ * Data comes from the floor_pulse_kpis RPC (m804) — server-side sums
+ * over customer_invoices, service_jobs, service_tat_metrics,
+ * rental_contracts, qrm_deals, parts_inventory/parts_catalog.
  */
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -26,13 +26,6 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
-const CLOSED_WON_STAGE_NAMES = [
-  "Invoice Closed",
-  "Post-Sale Follow-Up",
-  "Sales Order Signed",
-  "Deposit Collected",
-];
-
 interface BuPulseData {
   equipment_mtd: number;
   equipment_pipeline_count: number;
@@ -44,190 +37,26 @@ interface BuPulseData {
   rentals_monthly_rate: number;
 }
 
-type ServiceTatRow = {
-  target_duration_hours: number | null;
-  actual_duration_hours: number | null;
-};
-
-type ActiveRentalRow = {
-  agreed_monthly_rate: number | null;
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function firstRecord(value: unknown): Record<string, unknown> | null {
-  if (Array.isArray(value)) return value.find(isRecord) ?? null;
-  return isRecord(value) ? value : null;
-}
-
-function numberValue(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim().length > 0) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-function isStockoutInventoryRow(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  const catalog = firstRecord(value.catalog);
-  const qtyOnHand = numberValue(value.qty_on_hand) ?? 0;
-  const reorderPoint = numberValue(catalog?.reorder_point) ?? 0;
-  return qtyOnHand < reorderPoint;
-}
-
-function normalizeServiceTatRows(rows: unknown): ServiceTatRow[] {
-  if (!Array.isArray(rows)) return [];
-  return rows.map(normalizeServiceTatRow).filter((row): row is ServiceTatRow => row !== null);
-}
-
-function normalizeServiceTatRow(value: unknown): ServiceTatRow | null {
-  if (!isRecord(value)) return null;
-  return {
-    target_duration_hours: numberValue(value.target_duration_hours),
-    actual_duration_hours: numberValue(value.actual_duration_hours),
-  };
-}
-
-function normalizeActiveRentalRows(rows: unknown): ActiveRentalRow[] {
-  if (!Array.isArray(rows)) return [];
-  return rows.map(normalizeActiveRentalRow).filter((row): row is ActiveRentalRow => row !== null);
-}
-
-function normalizeActiveRentalRow(value: unknown): ActiveRentalRow | null {
-  if (!isRecord(value)) return null;
-  return {
-    agreed_monthly_rate: numberValue(value.agreed_monthly_rate),
-  };
-}
-
+/**
+ * N7.1: one floor_pulse_kpis RPC replaces the 7 whole-table pulls this
+ * widget used to fire (deals/invoices/inventory/TAT/rentals summed in JS).
+ * The RPC is role-gated server-side (admin/manager/owner) and returns a
+ * single row of scalars shared with ExecRevenuePace.
+ */
 async function fetchBuPulse(): Promise<BuPulseData> {
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
-  const monthStartISO = monthStart.toISOString();
-
-  // Resolve closed-won stage IDs once.
-  const { data: stages, error: stagesError } = await supabase
-    .from("qrm_deal_stages")
-    .select("id, name")
-    .in("name", CLOSED_WON_STAGE_NAMES);
-  if (stagesError) throw new Error(stagesError.message);
-  const closedWonIds = (stages ?? []).map((s) => s.id);
-
-  const safeClosedWon = closedWonIds.length ? closedWonIds : ["00000000-0000-0000-0000-000000000000"];
-
-  // Fire all queries in parallel.
-  const [
-    equipmentMtdRes,
-    equipmentPipelineRes,
-    partsMtdRes,
-    partsInventoryRes,
-    serviceMtdRes,
-    serviceTatRes,
-    rentalsRes,
-  ] = await Promise.all([
-    supabase
-      .from("qrm_deals")
-      .select("amount")
-      .in("stage_id", safeClosedWon)
-      .not("hubspot_deal_id", "is", null)
-      .gte("closed_at", monthStartISO)
-      .is("deleted_at", null),
-    supabase
-      .from("qrm_deals")
-      .select("id", { count: "exact", head: true })
-      .not("hubspot_deal_id", "is", null)
-      .is("deleted_at", null)
-      .is("closed_at", null),
-    supabase
-      .from("customer_invoices")
-      .select("total")
-      .not("parts_order_id", "is", null)
-      .gte("created_at", monthStartISO),
-    supabase
-      .from("parts_inventory")
-      .select("qty_on_hand, catalog:parts_catalog!parts_inventory_catalog_id_fkey ( reorder_point )")
-      .is("deleted_at", null),
-    supabase
-      .from("service_jobs")
-      .select("invoice_total")
-      .gte("closed_at", monthStartISO)
-      .is("deleted_at", null),
-    supabase
-      .from("service_tat_metrics")
-      .select("target_duration_hours, actual_duration_hours"),
-    supabase
-      .from("rental_contracts")
-      .select("status, agreed_monthly_rate")
-      .eq("status", "active"),
-  ]);
-
-  // Equipment MTD
-  if (equipmentMtdRes.error) throw new Error(equipmentMtdRes.error.message);
-  const equipment_mtd = (equipmentMtdRes.data ?? []).reduce(
-    (sum: number, row: { amount: number | null }) => sum + Number(row.amount ?? 0),
-    0,
-  );
-
-  // Equipment pipeline count
-  if (equipmentPipelineRes.error) throw new Error(equipmentPipelineRes.error.message);
-  const equipment_pipeline_count = equipmentPipelineRes.count ?? 0;
-
-  // Parts MTD
-  if (partsMtdRes.error) throw new Error(partsMtdRes.error.message);
-  const parts_mtd = (partsMtdRes.data ?? []).reduce(
-    (sum: number, row: { total: number | null }) => sum + Number(row.total ?? 0),
-    0,
-  );
-
-  // Parts stockouts — client-side filter on the joined inventory rows
-  if (partsInventoryRes.error) throw new Error(partsInventoryRes.error.message);
-  const parts_stockouts = (partsInventoryRes.data ?? []).filter(isStockoutInventoryRow).length;
-
-  // Service MTD
-  if (serviceMtdRes.error) throw new Error(serviceMtdRes.error.message);
-  const service_mtd = (serviceMtdRes.data ?? []).reduce(
-    (sum: number, row: { invoice_total: number | null }) => sum + Number(row.invoice_total ?? 0),
-    0,
-  );
-
-  // Service SLA percentage
-  if (serviceTatRes.error) throw new Error(serviceTatRes.error.message);
-  const tatRows = normalizeServiceTatRows(serviceTatRes.data ?? []);
-  const service_sla_pct =
-    tatRows.length === 0
-      ? 0
-      : Math.round(
-          (100 *
-            tatRows.filter(
-              (r) =>
-                (r.actual_duration_hours ?? Infinity) <= (r.target_duration_hours ?? 0),
-            ).length) /
-            tatRows.length,
-        );
-
-  // Rentals
-  if (rentalsRes.error) throw new Error(rentalsRes.error.message);
-  const activeRentals = normalizeActiveRentalRows(rentalsRes.data ?? []);
-  const rentals_active = activeRentals.length;
-  const rentals_monthly_rate = activeRentals.reduce(
-    (sum, row) => sum + Number(row.agreed_monthly_rate ?? 0),
-    0,
-  );
-
+  const { data, error } = await supabase.rpc("floor_pulse_kpis");
+  if (error) throw new Error(error.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("Pulse KPIs unavailable for this role.");
   return {
-    equipment_mtd,
-    equipment_pipeline_count,
-    parts_mtd,
-    parts_stockouts,
-    service_mtd,
-    service_sla_pct,
-    rentals_active,
-    rentals_monthly_rate,
+    equipment_mtd: Number(row.equipment_mtd ?? 0),
+    equipment_pipeline_count: Number(row.equipment_pipeline_count ?? 0),
+    parts_mtd: Number(row.parts_mtd ?? 0),
+    parts_stockouts: Number(row.parts_stockouts ?? 0),
+    service_mtd: Number(row.service_mtd ?? 0),
+    service_sla_pct: Number(row.service_sla_pct ?? 0),
+    rentals_active: Number(row.rentals_active ?? 0),
+    rentals_monthly_rate: Number(row.rentals_monthly_rate ?? 0),
   };
 }
 

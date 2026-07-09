@@ -1,5 +1,5 @@
 import { startTransition, useEffect, useState, type Dispatch, type SetStateAction } from "react";
-import { listCrmOpenDealsForBoard } from "../lib/qrm-api";
+import { listCrmDealStages, listCrmOpenDealsForBoard } from "../lib/qrm-api";
 import type { QrmRepSafeDeal } from "../lib/types";
 import {
   HYDRATION_UPDATE_BATCH_PAGES,
@@ -61,6 +61,18 @@ export function useOpenDealsHydration(
       let cursor = firstPage.nextCursor;
       let pagesSinceLastUpdate = 0;
 
+      // N7.1: resolve open stage ids ONCE for the whole hydration walk —
+      // each page used to re-fetch the entire crm_deal_stages table.
+      let openStageIds: string[] | undefined;
+      try {
+        const stages = await listCrmDealStages();
+        openStageIds = stages
+          .filter((stage) => !stage.isClosedWon && !stage.isClosedLost)
+          .map((stage) => stage.id);
+      } catch {
+        openStageIds = undefined; // per-page fallback resolves stages itself
+      }
+
       while (cursor && !cancelled) {
         if (seenCursors.has(cursor)) {
           setDealHydrationWarning(
@@ -74,6 +86,7 @@ export function useOpenDealsHydration(
           const pageResult = await listCrmOpenDealsForBoard({
             limit: OPEN_DEALS_PAGE_SIZE,
             cursor,
+            openStageIds,
           });
           mergedItems = [...mergedItems, ...pageResult.items];
           pagesSinceLastUpdate += 1;

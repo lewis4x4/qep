@@ -19,81 +19,67 @@
  * while The Floor uses `FLOOR_WIDGET_REGISTRY` for its simplified
  * composed surface.
  */
-import type { ComponentType } from "react";
+import { lazy, type ComponentType } from "react";
 import type { IronRole } from "@/features/qrm/lib/iron-roles";
 import type { FloorAttentionScore, FloorAttentionSignals } from "./attention";
 
-import {
-  PipelineByRepWidget,
-  ApprovalQueueWidget,
-  InventoryAgingWidget,
-} from "@/features/dashboards/widgets/impls/iron-manager-widgets";
-import {
-  AdvisorBriefWidget,
-  FollowUpQueueWidget,
-  ProspectingCounterWidget,
-} from "@/features/dashboards/widgets/impls/iron-advisor-widgets";
-import {
-  OrderProcessingWidget,
-  DepositTrackerWidget,
-  IntakeProgressWidget,
-  CreditAppsWidget,
-} from "@/features/dashboards/widgets/impls/iron-woman-widgets";
-import {
-  PdiChecklistsWidget,
-  DemoScheduleWidget,
-  ReturnInspectionsWidget,
-} from "@/features/dashboards/widgets/impls/iron-man-widgets";
-import { PartsReplenishQueueWidget } from "@/features/dashboards/widgets/impls/parts-widgets";
+const PipelineByRepWidget = lazy(() => import("@/features/dashboards/widgets/impls/iron-manager-widgets").then((m) => ({ default: m.PipelineByRepWidget })));
+const ApprovalQueueWidget = lazy(() => import("@/features/dashboards/widgets/impls/iron-manager-widgets").then((m) => ({ default: m.ApprovalQueueWidget })));
+const InventoryAgingWidget = lazy(() => import("@/features/dashboards/widgets/impls/iron-manager-widgets").then((m) => ({ default: m.InventoryAgingWidget })));
+const AdvisorBriefWidget = lazy(() => import("@/features/dashboards/widgets/impls/iron-advisor-widgets").then((m) => ({ default: m.AdvisorBriefWidget })));
+const FollowUpQueueWidget = lazy(() => import("@/features/dashboards/widgets/impls/iron-advisor-widgets").then((m) => ({ default: m.FollowUpQueueWidget })));
+const ProspectingCounterWidget = lazy(() => import("@/features/dashboards/widgets/impls/iron-advisor-widgets").then((m) => ({ default: m.ProspectingCounterWidget })));
+const OrderProcessingWidget = lazy(() => import("@/features/dashboards/widgets/impls/iron-woman-widgets").then((m) => ({ default: m.OrderProcessingWidget })));
+const DepositTrackerWidget = lazy(() => import("@/features/dashboards/widgets/impls/iron-woman-widgets").then((m) => ({ default: m.DepositTrackerWidget })));
+const IntakeProgressWidget = lazy(() => import("@/features/dashboards/widgets/impls/iron-woman-widgets").then((m) => ({ default: m.IntakeProgressWidget })));
+const CreditAppsWidget = lazy(() => import("@/features/dashboards/widgets/impls/iron-woman-widgets").then((m) => ({ default: m.CreditAppsWidget })));
+const PdiChecklistsWidget = lazy(() => import("@/features/dashboards/widgets/impls/iron-man-widgets").then((m) => ({ default: m.PdiChecklistsWidget })));
+const DemoScheduleWidget = lazy(() => import("@/features/dashboards/widgets/impls/iron-man-widgets").then((m) => ({ default: m.DemoScheduleWidget })));
+const ReturnInspectionsWidget = lazy(() => import("@/features/dashboards/widgets/impls/iron-man-widgets").then((m) => ({ default: m.ReturnInspectionsWidget })));
+const PartsReplenishQueueWidget = lazy(() => import("@/features/dashboards/widgets/impls/parts-widgets").then((m) => ({ default: m.PartsReplenishQueueWidget })));
 
 // ── Slice: The Floor widget wirings (Week 1) ────────────────────────────
 // Real-component wrappers replacing earlier placeholder cards. Each maps to an
 // existing feature-owned component and fetches its own data — see
 // docs/floor/widget-wiring-punch-list.md for the selection rationale.
-import { OwnerBriefCard } from "@/features/owner/components/OwnerBriefCard";
-import { CustomerHealthListWidget } from "../widgets/CustomerHealthListWidget";
-import { CrmCustomerSearchWidget } from "../widgets/CrmCustomerSearchWidget";
+const OwnerBriefCard = lazy(() => import("@/features/owner/components/OwnerBriefCard").then((m) => ({ default: m.OwnerBriefCard })));
+const CustomerHealthListWidget = lazy(() => import("../widgets/CustomerHealthListWidget").then((m) => ({ default: m.CustomerHealthListWidget })));
+const CrmCustomerSearchWidget = lazy(() => import("../widgets/CrmCustomerSearchWidget").then((m) => ({ default: m.CrmCustomerSearchWidget })));
 // P1 moonshot widgets — see docs/floor/widget-wiring-punch-list.md.
-import { SerialFirstWidget } from "../widgets/SerialFirstWidget";
-import { ActionItemsWidget } from "../widgets/ActionItemsWidget";
-import { DealCopilotSummaryWidget } from "../widgets/DealCopilotSummaryWidget";
-import {
-  DecisionRoomScoreboardFloorWidget,
-  SalesAiBriefingFloorWidget,
-  SalesDaySummaryFloorWidget,
-  ServicePartsHubStripFloorWidget,
-} from "../widgets/DirectWrapWidgets";
-import {
-  ExecDealVelocityFloorWidget,
-  ExecRevenuePaceFloorWidget,
-  MorningBriefFloorWidget,
-  OpenServiceTicketsFloorWidget,
-  PartsCustomerIntelFloorWidget,
-  PartsDemandForecastFloorWidget,
-  PartsInventoryHealthFloorWidget,
-  PartsLostSalesFloorWidget,
-  PartsOrderStatusFloorWidget,
-  PartsQuoteDraftsFloorWidget,
-  PartsSupplierHealthFloorWidget,
-  PendingInvoicesFloorWidget,
-  SalesCommissionSourceFloorWidget,
-} from "../widgets/OperationalWidgets";
-import {
-  AgingDealsTeamWidget,
-  CounterInquiriesWidget,
-  EditablePrepQueueWidget,
-  MarginTrendWidget,
-  MyQuotesByStatusWidget,
-  OwnerLargeDealsWidget,
-  RecentDecisionsWidget,
-  ServiceDeliveryScheduleWidget,
-  SlaPerformanceWidget,
-} from "../widgets/RoleHomeWidgets";
-import { BuPulseStripWidget } from "../widgets/BuPulseStrip";
-import { RecentActivityWidget } from "../widgets/RecentActivityWidget";
-import { TeamPipelineTable } from "../components/TeamPipelineTable";
-import { ManagerForecastCard } from "../components/ManagerForecastCard";
-import { StalledDealsTable } from "../components/StalledDealsTable";
+const SerialFirstWidget = lazy(() => import("../widgets/SerialFirstWidget").then((m) => ({ default: m.SerialFirstWidget })));
+const ActionItemsWidget = lazy(() => import("../widgets/ActionItemsWidget").then((m) => ({ default: m.ActionItemsWidget })));
+const DealCopilotSummaryWidget = lazy(() => import("../widgets/DealCopilotSummaryWidget").then((m) => ({ default: m.DealCopilotSummaryWidget })));
+const DecisionRoomScoreboardFloorWidget = lazy(() => import("../widgets/DirectWrapWidgets").then((m) => ({ default: m.DecisionRoomScoreboardFloorWidget })));
+const SalesAiBriefingFloorWidget = lazy(() => import("../widgets/DirectWrapWidgets").then((m) => ({ default: m.SalesAiBriefingFloorWidget })));
+const SalesDaySummaryFloorWidget = lazy(() => import("../widgets/DirectWrapWidgets").then((m) => ({ default: m.SalesDaySummaryFloorWidget })));
+const ServicePartsHubStripFloorWidget = lazy(() => import("../widgets/DirectWrapWidgets").then((m) => ({ default: m.ServicePartsHubStripFloorWidget })));
+const ExecDealVelocityFloorWidget = lazy(() => import("../widgets/OperationalWidgets").then((m) => ({ default: m.ExecDealVelocityFloorWidget })));
+const ExecRevenuePaceFloorWidget = lazy(() => import("../widgets/OperationalWidgets").then((m) => ({ default: m.ExecRevenuePaceFloorWidget })));
+const MorningBriefFloorWidget = lazy(() => import("../widgets/OperationalWidgets").then((m) => ({ default: m.MorningBriefFloorWidget })));
+const OpenServiceTicketsFloorWidget = lazy(() => import("../widgets/OperationalWidgets").then((m) => ({ default: m.OpenServiceTicketsFloorWidget })));
+const PartsCustomerIntelFloorWidget = lazy(() => import("../widgets/OperationalWidgets").then((m) => ({ default: m.PartsCustomerIntelFloorWidget })));
+const PartsDemandForecastFloorWidget = lazy(() => import("../widgets/OperationalWidgets").then((m) => ({ default: m.PartsDemandForecastFloorWidget })));
+const PartsInventoryHealthFloorWidget = lazy(() => import("../widgets/OperationalWidgets").then((m) => ({ default: m.PartsInventoryHealthFloorWidget })));
+const PartsLostSalesFloorWidget = lazy(() => import("../widgets/OperationalWidgets").then((m) => ({ default: m.PartsLostSalesFloorWidget })));
+const PartsOrderStatusFloorWidget = lazy(() => import("../widgets/OperationalWidgets").then((m) => ({ default: m.PartsOrderStatusFloorWidget })));
+const PartsQuoteDraftsFloorWidget = lazy(() => import("../widgets/OperationalWidgets").then((m) => ({ default: m.PartsQuoteDraftsFloorWidget })));
+const PartsSupplierHealthFloorWidget = lazy(() => import("../widgets/OperationalWidgets").then((m) => ({ default: m.PartsSupplierHealthFloorWidget })));
+const PendingInvoicesFloorWidget = lazy(() => import("../widgets/OperationalWidgets").then((m) => ({ default: m.PendingInvoicesFloorWidget })));
+const SalesCommissionSourceFloorWidget = lazy(() => import("../widgets/OperationalWidgets").then((m) => ({ default: m.SalesCommissionSourceFloorWidget })));
+const AgingDealsTeamWidget = lazy(() => import("../widgets/RoleHomeWidgets").then((m) => ({ default: m.AgingDealsTeamWidget })));
+const CounterInquiriesWidget = lazy(() => import("../widgets/RoleHomeWidgets").then((m) => ({ default: m.CounterInquiriesWidget })));
+const EditablePrepQueueWidget = lazy(() => import("../widgets/RoleHomeWidgets").then((m) => ({ default: m.EditablePrepQueueWidget })));
+const MarginTrendWidget = lazy(() => import("../widgets/RoleHomeWidgets").then((m) => ({ default: m.MarginTrendWidget })));
+const MyQuotesByStatusWidget = lazy(() => import("../widgets/RoleHomeWidgets").then((m) => ({ default: m.MyQuotesByStatusWidget })));
+const OwnerLargeDealsWidget = lazy(() => import("../widgets/RoleHomeWidgets").then((m) => ({ default: m.OwnerLargeDealsWidget })));
+const RecentDecisionsWidget = lazy(() => import("../widgets/RoleHomeWidgets").then((m) => ({ default: m.RecentDecisionsWidget })));
+const ServiceDeliveryScheduleWidget = lazy(() => import("../widgets/RoleHomeWidgets").then((m) => ({ default: m.ServiceDeliveryScheduleWidget })));
+const SlaPerformanceWidget = lazy(() => import("../widgets/RoleHomeWidgets").then((m) => ({ default: m.SlaPerformanceWidget })));
+const BuPulseStripWidget = lazy(() => import("../widgets/BuPulseStrip").then((m) => ({ default: m.BuPulseStripWidget })));
+const RecentActivityWidget = lazy(() => import("../widgets/RecentActivityWidget").then((m) => ({ default: m.RecentActivityWidget })));
+const TeamPipelineTable = lazy(() => import("../components/TeamPipelineTable").then((m) => ({ default: m.TeamPipelineTable })));
+const ManagerForecastCard = lazy(() => import("../components/ManagerForecastCard").then((m) => ({ default: m.ManagerForecastCard })));
+const StalledDealsTable = lazy(() => import("../components/StalledDealsTable").then((m) => ({ default: m.StalledDealsTable })));
 
 export interface FloorWidgetDescriptor {
   id: string;

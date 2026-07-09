@@ -299,11 +299,14 @@ export function useIronManagerData() {
         { data: expiringIncentives },
         { data: dealEquipmentLinks },
         { data: resolvedPredictions },
+        { data: staffProfiles },
       ] = await Promise.all([
-        sb.from("demos").select("id, deal_id, status, equipment_category, created_at").eq("status", "requested"),
-        sb.from("trade_valuations").select("id, deal_id, make, model, status, preliminary_value").eq("status", "manager_review"),
-        sb.from("crm_deals").select("id, name, margin_pct, margin_check_status").eq("margin_check_status", "flagged"),
-        sb.from("prospecting_kpis").select("rep_id, positive_visits, target, target_met, kpi_date").eq("kpi_date", new Date().toISOString().split("T")[0]),
+        // N7.1: the four queue queries were unbounded — they scale with
+        // flagged/pending volume and silently truncate at max_rows=1000.
+        sb.from("demos").select("id, deal_id, status, equipment_category, created_at").eq("status", "requested").order("created_at", { ascending: false }).limit(100),
+        sb.from("trade_valuations").select("id, deal_id, make, model, status, preliminary_value").eq("status", "manager_review").limit(100),
+        sb.from("crm_deals").select("id, name, margin_pct, margin_check_status").eq("margin_check_status", "flagged").limit(100),
+        sb.from("prospecting_kpis").select("rep_id, positive_visits, target, target_met, kpi_date").eq("kpi_date", new Date().toISOString().split("T")[0]).limit(100),
         sb
           .from("crm_deals")
           .select("id, name, stage_id, amount, assigned_rep_id, last_activity_at")
@@ -348,17 +351,18 @@ export function useIronManagerData() {
           .not("outcome", "is", null)
           .order("predicted_at", { ascending: false })
           .limit(200),
+        // N7.1: staff roster fetched in the same batch (bounded) so the
+        // rep-profile lookup no longer waterfalls behind the deal query.
+        sb.from("profiles").select("id, full_name, email").in("role", ["rep", "admin", "manager", "owner"]).limit(200),
       ]);
 
       const deals: PipelineDealRow[] = rowsOrEmpty(pipelineDeals);
       const stages: DealStageRow[] = rowsOrEmpty(dealStages);
-      const repIds = [...new Set(deals.map((d) => d.assigned_rep_id).filter((id): id is string => Boolean(id)))];
+      const repIds = new Set(deals.map((d) => d.assigned_rep_id).filter((id): id is string => Boolean(id)));
 
-      let repProfiles: RepProfileRow[] = [];
-      if (repIds.length > 0) {
-        const { data: profiles } = await sb.from("profiles").select("id, full_name, email").in("id", repIds);
-        repProfiles = rowsOrEmpty(profiles);
-      }
+      const repProfiles: RepProfileRow[] = rowsOrEmpty<RepProfileRow>(staffProfiles).filter((p) =>
+        repIds.has(p.id),
+      );
 
       const normalizedMarginFlags = normalizeMarginFlags(marginFlags);
       const normalizedAgingEquipment = normalizeAgingEquipment(agingEquipment);

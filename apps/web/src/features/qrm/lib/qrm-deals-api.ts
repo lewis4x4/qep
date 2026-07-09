@@ -190,10 +190,16 @@ export async function listCrmDealStages(): Promise<QrmDealStage[]> {
 export async function listCrmOpenDealsForBoard(
   input: QrmDealBoardListInput = {}
 ): Promise<QrmPageResult<QrmRepSafeDeal>> {
-  const stages = await listCrmDealStages();
-  const openStageIds = stages
-    .filter((stage) => !stage.isClosedWon && !stage.isClosedLost)
-    .map((stage) => stage.id);
+  // N7.1: callers that page (the pipeline hydration loop) resolve stages
+  // once and thread the ids in — the old shape re-fetched the whole
+  // crm_deal_stages table on every page.
+  let openStageIds = input.openStageIds;
+  if (!openStageIds) {
+    const stages = await listCrmDealStages();
+    openStageIds = stages
+      .filter((stage) => !stage.isClosedWon && !stage.isClosedLost)
+      .map((stage) => stage.id);
+  }
 
   if (openStageIds.length === 0) {
     return { items: [], nextCursor: null };
@@ -275,18 +281,52 @@ export async function listRepSafeDealsForContact(contactId: string): Promise<Qrm
   return normalizeRepSafeDealRows(data).map(toRepSafeDeal);
 }
 
-export async function listCrmWeightedOpenDeals(): Promise<QrmWeightedDeal[]> {
+const WEIGHTED_DEALS_DEFAULT_LIMIT = 300;
+
+/**
+ * Top-N open deals by weighted amount. N7.1: previously unbounded — pulled
+ * the whole crm_deals_weighted view and was silently truncated at
+ * PostgREST max_rows=1000. Consumers are ranked top-N surfaces, so an
+ * explicit bound returns the same rows they actually used.
+ */
+export async function listCrmWeightedOpenDeals(limit?: number): Promise<QrmWeightedDeal[]> {
+  const boundedLimit =
+    typeof limit === "number" && Number.isFinite(limit)
+      ? Math.max(1, Math.min(Math.trunc(limit), DEALS_PAGE_LIMIT_MAX))
+      : WEIGHTED_DEALS_DEFAULT_LIMIT;
+
   const { data, error } = await crmSupabase
     .from("crm_deals_weighted")
     .select(WEIGHTED_DEAL_SELECT)
     .order("weighted_amount", { ascending: false, nullsFirst: false })
-    .order("amount", { ascending: false, nullsFirst: false });
+    .order("amount", { ascending: false, nullsFirst: false })
+    .limit(boundedLimit);
 
   if (error) {
     throw new Error(error.message);
   }
 
   return normalizeWeightedDealRows(data).map(toWeightedDeal);
+}
+
+export interface CrmWeightedPipelineTotals {
+  openDeals: number;
+  pipelineAmount: number;
+  weightedPipeline: number;
+}
+
+/** Server-side reduction of crm_deals_weighted (m804) — three scalars, zero rows shipped. */
+export async function getCrmWeightedPipelineTotals(): Promise<CrmWeightedPipelineTotals> {
+  const { data, error } = await crmSupabase.rpc("crm_weighted_pipeline_totals");
+  if (error) {
+    throw new Error(error.message);
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    openDeals: Number(row?.open_deals ?? 0),
+    pipelineAmount: Number(row?.pipeline_amount ?? 0),
+    weightedPipeline: Number(row?.weighted_pipeline ?? 0),
+  };
 }
 
 export async function patchCrmDeal(dealId: string, input: QrmDealPatchInput): Promise<QrmRepSafeDeal> {
