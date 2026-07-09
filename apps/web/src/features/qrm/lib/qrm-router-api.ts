@@ -501,6 +501,12 @@ export async function patchCompanyShipTo(
   return requireRouterObjectPayload<QrmCompanyShipToAddress | { id: string; archived: true }>(payload, "shipTo");
 }
 
+/** Full workspace equipment list (newest-updated first, capped at 200 by the router). */
+export async function fetchAllEquipment(): Promise<QrmEquipment[]> {
+  const payload = await requestRouter("/qrm/equipment");
+  return requireRouterArrayPayload<QrmEquipment>(payload, "items");
+}
+
 export async function fetchCompanyEquipment(companyId: string): Promise<QrmEquipment[]> {
   const params = new URLSearchParams({ company_id: companyId });
   const payload = await requestRouter(`/qrm/equipment?${params.toString()}`);

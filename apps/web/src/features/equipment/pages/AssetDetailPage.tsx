@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  ArrowLeft, Wrench, Package, FileText, Activity, FolderOpen, Image as ImageIcon, Briefcase,
+  ArrowLeft, Wrench, Package, FileText, Activity, FolderOpen, Image as ImageIcon, Briefcase, Warehouse,
 } from "lucide-react";
 import {
   AssetCountdownStack,
@@ -27,13 +27,14 @@ import {
   type EquipmentDocumentRow,
 } from "../lib/equipment-row-normalizers";
 
-type TabKey = "service" | "parts" | "deal" | "telematics" | "docs" | "photos" | "commercial";
+type TabKey = "service" | "parts" | "deal" | "rental" | "telematics" | "docs" | "photos" | "commercial";
 
 const TABS: Array<{ key: TabKey; label: string; icon: React.ReactNode }> = [
   { key: "commercial", label: "Commercial Action", icon: <Briefcase className="h-3 w-3" /> },
   { key: "service",    label: "Service",           icon: <Wrench className="h-3 w-3" /> },
   { key: "parts",      label: "Parts",             icon: <Package className="h-3 w-3" /> },
   { key: "deal",       label: "Deal",              icon: <FileText className="h-3 w-3" /> },
+  { key: "rental",     label: "Rental",            icon: <Warehouse className="h-3 w-3" /> },
   { key: "telematics", label: "Telematics",        icon: <Activity className="h-3 w-3" /> },
   { key: "docs",       label: "Docs",              icon: <FolderOpen className="h-3 w-3" /> },
   { key: "photos",     label: "Photos",            icon: <ImageIcon className="h-3 w-3" /> },
@@ -167,6 +168,7 @@ export function AssetDetailPage() {
           {activeTab === "service" && <ServiceTab data={data} />}
           {activeTab === "parts" && <PartsTab equipmentId={equipment.id} lifetimeSpend={data.badges.lifetime_parts_spend} />}
           {activeTab === "deal" && <DealTab data={data} />}
+          {activeTab === "rental" && <RentalTab data={data} />}
           {activeTab === "telematics" && <TelematicsTab equipmentId={equipment.id} />}
           {activeTab === "docs" && <DocsTab equipmentId={equipment.id} />}
           {activeTab === "photos" && <PhotosTab photoUrls={equipment.photo_urls ?? []} />}
@@ -226,6 +228,105 @@ function DealTab({ data }: { data: Asset360Response }) {
         <p className="mt-1 text-xs text-muted-foreground">${d.amount.toLocaleString()}</p>
       )}
     </Card>
+  );
+}
+
+function formatCents(cents: number | null): string {
+  if (cents == null) return "—";
+  return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function RentalTab({ data }: { data: Asset360Response }) {
+  const rental = data.rental;
+  const contracts = rental?.contracts ?? [];
+  const invoices = rental?.recent_invoices ?? [];
+  const open = rental?.open_contract ?? null;
+
+  if (contracts.length === 0 && invoices.length === 0) {
+    return (
+      <Card className="p-4">
+        <p className="text-xs text-muted-foreground">
+          No rental history for this machine. Contracts and rental invoices will appear here once
+          the unit enters the rental fleet.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {open && (
+        <Card className="border-qep-orange/40 p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-qep-orange">On rent / open contract</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">
+            {open.contract_number ?? open.id.slice(0, 8)}
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {open.lifecycle_state ?? open.status ?? "open"}
+            {open.on_rent_at ? ` · on rent since ${new Date(open.on_rent_at).toLocaleDateString()}` : ""}
+            {open.approved_end_date ? ` · due back ${new Date(open.approved_end_date).toLocaleDateString()}` : ""}
+          </p>
+        </Card>
+      )}
+
+      <Card className="p-4">
+        <p className="text-xs font-semibold text-foreground">Rental contracts</p>
+        {contracts.length === 0 ? (
+          <p className="mt-3 text-xs text-muted-foreground">No contracts recorded.</p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {contracts.map((c) => (
+              <div key={c.id} className="rounded-lg border border-border/60 bg-muted/10 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-foreground">{c.contract_number ?? c.id.slice(0, 8)}</p>
+                  <span className="rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {c.lifecycle_state ?? c.status ?? "unknown"}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {c.approved_start_date ? new Date(c.approved_start_date).toLocaleDateString() : "?"}
+                  {" → "}
+                  {c.returned_at
+                    ? `returned ${new Date(c.returned_at).toLocaleDateString()}`
+                    : c.approved_end_date
+                      ? new Date(c.approved_end_date).toLocaleDateString()
+                      : "open-ended"}
+                  {c.agreed_daily_rate != null ? ` · $${c.agreed_daily_rate.toLocaleString()}/day` : ""}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card className="p-4">
+        <p className="text-xs font-semibold text-foreground">Recent rental invoices</p>
+        {invoices.length === 0 ? (
+          <p className="mt-3 text-xs text-muted-foreground">No rental invoices for this machine yet.</p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {invoices.map((inv) => (
+              <div key={inv.id} className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/10 p-3">
+                <div>
+                  <p className="text-sm font-medium text-foreground">{inv.invoice_number ?? inv.id.slice(0, 8)}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {inv.period_start ? new Date(inv.period_start).toLocaleDateString() : "?"}
+                    {inv.period_end ? ` – ${new Date(inv.period_end).toLocaleDateString()}` : ""}
+                    {inv.status ? ` · ${inv.status}` : ""}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-foreground">{formatCents(inv.total_cents)}</p>
+                  {inv.balance_cents != null && inv.balance_cents > 0 && (
+                    <p className="text-xs text-amber-400">{formatCents(inv.balance_cents)} open</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
   );
 }
 

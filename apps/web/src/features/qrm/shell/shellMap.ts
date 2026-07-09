@@ -63,6 +63,7 @@ const ROUTE_RULES: RouteRule[] = [
   { prefix: "/qrm/contacts", surface: "graph", lens: "contacts" },
   { prefix: "/qrm/companies", surface: "graph", lens: "companies" },
   { prefix: "/qrm/accounts", surface: "graph", lens: "companies" },
+  { prefix: "/qrm/equipment", surface: "graph", lens: "equipment" },
   { prefix: "/qrm/inventory-pressure", surface: "graph", lens: "inventory" },
   { prefix: "/qrm/rentals", surface: "graph", lens: "rentals" },
   { prefix: "/qrm/operator-intelligence", surface: "graph", lens: "operators" },
@@ -248,6 +249,12 @@ export const SURFACE_LENSES: Record<SurfaceId, LensDefinition[]> = {
       id: "companies",
       label: "Companies",
       href: "/qrm/companies",
+      surface: "graph",
+    },
+    {
+      id: "equipment",
+      label: "Equipment",
+      href: "/qrm/equipment",
       surface: "graph",
     },
     {

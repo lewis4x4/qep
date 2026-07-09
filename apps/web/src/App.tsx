@@ -587,6 +587,11 @@ const QrmContactDetailPage = lazy(() =>
 const QrmCompaniesPage = lazy(() =>
   import("./features/qrm/pages/QrmCompaniesPage").then((m) => ({ default: m.QrmCompaniesPage }))
 );
+const QrmEquipmentListPage = lazy(() =>
+  import("./features/qrm/pages/QrmEquipmentListPage").then((m) => ({
+    default: m.QrmEquipmentListPage,
+  }))
+);
 const QrmCampaignsPage = lazy(() =>
   import("./features/qrm/pages/QrmCampaignsPage").then((m) => ({ default: m.QrmCampaignsPage }))
 );
@@ -2816,6 +2821,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <FlareAdminPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/equipment"
+                element={
+                  canAccessMachineRecords(profile.role) ? (
+                    <QrmEquipmentListPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

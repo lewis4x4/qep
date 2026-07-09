@@ -27,6 +27,7 @@ import {
   UserRound,
   PackageSearch,
   DoorClosed,
+  Boxes,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -47,6 +48,7 @@ const CRM_SUB_NAV_ITEMS: SubNavItem[] = [
   { label: "Deals", href: "/qrm/deals", icon: LayoutGrid },
   { label: "Contacts", href: "/qrm/contacts", icon: UsersRound },
   { label: "Companies", href: "/qrm/companies", icon: Building2 },
+  { label: "Equipment", href: "/qrm/equipment", icon: Boxes, roles: ["rep", "admin", "manager", "owner"] },
   { label: "Time Bank", href: "/qrm/time-bank", icon: Timer },
   { label: "Inventory", href: "/qrm/inventory-pressure", icon: AlertTriangle },
   { label: "Motion", href: "/qrm/iron-in-motion", icon: Truck },

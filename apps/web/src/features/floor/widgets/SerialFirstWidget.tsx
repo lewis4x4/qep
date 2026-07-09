@@ -96,8 +96,8 @@ export function SerialFirstWidget() {
   const [raw, setRaw] = useState("");
   const [debounced, setDebounced] = useState("");
   // Floor operator roles (parts_counter, …) can hold this widget but are
-  // bounced from /fleet and /qrm/equipment/:id by the route guards — links
-  // must degrade to plain content for them, not silently redirect.
+  // bounced from /qrm/equipment and /qrm/equipment/:id by the route guards —
+  // links must degrade to plain content for them, not silently redirect.
   const { profile } = useAuth();
   const canOpenRecords = canAccessMachineRecords(profile?.role);
 
@@ -141,7 +141,7 @@ export function SerialFirstWidget() {
         </div>
         {canOpenRecords && (
           <Link
-            to="/fleet"
+            to="/qrm/equipment"
             className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground hover:text-[hsl(var(--qep-orange))]"
           >
             All machines
@@ -205,7 +205,7 @@ export function SerialFirstWidget() {
             {canOpenRecords ? (
               <>
                 , or{" "}
-                <Link to="/fleet" className="text-[hsl(var(--qep-orange))] hover:underline">
+                <Link to="/qrm/equipment" className="text-[hsl(var(--qep-orange))] hover:underline">
                   browse all machines
                 </Link>
               </>

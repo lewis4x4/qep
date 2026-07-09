@@ -47,12 +47,83 @@ export interface Asset360OpenDeal {
   next_follow_up_at: string | null;
 }
 
+export interface Asset360RentalContract {
+  id: string;
+  contract_number: string | null;
+  status: string | null;
+  lifecycle_state: string | null;
+  approved_start_date: string | null;
+  approved_end_date: string | null;
+  on_rent_at: string | null;
+  off_rent_at: string | null;
+  returned_at: string | null;
+  closed_at: string | null;
+  agreed_daily_rate: number | null;
+  agreed_weekly_rate: number | null;
+  agreed_monthly_rate: number | null;
+}
+
+export interface Asset360RentalInvoice {
+  id: string;
+  invoice_number: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  total_cents: number | null;
+  balance_cents: number | null;
+  status: string | null;
+  due_date: string | null;
+}
+
+export interface Asset360Rental {
+  contracts: Asset360RentalContract[];
+  open_contract: Asset360RentalContract | null;
+  recent_invoices: Asset360RentalInvoice[];
+}
+
+export interface Asset360Intake {
+  id: string;
+  current_stage: number | null;
+  stock_number: string | null;
+  po_number: string | null;
+  arrival_date: string | null;
+  pdi_completed: boolean | null;
+  photo_ready: boolean | null;
+  pricing_verified: boolean | null;
+  updated_at: string | null;
+}
+
+export interface Asset360Invoice {
+  id: string;
+  invoice_number: string | null;
+  invoice_type: string | null;
+  status: string | null;
+  total: number | null;
+  amount_paid: number | null;
+  created_at: string | null;
+}
+
+export interface Asset360Trade {
+  id: string;
+  deal_id: string | null;
+  allowance_cents: number | null;
+  book_value_cents: number | null;
+  disposition: string | null;
+  reconditioning_approval_status: string | null;
+  approved_at: string | null;
+  created_at: string | null;
+}
+
 export interface Asset360Response {
   equipment: Asset360Equipment;
   company: Asset360Company | null;
   badges: AssetBadgeData;
   recent_service: Asset360RecentService[];
   open_deal: Asset360OpenDeal | null;
+  // N6.1 arms — older RPC deploys omit these; parsers default them.
+  rental: Asset360Rental | null;
+  intake: Asset360Intake | null;
+  invoices: Asset360Invoice[];
+  trades: Asset360Trade[];
 }
 
 export interface AssetBadgeData {
@@ -248,6 +319,110 @@ function parseOpenDeal(value: Json | undefined): Asset360OpenDeal | null {
   };
 }
 
+function parseRentalContract(value: Json | null | undefined): Asset360RentalContract | null {
+  if (value === undefined || !isJsonRecord(value)) return null;
+  const id = readNullableString(value.id);
+  if (!id) return null;
+  return {
+    id,
+    contract_number: readNullableString(value.contract_number),
+    status: readNullableString(value.status),
+    lifecycle_state: readNullableString(value.lifecycle_state),
+    approved_start_date: readNullableString(value.approved_start_date),
+    approved_end_date: readNullableString(value.approved_end_date),
+    on_rent_at: readNullableString(value.on_rent_at),
+    off_rent_at: readNullableString(value.off_rent_at),
+    returned_at: readNullableString(value.returned_at),
+    closed_at: readNullableString(value.closed_at),
+    agreed_daily_rate: readNullableNumber(value.agreed_daily_rate),
+    agreed_weekly_rate: readNullableNumber(value.agreed_weekly_rate),
+    agreed_monthly_rate: readNullableNumber(value.agreed_monthly_rate),
+  };
+}
+
+function parseRental(value: Json | null | undefined): Asset360Rental | null {
+  if (value === undefined || !isJsonRecord(value)) return null;
+  const contracts = Array.isArray(value.contracts)
+    ? value.contracts.map(parseRentalContract).filter((c): c is Asset360RentalContract => c !== null)
+    : [];
+  const invoices = Array.isArray(value.recent_invoices)
+    ? value.recent_invoices.flatMap((row): Asset360RentalInvoice[] => {
+        if (!isJsonRecord(row)) return [];
+        const id = readNullableString(row.id);
+        if (!id) return [];
+        return [{
+          id,
+          invoice_number: readNullableString(row.invoice_number),
+          period_start: readNullableString(row.period_start),
+          period_end: readNullableString(row.period_end),
+          total_cents: readNullableNumber(row.total_cents),
+          balance_cents: readNullableNumber(row.balance_cents),
+          status: readNullableString(row.status),
+          due_date: readNullableString(row.due_date),
+        }];
+      })
+    : [];
+  return {
+    contracts,
+    open_contract: parseRentalContract(value.open_contract),
+    recent_invoices: invoices,
+  };
+}
+
+function parseIntake(value: Json | null | undefined): Asset360Intake | null {
+  if (value === undefined || !isJsonRecord(value)) return null;
+  const id = readNullableString(value.id);
+  if (!id) return null;
+  return {
+    id,
+    current_stage: readNullableNumber(value.current_stage),
+    stock_number: readNullableString(value.stock_number),
+    po_number: readNullableString(value.po_number),
+    arrival_date: readNullableString(value.arrival_date),
+    pdi_completed: typeof value.pdi_completed === "boolean" ? value.pdi_completed : null,
+    photo_ready: typeof value.photo_ready === "boolean" ? value.photo_ready : null,
+    pricing_verified: typeof value.pricing_verified === "boolean" ? value.pricing_verified : null,
+    updated_at: readNullableString(value.updated_at),
+  };
+}
+
+function parseInvoices(value: Json | null | undefined): Asset360Invoice[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row): Asset360Invoice[] => {
+    if (!isJsonRecord(row)) return [];
+    const id = readNullableString(row.id);
+    if (!id) return [];
+    return [{
+      id,
+      invoice_number: readNullableString(row.invoice_number),
+      invoice_type: readNullableString(row.invoice_type),
+      status: readNullableString(row.status),
+      total: readNullableNumber(row.total),
+      amount_paid: readNullableNumber(row.amount_paid),
+      created_at: readNullableString(row.created_at),
+    }];
+  });
+}
+
+function parseTrades(value: Json | null | undefined): Asset360Trade[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row): Asset360Trade[] => {
+    if (!isJsonRecord(row)) return [];
+    const id = readNullableString(row.id);
+    if (!id) return [];
+    return [{
+      id,
+      deal_id: readNullableString(row.deal_id),
+      allowance_cents: readNullableNumber(row.allowance_cents),
+      book_value_cents: readNullableNumber(row.book_value_cents),
+      disposition: readNullableString(row.disposition),
+      reconditioning_approval_status: readNullableString(row.reconditioning_approval_status),
+      approved_at: readNullableString(row.approved_at),
+      created_at: readNullableString(row.created_at),
+    }];
+  });
+}
+
 export function parseAsset360(value: Json | null): Asset360Response | null {
   if (!isJsonRecord(value)) return null;
 
@@ -260,5 +435,9 @@ export function parseAsset360(value: Json | null): Asset360Response | null {
     badges: parseAssetBadges(value.badges ?? null),
     recent_service: parseRecentService(value.recent_service),
     open_deal: parseOpenDeal(value.open_deal),
+    rental: parseRental(value.rental),
+    intake: parseIntake(value.intake),
+    invoices: parseInvoices(value.invoices),
+    trades: parseTrades(value.trades),
   };
 }
