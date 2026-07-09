@@ -36,7 +36,7 @@ const ACTION_CATALOG = [
   "update_deal_stage", "tag_account", "create_exception", "recompute_health_score",
   "notify_service_recipient", "escalate_parts_vendor", "create_audit_event",
   "request_approval",
-  "create_traffic_ticket", "open_internal_service_job", "create_rental_conversion_deal",
+  "create_traffic_ticket", "open_internal_service_job", "create_rental_conversion_deal", "open_service_intake",
 ];
 
 const EVENT_TAXONOMY = [

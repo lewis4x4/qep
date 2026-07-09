@@ -560,7 +560,46 @@ const link_customer_fleet: FlowAction = {
   },
 };
 
-/* ─── 16. create_rental_conversion_deal (L9.3 RPO seam) ─────────────────── */
+/* ─── 16. open_service_intake (L9.4 telematics→service seam) ────────────── */
+
+const open_service_intake: FlowAction = {
+  key: "open_service_intake",
+  description:
+    "Open a request_received service intake on a customer-owned machine (telematics fault routing)",
+  affects_modules: ["service"],
+  idempotency_key_template: "svc_intake:${params.equipment_id}:${event.event_id}",
+  async execute(params, ctx, deps) {
+    if (deps.dry_run) return dryRunSkip(deps, "open_service_intake");
+    const p = resolveParams(params, ctx);
+    if (!p.equipment_id) return { status: "skipped", reason: "no equipment_id in params" };
+
+    let companyId = typeof p.company_id === "string" && p.company_id ? p.company_id : null;
+    if (!companyId) {
+      const { data: unit } = await deps.admin
+        .from("qrm_equipment")
+        .select("company_id")
+        .eq("id", p.equipment_id)
+        .maybeSingle();
+      companyId = (unit?.company_id as string | null) ?? null;
+    }
+    if (!companyId) return { status: "skipped", reason: "no owning company resolvable for the unit" };
+
+    const { data, error } = await deps.admin.from("service_jobs").insert({
+      workspace_id: deps.workspace_id,
+      machine_id: p.equipment_id,
+      customer_id: companyId,
+      request_type: "repair",
+      source_type: "internal_request",
+      customer_problem_summary:
+        (typeof p.summary === "string" && p.summary.trim()) ||
+        `Telematics-detected issue (${ctx.event.flow_event_type})`,
+    }).select("id").single();
+    if (error) return { status: "failed", error: error.message, retryable: true };
+    return { status: "succeeded", result: { service_job_id: data?.id } };
+  },
+};
+
+/* ─── 17. create_rental_conversion_deal (L9.3 RPO seam) ─────────────────── */
 
 const create_rental_conversion_deal: FlowAction = {
   key: "create_rental_conversion_deal",
@@ -613,6 +652,8 @@ export const ACTION_REGISTRY: Record<string, FlowAction> = {
   link_customer_fleet,
   // L9.3 RPO conversion seam
   create_rental_conversion_deal,
+  // L9.4 telematics→service seam
+  open_service_intake,
   // Wave 7 Iron Companion actions (6 v1 flows)
   ...IRON_ACTION_REGISTRY,
 };

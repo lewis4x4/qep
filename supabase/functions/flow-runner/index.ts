@@ -38,6 +38,10 @@ import { dealDepositMakeReady } from "../_shared/flow-workflows/deal-deposit-mak
 import { dealClosedWonFleet } from "../_shared/flow-workflows/deal-closed-won-fleet.ts";
 import { IRON_FLOW_DEFINITIONS } from "../_shared/flow-workflows/iron-flows.ts";
 import { RENTAL_FLOW_DEFINITIONS } from "../_shared/flow-workflows/rental-lifecycle-flows.ts";
+import {
+  telematicsFaultCustomerIntake,
+  telematicsFaultRentalService,
+} from "../_shared/flow-workflows/telematics-fault-service.ts";
 
 /** All workflow files known to this build. Auto-synced into the DB on every tick. */
 const REGISTERED_WORKFLOWS: FlowWorkflowDefinition[] = [
@@ -56,6 +60,9 @@ const REGISTERED_WORKFLOWS: FlowWorkflowDefinition[] = [
   dealDepositMakeReady,
   // N4.1 customer truth: closed won + subject unit → customer_fleet row
   dealClosedWonFleet,
+  // L9.4: telematics faults open service (rental H10 / customer intake)
+  telematicsFaultRentalService,
+  telematicsFaultCustomerIntake,
   // Wave 7 Iron Companion conversational flows (6 v1 flows)
   ...IRON_FLOW_DEFINITIONS,
   // Stream L / L4 rental lifecycle flows (7 flows; rental-nearing-end above)
