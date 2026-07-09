@@ -16,6 +16,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # The secrets context is not allowed in step-level `if:` — presence
+      # flags are computed here instead (see the KB gates below).
+      HAS_OPENAI_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
+      HAS_KB_TOKENS: ${{ secrets.SUPABASE_ANON_KEY != '' && secrets.KB_TEST_ADMIN_TOKEN != '' }}
+      HAS_KB_ISOLATION: ${{ secrets.KB_ISOLATION_CASES != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -43,7 +49,7 @@ jobs:
       #   gh secret set OPENAI_API_KEY / SUPABASE_ANON_KEY /
       #   KB_TEST_ADMIN_TOKEN / KB_TEST_REP_TOKEN / KB_ISOLATION_CASES
       - name: Knowledge retrieval eval
-        if: ${{ secrets.OPENAI_API_KEY != '' }}
+        if: ${{ env.HAS_OPENAI_KEY == 'true' }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -52,11 +58,11 @@ jobs:
         run: node ./scripts/kb-eval/run-eval.mjs
 
       - name: Knowledge retrieval eval (skipped — secrets absent)
-        if: ${{ secrets.OPENAI_API_KEY == '' }}
+        if: ${{ env.HAS_OPENAI_KEY != 'true' }}
         run: echo "::warning::kb-eval SKIPPED — OPENAI_API_KEY repo secret not configured"
 
       - name: Knowledge base integration tests
-        if: ${{ secrets.SUPABASE_ANON_KEY != '' && secrets.KB_TEST_ADMIN_TOKEN != '' }}
+        if: ${{ env.HAS_KB_TOKENS == 'true' }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -66,11 +72,11 @@ jobs:
         run: bun run test:kb-integration
 
       - name: Knowledge base integration tests (skipped — secrets absent)
-        if: ${{ secrets.SUPABASE_ANON_KEY == '' || secrets.KB_TEST_ADMIN_TOKEN == '' }}
+        if: ${{ env.HAS_KB_TOKENS != 'true' }}
         run: echo "::warning::kb-integration SKIPPED — SUPABASE_ANON_KEY / KB_TEST_* repo secrets not configured"
 
       - name: Knowledge workspace isolation
-        if: ${{ secrets.KB_ISOLATION_CASES != '' }}
+        if: ${{ env.HAS_KB_ISOLATION == 'true' }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -79,7 +85,7 @@ jobs:
         run: node ./scripts/kb-eval/workspace-isolation.mjs
 
       - name: Knowledge workspace isolation (skipped — secrets absent)
-        if: ${{ secrets.KB_ISOLATION_CASES == '' }}
+        if: ${{ env.HAS_KB_ISOLATION != 'true' }}
         run: echo "::warning::kb-isolation SKIPPED — KB_ISOLATION_CASES repo secret not configured"
 
       - name: Voice field note regression tests
