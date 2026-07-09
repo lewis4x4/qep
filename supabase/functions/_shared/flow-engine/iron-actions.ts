@@ -895,11 +895,27 @@ const iron_initiate_rental_return: FlowAction = {
       };
     }
 
+    // L9.2: stamp the contract — without rental_contract_id the L5 billing
+    // join (rental-billing-runner matches returns by contract) can never
+    // find this return and assessed charges bill $0.
+    let contractId: string | null = null;
+    const { data: openContract } = await deps.admin
+      .from("rental_contracts")
+      .select("id")
+      .eq("equipment_id", equipmentId)
+      .in("lifecycle_state", ["on_rent", "off_rent", "returned"])
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    contractId = (openContract?.id as string | undefined) ?? null;
+
     const { data, error } = await deps.admin
       .from("rental_returns")
       .insert({
         workspace_id: deps.workspace_id,
         equipment_id: equipmentId,
+        rental_contract_id: contractId,
         inspector_id: inspectorId,
         inspection_date: new Date().toISOString().slice(0, 10),
         status: "inspection_pending",

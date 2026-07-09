@@ -10,11 +10,22 @@ export async function generateInvoiceForServiceJob(
   const { data: job, error: jErr } = await supabase
     .from("service_jobs")
     .select(
-      "id, workspace_id, customer_id, quote_total, portal_request_id, comeback_no_rebill, request_type, renter_fault_billable",
+      "id, workspace_id, customer_id, quote_total, portal_request_id, comeback_no_rebill, request_type, renter_fault_billable, service_internal_work_class",
     )
     .eq("id", jobId)
     .single();
   if (jErr || !job) return { invoice_id: null, error: "job not found" };
+  // L9.2 single billing path: rental-fleet damage bills on the FINAL
+  // RENTAL INVOICE (rental-billing-runner reads
+  // rental_returns.damage_charge_cents). A renter-fault H10 job is exempt
+  // from the internal-skip below, so without this guard the same damage
+  // would bill twice once customer_id is set on the job.
+  if (String(job.service_internal_work_class ?? "") === "rental_fleet_maintenance") {
+    return {
+      invoice_id: null,
+      error: "rental-fleet damage bills on the final rental invoice (L9.2 single billing path)",
+    };
+  }
   if (
     String(job.request_type ?? "") === "internal" &&
     job.renter_fault_billable !== true

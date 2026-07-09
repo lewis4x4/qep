@@ -91,6 +91,13 @@ type DisposeDamagePayload = {
    * exception queue instead of choosing. */
   disposition?: "customer_billable" | "warranty" | "internal_wear" | "dispute";
   notes?: string | null;
+  /** L9.2: assessed amounts in CENTS. When damage_charge_cents is omitted,
+   * the legacy wizard dollars in rental_returns.charge_amount are converted
+   * (×100) so the L5 billing runner finally sees what was assessed. */
+  damage_charge_cents?: number | string | null;
+  fuel_charge_cents?: number | string | null;
+  cleaning_charge_cents?: number | string | null;
+  environmental_fee_cents?: number | string | null;
 };
 
 type StartCheckoutInspectionPayload = {
@@ -1251,6 +1258,21 @@ Deno.serve(async (req) => {
       }
 
       const renterFault = body.disposition === "customer_billable";
+
+      // L9.2: renter-fault work orders carry the paying customer + the
+      // return backlink so the close loop can advance the return. The
+      // damage itself bills on the FINAL RENTAL INVOICE only —
+      // generateInvoiceForServiceJob refuses rental_fleet_maintenance jobs.
+      let customerId: string | null = null;
+      if (ret.rental_contract_id) {
+        const { data: contract } = await admin
+          .from("rental_contracts")
+          .select("qrm_company_id")
+          .eq("id", ret.rental_contract_id)
+          .maybeSingle();
+        customerId = (contract?.qrm_company_id as string | null) ?? null;
+      }
+
       let serviceJobId: string | null = null;
       if (ret.equipment_id) {
         const { data: job, error: jobError } = await admin
@@ -1258,6 +1280,8 @@ Deno.serve(async (req) => {
           .insert({
             workspace_id: workspaceId,
             machine_id: ret.equipment_id,
+            customer_id: customerId,
+            rental_return_id: ret.id,
             request_type: "internal",
             customer_problem_summary:
               `Rental return damage (${body.disposition}): ` +
@@ -1275,16 +1299,31 @@ Deno.serve(async (req) => {
         serviceJobId = job.id as string;
       }
 
+      // L9.2: persist assessed amounts as true cents — the billing
+      // assembler treats raw values as cents, so the wizard's legacy
+      // dollar charge_amount converts ×100 when explicit cents are absent.
+      const damageCents = toMeter(body.damage_charge_cents) ??
+        (typeof ret.charge_amount === "number" && ret.charge_amount > 0
+          ? Math.round(ret.charge_amount * 100)
+          : null);
+      const fuelCents = toMeter(body.fuel_charge_cents);
+      const cleaningCents = toMeter(body.cleaning_charge_cents);
+      const environmentalCents = toMeter(body.environmental_fee_cents);
+
       const { data: updated, error: updError } = await admin
         .from("rental_returns")
         .update({
           damage_disposition: body.disposition,
           work_order_number: serviceJobId ?? undefined,
           status: serviceJobId ? "work_order_open" : "damage_assessment",
+          ...(damageCents != null ? { damage_charge_cents: Math.round(damageCents) } : {}),
+          ...(fuelCents != null ? { fuel_charge_cents: Math.round(fuelCents) } : {}),
+          ...(cleaningCents != null ? { cleaning_charge_cents: Math.round(cleaningCents) } : {}),
+          ...(environmentalCents != null ? { environmental_fee_cents: Math.round(environmentalCents) } : {}),
         })
         .eq("id", ret.id)
         .eq("workspace_id", workspaceId)
-        .select("id, damage_disposition, work_order_number, status")
+        .select("id, damage_disposition, work_order_number, status, damage_charge_cents")
         .single();
       if (updError || !updated) {
         return safeJsonError(updError?.message ?? "Work order opened but return update failed", 500, origin);
