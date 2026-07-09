@@ -17,7 +17,8 @@
  */
 import { useEffect } from "react";
 import { useQueryClient, type Mutation } from "@tanstack/react-query";
-import * as Sentry from "@sentry/react";
+import type { Event as SentryEvent } from "@sentry/react";
+import { onSentryReady } from "@/lib/sentry-lazy";
 import { pushPresence } from "./presence";
 
 const MUTATION_GRACE_MS = 800;
@@ -103,21 +104,26 @@ export function IronGlobalSubscribers() {
    * is correct, not lazy.
    */
   useEffect(() => {
-    const client = Sentry.getClient();
-    if (!client) return;
-
     const guard = { active: true };
 
-    const processor = (event: Sentry.Event): Sentry.Event | null => {
-      if (!guard.active) return event;
-      // Only react to actual exceptions, not breadcrumbs or transactions.
-      if (event.type === undefined && event.exception?.values?.length) {
-        pushPresence("sentry-error", "alert", { ttlMs: 4000 });
-      }
-      return event;
-    };
+    // The SDK initializes after first paint (see instrument.ts /
+    // sentry-lazy), so subscribe when it lands rather than probing
+    // getClient() at mount — which raced the lazy init and lost.
+    onSentryReady((Sentry) => {
+      const client = Sentry.getClient();
+      if (!client) return;
 
-    client.addEventProcessor(processor);
+      const processor = (event: SentryEvent): SentryEvent | null => {
+        if (!guard.active) return event;
+        // Only react to actual exceptions, not breadcrumbs or transactions.
+        if (event.type === undefined && event.exception?.values?.length) {
+          pushPresence("sentry-error", "alert", { ttlMs: 4000 });
+        }
+        return event;
+      };
+
+      client.addEventProcessor(processor);
+    });
 
     return () => {
       guard.active = false;

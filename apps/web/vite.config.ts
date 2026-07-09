@@ -142,6 +142,15 @@ export default defineConfig({
           if (id.includes("maplibre-gl")) {
             return "vendor-maplibre";
           }
+
+          // The Sentry SDK is reachable ONLY via instrument.ts's post-paint
+          // dynamic import (eager code goes through lib/sentry-lazy). Left
+          // unnamed, rollup names the lazy chunk after the package's
+          // index.js — "index-<hash>.js" — which the bundle-size guard
+          // would miscount as entry payload. Pin it to vendor-sentry.
+          if (id.includes("node_modules/@sentry")) {
+            return "vendor-sentry";
+          }
           return undefined;
         },
       },

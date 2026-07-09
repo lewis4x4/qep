@@ -1,3 +1,5 @@
+import { __setSentrySdk } from "@/lib/sentry-lazy";
+
 let instrumentationScheduled = false;
 
 function scheduleAfterFirstPaint(callback: () => void) {
@@ -36,9 +38,18 @@ export function scheduleInstrumentation() {
 
 async function installInstrumentation(dsn: string) {
   try {
-    const [React, Router, Sentry, WebVitals] = await Promise.all([
-      import("react"),
-      import("react-router-dom"),
+    // react and react-router-dom live in the eager entry chunk, so these
+    // two resolve instantly with no extra fetch. Known cost: needing
+    // matchRoutes/createRoutesFromChildren here retains ~63KB of router
+    // internals (@remix-run/router matching engine) in the entry chunk
+    // that DSN-less builds tree-shake away — measured 2026-07-09 via
+    // sourcemap diff; neither destructure form shakes it. That is the
+    // price of route-named tracing, not of the Sentry SDK (which stays
+    // in the lazy vendor-sentry chunk).
+    const { useEffect } = await import("react");
+    const { useLocation, useNavigationType, matchRoutes, createRoutesFromChildren } =
+      await import("react-router-dom");
+    const [Sentry, { installSalesWebVitals }] = await Promise.all([
       import("@sentry/react"),
       import("@/features/sales/lib/web-vitals-reporter"),
     ]);
@@ -49,20 +60,24 @@ async function installInstrumentation(dsn: string) {
       release: `${import.meta.env.VITE_APP_VERSION ?? "0.0.0"}+${import.meta.env.VITE_GIT_SHA ?? "local"}`,
       integrations: [
         Sentry.reactRouterV6BrowserTracingIntegration({
-          useEffect: React.useEffect,
-          useLocation: Router.useLocation,
-          useNavigationType: Router.useNavigationType,
-          matchRoutes: Router.matchRoutes,
-          createRoutesFromChildren: Router.createRoutesFromChildren,
+          useEffect,
+          useLocation,
+          useNavigationType,
+          matchRoutes,
+          createRoutesFromChildren,
         }),
       ],
       tracesSampleRate: import.meta.env.PROD ? 0.1 : 1.0,
     });
 
+    // Hand the SDK to the lazy facade: flushes errors buffered before
+    // first paint and wakes onSentryReady subscribers (Iron avatar).
+    __setSentrySdk(Sentry);
+
     // Emit CLS / INP / LCP / FCP / TTFB samples from real rep phones
     // into Sentry as distribution metrics. Keep Session Replay off the
     // LCP path; error capture and web-vitals metrics remain enabled.
-    WebVitals.installSalesWebVitals((metric) => {
+    installSalesWebVitals((metric) => {
       Sentry.metrics.distribution(
         `web_vitals.${metric.name.toLowerCase()}`,
         metric.value,

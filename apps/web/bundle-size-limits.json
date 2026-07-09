@@ -1,6 +1,6 @@
 {
-  "indexEntryMaxBytes": 814165,
-  "baselineBytes": 740150,
+  "indexEntryMaxBytes": 306942,
+  "baselineBytes": 279038,
   "baselineCapturedAt": "2026-07-09",
   "routeChunkMaxBytes": 150000,
   "routeChunkExemptions": [
@@ -11,5 +11,5 @@
     "DgeIntelligencePanel-",
     "FlareProvider-"
   ],
-  "note": "index cap = baseline + 10% of dist/assets/index-*.js after a production build WITH VITE_SENTRY_DSN set (the CI/deploy configuration — the Sentry browser SDK adds ~503KB to the eager payload vs a DSN-less local build, which measures ~225KB). Re-baselined twice on 2026-07-09 (N7.1 then CI revival). Lazy-initializing the Sentry SDK is the obvious next win. routeChunkMaxBytes caps every non-index chunk individually; exemptions are grandfathered heavy chunks — shrink this list, never grow it without justification."
+  "note": "index cap = baseline + 10% of dist/assets/index-*.js after a production build WITH VITE_SENTRY_DSN set (the CI/deploy configuration). Re-baselined 2026-07-09 after lazy-initializing the Sentry SDK: the ~458KB @sentry/react payload now ships as the post-first-paint vendor-sentry-*.js chunk (eager code goes through src/lib/sentry-lazy.ts), cutting the DSN-enabled index from 740KB to 279KB. The remaining ~63KB DSN delta vs a DSN-less build (~214KB) is @remix-run/router matching internals retained by reactRouterV6BrowserTracingIntegration — see instrument.ts. routeChunkMaxBytes caps every non-index chunk individually; exemptions are grandfathered heavy chunks — shrink this list, never grow it without justification."
 }
