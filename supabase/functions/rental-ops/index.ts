@@ -106,6 +106,14 @@ type CompleteCheckoutInspectionPayload = {
   damage_description?: string | null;
 };
 
+type CompleteCheckinInspectionPayload = {
+  action: "complete_checkin_inspection";
+  run_id?: string;
+  machine_hours?: number | string | null;
+  damage_found?: boolean;
+  damage_description?: string | null;
+};
+
 type CheckOutContractPayload = {
   action: "check_out_contract";
   contract_id?: string;
@@ -223,6 +231,7 @@ type RentalOpsPayload =
   | DisposeDamagePayload
   | StartCheckoutInspectionPayload
   | CompleteCheckoutInspectionPayload
+  | CompleteCheckinInspectionPayload
   | CheckOutContractPayload;
 
 const RENTAL_CHECKOUT_TEMPLATE = {
@@ -234,6 +243,22 @@ const RENTAL_CHECKOUT_TEMPLATE = {
     { id: "attachments", label: "Attachments present and secured", type: "boolean" },
     { id: "fluids", label: "Fluids topped and no visible leaks", type: "boolean" },
     { id: "safety", label: "Safety equipment (fire ext., beacon, seat belt) present", type: "boolean" },
+    { id: "hour_meter", label: "Hour meter photographed and recorded", type: "boolean" },
+  ],
+};
+
+// L9.1: check-in mirror of the checkout template. Opened automatically when
+// a line is coded returned; completing it moves the rental_returns row to
+// clean_return or damage_assessment.
+const RENTAL_CHECKIN_TEMPLATE = {
+  applies_to: "rental_checkin",
+  template_name: "Rental check-in condition inspection",
+  questions: [
+    { id: "exterior", label: "Exterior condition documented (photos)", type: "boolean" },
+    { id: "tires_tracks", label: "Tires / tracks / undercarriage condition", type: "boolean" },
+    { id: "attachments", label: "Attachments returned and undamaged", type: "boolean" },
+    { id: "fluids", label: "Fluid levels checked and no new leaks", type: "boolean" },
+    { id: "fuel", label: "Fuel level recorded", type: "boolean" },
     { id: "hour_meter", label: "Hour meter photographed and recorded", type: "boolean" },
   ],
 };
@@ -959,6 +984,14 @@ Deno.serve(async (req) => {
       // L2: IntelliDealer R/O/H coding on a contract line. The mig 773 rollup
       // trigger derives the trunk (downstream only); the clock stamps ride the
       // guard. Exchanges have their own action.
+      //
+      // L9.1: coding a line 'returned' also opens the check-in half of the
+      // loop — a rental_returns row (stamped with contract + equipment, so
+      // the L5 billing join can match) and a rental_checkin inspection run.
+      // The return row is created BEFORE the line update on purpose: the
+      // fleet-state recompute fires on the line-status write, and the m805
+      // gate needs the open return visible to park the unit at in_service
+      // instead of releasing it straight back to available.
       if (!body.line_id) return safeJsonError("line_id required", 400, origin);
       if (!body.return_code || !["returned", "off_rent", "hold"].includes(body.return_code)) {
         return safeJsonError("return_code must be returned, off_rent, or hold", 400, origin);
@@ -966,7 +999,7 @@ Deno.serve(async (req) => {
 
       const { data: line, error: lineError } = await admin
         .from("rental_contract_lines")
-        .select("id, status")
+        .select("id, status, equipment_id, rental_contract_id")
         .eq("id", body.line_id)
         .eq("workspace_id", workspaceId)
         .maybeSingle();
@@ -978,6 +1011,46 @@ Deno.serve(async (req) => {
         (from === "off_rent" && body.return_code === "returned");
       if (!legal) {
         return safeJsonError(`Line in status '${from}' cannot be coded '${body.return_code}'`, 400, origin);
+      }
+
+      let returnId: string | null = null;
+      let checkinRunId: string | null = null;
+      const warnings: string[] = [];
+
+      if (body.return_code === "returned" && line.equipment_id) {
+        const { data: existingReturn } = await admin
+          .from("rental_returns")
+          .select("id, status")
+          .eq("workspace_id", workspaceId)
+          .eq("equipment_id", line.equipment_id)
+          .eq("rental_contract_id", line.rental_contract_id)
+          .neq("status", "completed")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (existingReturn) {
+          returnId = existingReturn.id as string;
+        } else {
+          const { data: createdReturn, error: returnError } = await admin
+            .from("rental_returns")
+            .insert({
+              workspace_id: workspaceId,
+              rental_contract_id: line.rental_contract_id,
+              equipment_id: line.equipment_id,
+              status: "inspection_pending",
+              inspection_started_at: new Date().toISOString(),
+            })
+            .select("id")
+            .single();
+          if (returnError || !createdReturn) {
+            return safeJsonError(
+              returnError?.message ?? "Failed to open the return record",
+              500,
+              origin,
+            );
+          }
+          returnId = createdReturn.id as string;
+        }
       }
 
       const patch: Record<string, unknown> = {
@@ -996,7 +1069,132 @@ Deno.serve(async (req) => {
         .select("id, status, return_code, return_meter_hours, actual_returned_at")
         .single();
       if (error || !updated) return safeJsonError(error?.message ?? "Failed to code the line", 500, origin);
-      return safeJsonOk({ line: updated }, origin);
+
+      // Open the check-in inspection run. Zero-blocking: a template or run
+      // failure degrades to a warning — the return coding itself stands.
+      if (body.return_code === "returned" && line.equipment_id && returnId) {
+        try {
+          let templateId: string | null = null;
+          const { data: template } = await admin
+            .from("inspection_templates")
+            .select("id")
+            .eq("workspace_id", workspaceId)
+            .eq("applies_to", RENTAL_CHECKIN_TEMPLATE.applies_to)
+            .eq("is_active", true)
+            .limit(1)
+            .maybeSingle();
+          templateId = template?.id ?? null;
+          if (!templateId) {
+            const { data: createdTemplate, error: templateError } = await admin
+              .from("inspection_templates")
+              .insert({
+                workspace_id: workspaceId,
+                template_name: RENTAL_CHECKIN_TEMPLATE.template_name,
+                applies_to: RENTAL_CHECKIN_TEMPLATE.applies_to,
+                questions: RENTAL_CHECKIN_TEMPLATE.questions,
+              })
+              .select("id")
+              .single();
+            if (templateError || !createdTemplate) {
+              throw new Error(templateError?.message ?? "check-in template create failed");
+            }
+            templateId = createdTemplate.id as string;
+          }
+
+          const { data: openRun } = await admin
+            .from("inspection_runs")
+            .select("id")
+            .eq("workspace_id", workspaceId)
+            .eq("rental_contract_id", line.rental_contract_id)
+            .eq("equipment_id", line.equipment_id)
+            .eq("template_id", templateId)
+            .is("completed_at", null)
+            .limit(1)
+            .maybeSingle();
+          if (openRun) {
+            checkinRunId = openRun.id as string;
+          } else {
+            const inspectionNumber = `RCN-${String(line.rental_contract_id).slice(0, 8)}-${Date.now().toString(36).toUpperCase()}`;
+            const { data: run, error: runError } = await admin
+              .from("inspection_runs")
+              .insert({
+                workspace_id: workspaceId,
+                template_id: templateId,
+                inspection_number: inspectionNumber,
+                rental_contract_id: line.rental_contract_id,
+                equipment_id: line.equipment_id,
+                inspector_id: auth.userId,
+                started_at: new Date().toISOString(),
+              })
+              .select("id")
+              .single();
+            if (runError || !run) throw new Error(runError?.message ?? "check-in run create failed");
+            checkinRunId = run.id as string;
+          }
+        } catch (err) {
+          warnings.push(
+            `checkin_inspection_failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+
+      return safeJsonOk(
+        {
+          line: updated,
+          return_id: returnId,
+          checkin_run_id: checkinRunId,
+          ...(warnings.length ? { warnings } : {}),
+        },
+        origin,
+      );
+    }
+
+    if (body.action === "complete_checkin_inspection") {
+      // L9.1: completing the check-in inspection routes the return —
+      // damage found → damage_assessment (disposition decision pending),
+      // clean → clean_return. The m805 fleet gate releases availability
+      // when the return leaves the pending set.
+      if (!body.run_id) return safeJsonError("run_id required", 400, origin);
+      const { data: run, error } = await admin
+        .from("inspection_runs")
+        .update({
+          completed_at: new Date().toISOString(),
+          machine_hours: toMeter(body.machine_hours),
+          damage_found: body.damage_found === true,
+          damage_description: typeof body.damage_description === "string" ? body.damage_description : null,
+        })
+        .eq("id", body.run_id)
+        .eq("workspace_id", workspaceId)
+        .not("rental_contract_id", "is", null)
+        .is("completed_at", null)
+        .select("id, rental_contract_id, equipment_id, completed_at, machine_hours, damage_found")
+        .maybeSingle();
+      if (error) return safeJsonError(error.message ?? "Failed to complete the inspection", 500, origin);
+      if (!run) return safeJsonError("Inspection run not found (or already completed)", 400, origin);
+
+      const damageFound = body.damage_found === true;
+      const { data: updatedReturn, error: returnError } = await admin
+        .from("rental_returns")
+        .update({
+          status: damageFound ? "damage_assessment" : "clean_return",
+          has_charges: damageFound ? true : false,
+          inspection_date: new Date().toISOString().slice(0, 10),
+          inspector_id: auth.userId,
+          ...(damageFound && typeof body.damage_description === "string"
+            ? { damage_description: body.damage_description }
+            : {}),
+        })
+        .eq("workspace_id", workspaceId)
+        .eq("rental_contract_id", run.rental_contract_id)
+        .eq("equipment_id", run.equipment_id)
+        .in("status", ["inspection_pending", "decision_pending"])
+        .select("id, status, has_charges")
+        .maybeSingle();
+      if (returnError) {
+        return safeJsonError(returnError.message ?? "Failed to route the return", 500, origin);
+      }
+
+      return safeJsonOk({ run, return: updatedReturn ?? null }, origin);
     }
 
     if (body.action === "release_hold") {
