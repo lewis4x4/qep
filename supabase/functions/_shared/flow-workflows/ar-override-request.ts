@@ -12,7 +12,7 @@ export const arOverrideRequest: FlowWorkflowDefinition = {
   owner_role: "accounting",
   trigger_event_pattern: "ar.block.created",
   conditions: [
-    { op: "exists", field: "event.payload.company_id" },
+    { op: "exists", field: "payload.company_id" },
   ],
   actions: [
     {
@@ -31,8 +31,8 @@ export const arOverrideRequest: FlowWorkflowDefinition = {
       params: {
         tag: "ar_override_requested",
         metadata: {
-          company_id: "${event.payload.company_id}",
-          amount_outstanding: "${event.payload.amount_outstanding}",
+          company_id: "${payload.company_id}",
+          amount_outstanding: "${payload.amount_outstanding}",
         },
       },
     },

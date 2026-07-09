@@ -11,10 +11,11 @@
  */
 import type { FlowAction, FlowActionDeps, FlowActionResult, FlowContext } from "./types.ts";
 import { IRON_ACTION_REGISTRY } from "./iron-actions.ts";
+import { createRentalConversionDeal } from "../rental-conversion-deal.ts";
 
 /* ─── Helper: param resolution against context ─────────────────────────── */
 
-/** Walks `${event.payload.deal_id}` style placeholders against the context. */
+/** Walks `${payload.deal_id}` style placeholders against the context (roots: event/context/payload/params — `event.payload` does NOT exist; FlowEvent carries `properties`). */
 function resolveValue(value: unknown, ctx: FlowContext): unknown {
   if (typeof value !== "string") return value;
   if (!value.includes("${")) return value;
@@ -559,6 +560,37 @@ const link_customer_fleet: FlowAction = {
   },
 };
 
+/* ─── 16. create_rental_conversion_deal (L9.3 RPO seam) ─────────────────── */
+
+const create_rental_conversion_deal: FlowAction = {
+  key: "create_rental_conversion_deal",
+  description:
+    "RPO credit threshold → create the conversion deal (amount = buyout − accrued credit, unit linked as subject)",
+  affects_modules: ["rental", "qrm"],
+  idempotency_key_template: "rpo_deal:${payload.rental_id}",
+  async execute(params, ctx, deps) {
+    if (deps.dry_run) return dryRunSkip(deps, "create_rental_conversion_deal");
+    const p = resolveParams(params, ctx);
+    const contractId = typeof p.rental_id === "string" && p.rental_id
+      ? p.rental_id
+      : typeof ctx.event.properties?.rental_id === "string"
+        ? (ctx.event.properties.rental_id as string)
+        : null;
+    if (!contractId) return { status: "skipped", reason: "no rental_id on the event" };
+
+    // The threshold event payload carries no company/equipment — the
+    // helper self-resolves everything from the contract row.
+    const result = await createRentalConversionDeal(deps.admin, deps.workspace_id, contractId);
+    if (!result.dealId) {
+      return { status: "failed", error: result.error ?? "conversion deal not created", retryable: true };
+    }
+    return {
+      status: "succeeded",
+      result: { deal_id: result.dealId, created: result.created, ...(result.error ? { warning: result.error } : {}) },
+    };
+  },
+};
+
 /* ─── Registry export ───────────────────────────────────────────────────── */
 
 export const ACTION_REGISTRY: Record<string, FlowAction> = {
@@ -579,6 +611,8 @@ export const ACTION_REGISTRY: Record<string, FlowAction> = {
   open_internal_service_job,
   // N4.1 customer-truth seam
   link_customer_fleet,
+  // L9.3 RPO conversion seam
+  create_rental_conversion_deal,
   // Wave 7 Iron Companion actions (6 v1 flows)
   ...IRON_ACTION_REGISTRY,
 };

@@ -33180,6 +33180,7 @@ export type Database = {
           next_follow_up_at: string | null
           primary_contact_id: string | null
           quote_type: string | null
+          rental_contract_id: string | null
           selected_scenario: Database["public"]["Enums"]["scenario_type"] | null
           sla_deadline_at: string | null
           sla_started_at: string | null
@@ -33223,6 +33224,7 @@ export type Database = {
           next_follow_up_at?: string | null
           primary_contact_id?: string | null
           quote_type?: string | null
+          rental_contract_id?: string | null
           selected_scenario?:
             | Database["public"]["Enums"]["scenario_type"]
             | null
@@ -33268,6 +33270,7 @@ export type Database = {
           next_follow_up_at?: string | null
           primary_contact_id?: string | null
           quote_type?: string | null
+          rental_contract_id?: string | null
           selected_scenario?:
             | Database["public"]["Enums"]["scenario_type"]
             | null
@@ -33375,6 +33378,13 @@ export type Database = {
             columns: ["stage_id"]
             isOneToOne: false
             referencedRelation: "qrm_deal_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qrm_deals_rental_contract_id_fkey"
+            columns: ["rental_contract_id"]
+            isOneToOne: false
+            referencedRelation: "rental_contracts"
             referencedColumns: ["id"]
           },
         ]
@@ -44252,6 +44262,7 @@ export type Database = {
           promised_at: string | null
           quote_total: number | null
           ready_to_bill_at: string | null
+          rental_return_id: string | null
           renter_fault_billable: boolean
           request_type: Database["public"]["Enums"]["service_request_type"]
           requested_by_name: string | null
@@ -44384,6 +44395,7 @@ export type Database = {
           promised_at?: string | null
           quote_total?: number | null
           ready_to_bill_at?: string | null
+          rental_return_id?: string | null
           renter_fault_billable?: boolean
           request_type?: Database["public"]["Enums"]["service_request_type"]
           requested_by_name?: string | null
@@ -44516,6 +44528,7 @@ export type Database = {
           promised_at?: string | null
           quote_total?: number | null
           ready_to_bill_at?: string | null
+          rental_return_id?: string | null
           renter_fault_billable?: boolean
           request_type?: Database["public"]["Enums"]["service_request_type"]
           requested_by_name?: string | null
@@ -44858,6 +44871,13 @@ export type Database = {
             columns: ["portal_request_id"]
             isOneToOne: false
             referencedRelation: "service_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_jobs_rental_return_id_fkey"
+            columns: ["rental_return_id"]
+            isOneToOne: false
+            referencedRelation: "rental_returns"
             referencedColumns: ["id"]
           },
           {
@@ -67174,6 +67194,10 @@ export type Database = {
       rental_contract_rollup_lifecycle: {
         Args: { p_contract_id: string }
         Returns: string
+      }
+      rental_conversion_signals: {
+        Args: { p_company_id: string }
+        Returns: Json
       }
       rental_disposal_signals: {
         Args: { p_workspace_id: string }

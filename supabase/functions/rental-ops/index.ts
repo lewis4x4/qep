@@ -2,6 +2,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { createRentalConversionDeal } from "../_shared/rental-conversion-deal.ts";
 import {
   evaluateRentalRateFloor,
   mintRentalInvoiceNumber,
@@ -98,6 +99,11 @@ type DisposeDamagePayload = {
   fuel_charge_cents?: number | string | null;
   cleaning_charge_cents?: number | string | null;
   environmental_fee_cents?: number | string | null;
+};
+
+type ConvertRpoToDealPayload = {
+  action: "convert_rpo_to_deal";
+  contract_id?: string;
 };
 
 type StartCheckoutInspectionPayload = {
@@ -239,6 +245,7 @@ type RentalOpsPayload =
   | StartCheckoutInspectionPayload
   | CompleteCheckoutInspectionPayload
   | CompleteCheckinInspectionPayload
+  | ConvertRpoToDealPayload
   | CheckOutContractPayload;
 
 const RENTAL_CHECKOUT_TEMPLATE = {
@@ -700,6 +707,21 @@ Deno.serve(async (req) => {
       }
 
       return safeJsonOk({ exchanged_line_id: oldLine.id, new_line: newLine }, origin);
+    }
+
+    if (body.action === "convert_rpo_to_deal") {
+      // L9.3 operator path: same shared helper as the
+      // rental.rpo.threshold_reached flow action — idempotent per contract
+      // via the m807 unique provenance index.
+      if (!body.contract_id) return safeJsonError("contract_id required", 400, origin);
+      const result = await createRentalConversionDeal(admin, workspaceId, body.contract_id);
+      if (!result.dealId) {
+        return safeJsonError(result.error ?? "Conversion deal not created", 400, origin);
+      }
+      return safeJsonOk(
+        { deal_id: result.dealId, created: result.created, ...(result.error ? { warning: result.error } : {}) },
+        origin,
+      );
     }
 
     if (body.action === "start_checkout_inspection") {

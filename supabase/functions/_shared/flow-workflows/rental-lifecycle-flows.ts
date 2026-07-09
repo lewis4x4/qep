@@ -18,18 +18,18 @@ export const RENTAL_FLOW_DEFINITIONS: FlowWorkflowDefinition[] = [
     owner_role: "rental",
     trigger_event_pattern: "rental.contract.opened",
     conditions: [
-      { op: "exists", field: "event.payload.rental_id" },
-      { op: "eq", field: "event.payload.delivery_required", value: true },
+      { op: "exists", field: "payload.rental_id" },
+      { op: "eq", field: "payload.delivery_required", value: true },
     ],
     actions: [
       {
         action_key: "create_traffic_ticket",
         params: {
           direction: "delivery",
-          rental_contract_id: "${event.payload.rental_id}",
-          contract_number: "${event.payload.contract_number}",
-          equipment_id: "${event.payload.equipment_id}",
-          to_location: "${event.payload.delivery_location}",
+          rental_contract_id: "${payload.rental_id}",
+          contract_number: "${payload.contract_number}",
+          equipment_id: "${payload.equipment_id}",
+          to_location: "${payload.delivery_location}",
         },
       },
       {
@@ -47,15 +47,15 @@ export const RENTAL_FLOW_DEFINITIONS: FlowWorkflowDefinition[] = [
       "The clock stopped: the unit is idle in the field. Create the pickup haul ticket immediately and audit the stop.",
     owner_role: "rental",
     trigger_event_pattern: "rental.off_rent",
-    conditions: [{ op: "exists", field: "event.payload.rental_id" }],
+    conditions: [{ op: "exists", field: "payload.rental_id" }],
     actions: [
       {
         action_key: "create_traffic_ticket",
         params: {
           direction: "pickup",
-          rental_contract_id: "${event.payload.rental_id}",
-          contract_number: "${event.payload.contract_number}",
-          equipment_id: "${event.payload.equipment_id}",
+          rental_contract_id: "${payload.rental_id}",
+          contract_number: "${payload.contract_number}",
+          equipment_id: "${payload.equipment_id}",
         },
       },
       {
@@ -73,15 +73,15 @@ export const RENTAL_FLOW_DEFINITIONS: FlowWorkflowDefinition[] = [
       "Unit physically back: queue the return condition inspection so charges and disposition happen while evidence is fresh.",
     owner_role: "rental",
     trigger_event_pattern: "rental.returned",
-    conditions: [{ op: "exists", field: "event.payload.rental_id" }],
+    conditions: [{ op: "exists", field: "payload.rental_id" }],
     actions: [
       {
         action_key: "create_task",
         params: {
           activity_type: "rental_return_inspection",
-          subject: "Return inspection: ${event.payload.contract_number}",
+          subject: "Return inspection: ${payload.contract_number}",
           body:
-            "Contract ${event.payload.contract_number} returned. Complete the condition inspection, code charges, and dispose any damage in /ops/returns.",
+            "Contract ${payload.contract_number} returned. Complete the condition inspection, code charges, and dispose any damage in /ops/returns.",
         },
       },
     ],
@@ -94,24 +94,24 @@ export const RENTAL_FLOW_DEFINITIONS: FlowWorkflowDefinition[] = [
       "Contract past its end date with the clock still running: task the rep and put it in the human work queue.",
     owner_role: "rental",
     trigger_event_pattern: "rental.overdue",
-    conditions: [{ op: "exists", field: "event.payload.rental_id" }],
+    conditions: [{ op: "exists", field: "payload.rental_id" }],
     actions: [
       {
         action_key: "create_task",
         params: {
           activity_type: "follow_up",
-          subject: "Overdue rental ${event.payload.contract_number} (${event.payload.days_overdue}d)",
+          subject: "Overdue rental ${payload.contract_number} (${payload.days_overdue}d)",
           body:
-            "Contract ${event.payload.contract_number} is ${event.payload.days_overdue} day(s) past ${event.payload.ends_at}. Call the customer: extend, off-rent, or schedule pickup.",
+            "Contract ${payload.contract_number} is ${payload.days_overdue} day(s) past ${payload.ends_at}. Call the customer: extend, off-rent, or schedule pickup.",
         },
       },
       {
         action_key: "create_exception",
         params: {
           source: "rental_overdue_return",
-          title: "Rental overdue: ${event.payload.contract_number}",
+          title: "Rental overdue: ${payload.contract_number}",
           severity: "warn",
-          detail: "Due ${event.payload.ends_at}; state ${event.payload.lifecycle_state}.",
+          detail: "Due ${payload.ends_at}; state ${payload.lifecycle_state}.",
         },
         on_failure: "continue",
       },
@@ -125,24 +125,24 @@ export const RENTAL_FLOW_DEFINITIONS: FlowWorkflowDefinition[] = [
       "Certificate of insurance lapses within 14 days on a live rental: chase the renewal before the dealership is exposed.",
     owner_role: "rental",
     trigger_event_pattern: "rental.coi.expiring",
-    conditions: [{ op: "exists", field: "event.payload.rental_id" }],
+    conditions: [{ op: "exists", field: "payload.rental_id" }],
     actions: [
       {
         action_key: "create_task",
         params: {
           activity_type: "follow_up",
-          subject: "COI expiring: ${event.payload.contract_number}",
+          subject: "COI expiring: ${payload.contract_number}",
           body:
-            "Certificate of insurance for ${event.payload.contract_number} expires ${event.payload.coi_expires_at}. Request the renewed COI from the customer.",
+            "Certificate of insurance for ${payload.contract_number} expires ${payload.coi_expires_at}. Request the renewed COI from the customer.",
         },
       },
       {
         action_key: "create_exception",
         params: {
           source: "rental_coi_expired",
-          title: "COI expiring on live rental ${event.payload.contract_number}",
+          title: "COI expiring on live rental ${payload.contract_number}",
           severity: "warn",
-          detail: "Expires ${event.payload.coi_expires_at}.",
+          detail: "Expires ${payload.coi_expires_at}.",
         },
         on_failure: "continue",
       },
@@ -156,15 +156,15 @@ export const RENTAL_FLOW_DEFINITIONS: FlowWorkflowDefinition[] = [
       "A unit has sat off-rent in the field for 3+ days — non-billable, non-earning. Escalate the pickup.",
     owner_role: "rental",
     trigger_event_pattern: "rental.unit.idle_aging",
-    conditions: [{ op: "exists", field: "event.payload.rental_id" }],
+    conditions: [{ op: "exists", field: "payload.rental_id" }],
     actions: [
       {
         action_key: "create_task",
         params: {
           activity_type: "follow_up",
-          subject: "Idle off-rent unit (${event.payload.idle_days}d): ${event.payload.contract_number}",
+          subject: "Idle off-rent unit (${payload.idle_days}d): ${payload.contract_number}",
           body:
-            "Unit has been off-rent ${event.payload.idle_days} day(s) awaiting pickup — it is earning nothing in the field. Confirm the haul ticket is scheduled or reassign it.",
+            "Unit has been off-rent ${payload.idle_days} day(s) awaiting pickup — it is earning nothing in the field. Confirm the haul ticket is scheduled or reassign it.",
         },
       },
     ],
@@ -177,15 +177,15 @@ export const RENTAL_FLOW_DEFINITIONS: FlowWorkflowDefinition[] = [
       "An on-rent unit left its jobsite geofence (theft/unauthorized-move exception already queued by the DB trigger): prompt the off-rent inspection decision.",
     owner_role: "rental",
     trigger_event_pattern: "rental.geofence.exit",
-    conditions: [{ op: "exists", field: "event.payload.rental_id" }],
+    conditions: [{ op: "exists", field: "payload.rental_id" }],
     actions: [
       {
         action_key: "create_task",
         params: {
           activity_type: "follow_up",
-          subject: "Geofence exit: ${event.payload.contract_number}",
+          subject: "Geofence exit: ${payload.contract_number}",
           body:
-            "Unit on ${event.payload.contract_number} exited its geofence at ${event.payload.event_at}. Confirm with the customer: authorized move (update jobsite), off-rent (start the return), or escalate the theft exception.",
+            "Unit on ${payload.contract_number} exited its geofence at ${payload.event_at}. Confirm with the customer: authorized move (update jobsite), off-rent (start the return), or escalate the theft exception.",
         },
       },
     ],
@@ -198,15 +198,15 @@ export const RENTAL_FLOW_DEFINITIONS: FlowWorkflowDefinition[] = [
       "Telematics hours already exceed the included-hours allowance (110%) mid-rental: warn the rep before the final invoice surprises the customer.",
     owner_role: "rental",
     trigger_event_pattern: "rental.telematics.overage",
-    conditions: [{ op: "exists", field: "event.payload.rental_id" }],
+    conditions: [{ op: "exists", field: "payload.rental_id" }],
     actions: [
       {
         action_key: "create_task",
         params: {
           activity_type: "follow_up",
-          subject: "Hour overage building: ${event.payload.contract_number}",
+          subject: "Hour overage building: ${payload.contract_number}",
           body:
-            "Telematics shows ${event.payload.hours_used}h used against ${event.payload.included_hours}h included on ${event.payload.contract_number}. Call the customer: extend the allowance, upsell the next tier, or set expectations for overage billing.",
+            "Telematics shows ${payload.hours_used}h used against ${payload.included_hours}h included on ${payload.contract_number}. Call the customer: extend the allowance, upsell the next tier, or set expectations for overage billing.",
         },
       },
     ],
@@ -219,16 +219,16 @@ export const RENTAL_FLOW_DEFINITIONS: FlowWorkflowDefinition[] = [
       "Accrued rental credit crossed the RPO threshold (emitted by the L5 billing engine on paid RPO invoices): nudge the rep toward conversion.",
     owner_role: "rental",
     trigger_event_pattern: "rental.rpo.threshold_reached",
-    conditions: [{ op: "exists", field: "event.payload.rental_id" }],
+    conditions: [{ op: "exists", field: "payload.rental_id" }],
     actions: [
+      // L9.3: the accrued credit becomes a real deal (amount = buyout −
+      // accrued, unit linked as subject, provenance on rental_contract_id).
+      // The old create_task here failed on a null activity anchor — the
+      // threshold payload carries no company/deal, so the "sales motion"
+      // never landed (RF-024).
       {
-        action_key: "create_task",
-        params: {
-          activity_type: "follow_up",
-          subject: "RPO conversion window: ${event.payload.contract_number}",
-          body:
-            "Accrued rental credit reached ${event.payload.accrued_credit} against the purchase option. Open the conversion conversation before the exercise deadline ${event.payload.rpo_exercise_deadline}.",
-        },
+        action_key: "create_rental_conversion_deal",
+        params: { rental_id: "${payload.rental_id}" },
       },
     ],
     affects_modules: ["rental", "qrm"],

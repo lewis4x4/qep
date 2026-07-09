@@ -19,7 +19,7 @@ export const dealClosedWonFleet: FlowWorkflowDefinition = {
   owner_role: "sales",
   trigger_event_pattern: "deal.stage.changed",
   // Field root note: conditions resolve against `payload.*` (the event's
-  // properties) — `event.payload.*` silently resolves undefined.
+  // properties) — `payload.*` silently resolves undefined.
   conditions: [
     { op: "eq", field: "payload.is_closed_won", value: true },
     { op: "exists", field: "payload.equipment_id" },

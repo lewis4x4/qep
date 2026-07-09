@@ -115,6 +115,42 @@ export function RentalConversionEnginePage() {
     staleTime: 60_000,
   });
 
+  // L9.3: rental truth — contracts/invoices/RPO accrual by qrm_company_id
+  // (rental_conversion_signals, m807) instead of CRM deal tags + voice
+  // captures only.
+  const rentalTruthQuery = useQuery({
+    queryKey: ["rental-conversion", accountId, "rental-truth"],
+    enabled: Boolean(accountId),
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("rental_conversion_signals", {
+        p_company_id: accountId,
+      });
+      if (error) throw new Error(error.message);
+      const record = (data ?? {}) as {
+        contract_count?: number;
+        open_contract_count?: number;
+        trailing_90d_billed_cents?: number;
+        active_rpo?: Array<{
+          contract_id: string;
+          contract_number: string | null;
+          lifecycle_state: string | null;
+          accrued_cents: number;
+          purchase_price_cents: number | null;
+          exercise_deadline: string | null;
+          conversion_deal_id: string | null;
+        }>;
+      };
+      return {
+        contractCount: Number(record.contract_count ?? 0),
+        openContractCount: Number(record.open_contract_count ?? 0),
+        trailing90dBilledCents: Number(record.trailing_90d_billed_cents ?? 0),
+        activeRpo: Array.isArray(record.active_rpo) ? record.active_rpo : [],
+      };
+    },
+  });
+  const rentalTruth = rentalTruthQuery.data;
+
   const board = boardQuery.data;
   const isLoading = accountQuery.isLoading || boardQuery.isLoading;
   const isError = accountQuery.isError || boardQuery.isError;
@@ -154,6 +190,67 @@ export function RentalConversionEnginePage() {
         </DeckSurface>
       ) : (
         <>
+          {rentalTruth ? (
+            <DeckSurface className="p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Rental truth
+              </p>
+              <div className="mt-3 grid gap-4 sm:grid-cols-3">
+                <div>
+                  <p className="text-2xl font-semibold text-foreground">
+                    {rentalTruth.contractCount}
+                    <span className="ml-2 text-sm font-normal text-muted-foreground">
+                      ({rentalTruth.openContractCount} open)
+                    </span>
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">Rental contracts on this account.</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-semibold text-foreground">
+                    {formatCurrency(rentalTruth.trailing90dBilledCents / 100)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">Rental billed, trailing 90 days.</p>
+                </div>
+                <div>
+                  {rentalTruth.activeRpo.length === 0 ? (
+                    <>
+                      <p className="text-2xl font-semibold text-foreground">—</p>
+                      <p className="mt-1 text-xs text-muted-foreground">No active RPO accrual.</p>
+                    </>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {rentalTruth.activeRpo.map((rpo) => (
+                        <div key={rpo.contract_id} className="text-xs">
+                          <p className="font-medium text-foreground">
+                            {rpo.contract_number ?? rpo.contract_id.slice(0, 8)}:{" "}
+                            {formatCurrency(rpo.accrued_cents / 100)}
+                            {rpo.purchase_price_cents != null
+                              ? ` of ${formatCurrency(rpo.purchase_price_cents / 100)} buyout`
+                              : ""}
+                          </p>
+                          <p className="text-muted-foreground">
+                            {rpo.exercise_deadline ? `exercise by ${rpo.exercise_deadline}` : "no deadline"}
+                            {rpo.conversion_deal_id ? (
+                              <>
+                                {" · "}
+                                <Link
+                                  to={`/qrm/deals/${rpo.conversion_deal_id}`}
+                                  className="text-qep-orange hover:underline"
+                                >
+                                  conversion deal
+                                </Link>
+                              </>
+                            ) : null}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </DeckSurface>
+          ) : null}
+
           <div className="grid gap-4 md:grid-cols-5">
             <DeckSurface className="p-4">
               <div className="flex items-center gap-2">

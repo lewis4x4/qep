@@ -18,8 +18,8 @@ export const priceFileImported: FlowWorkflowDefinition = {
       params: {
         tag: "price_file_import_processed",
         metadata: {
-          file_id: "${event.payload.file_id}",
-          rows_imported: "${event.payload.rows_imported}",
+          file_id: "${payload.file_id}",
+          rows_imported: "${payload.rows_imported}",
         },
       },
     },
@@ -29,7 +29,7 @@ export const priceFileImported: FlowWorkflowDefinition = {
         source: "price_unmatched",
         title: "Price file imported — review affected quotes",
         severity: "info",
-        detail: "${event.payload.rows_imported} rows imported. Review the impact report and trigger requotes where applicable.",
+        detail: "${payload.rows_imported} rows imported. Review the impact report and trigger requotes where applicable.",
       },
     },
   ],

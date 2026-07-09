@@ -12,14 +12,14 @@ export const competitorSignalFromVoice: FlowWorkflowDefinition = {
   owner_role: "sales",
   trigger_event_pattern: "voice.capture.parsed",
   conditions: [
-    { op: "eq", field: "event.payload.extraction_result.competitor_detected", value: true },
-    { op: "gte", field: "event.payload.extraction_result.competitor_confidence", value: 0.7 },
+    { op: "eq", field: "payload.extraction_result.competitor_detected", value: true },
+    { op: "gte", field: "payload.extraction_result.competitor_confidence", value: 0.7 },
   ],
   actions: [
     {
       action_key: "tag_account",
       params: {
-        company_id: "${event.payload.extraction_result.company_id}",
+        company_id: "${payload.extraction_result.company_id}",
         tag: "competitor_risk",
       },
     },
@@ -28,7 +28,7 @@ export const competitorSignalFromVoice: FlowWorkflowDefinition = {
       params: {
         activity_type: "follow_up",
         subject: "Competitor signal — address account risk",
-        body: "Voice capture flagged ${event.payload.extraction_result.competitor_name} as a competitive threat. Reach out today.",
+        body: "Voice capture flagged ${payload.extraction_result.competitor_name} as a competitive threat. Reach out today.",
       },
     },
     {
@@ -36,8 +36,8 @@ export const competitorSignalFromVoice: FlowWorkflowDefinition = {
       params: {
         tag: "competitor_signal_recorded",
         metadata: {
-          competitor: "${event.payload.extraction_result.competitor_name}",
-          confidence: "${event.payload.extraction_result.competitor_confidence}",
+          competitor: "${payload.extraction_result.competitor_name}",
+          confidence: "${payload.extraction_result.competitor_confidence}",
         },
       },
     },

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { optimizeCharge } from "../../../../../../shared/rental-rate-math";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { AlertTriangle, ArrowUpRight, DollarSign, RefreshCcw, TrendingUp, Truck, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -302,6 +302,7 @@ export function RentalCommandCenterPage() {
   const [checkoutHours, setCheckoutHours] = useState<Record<string, string>>({});
   const [checkoutUnitPick, setCheckoutUnitPick] = useState<Record<string, string>>({});
   const [opsError, setOpsError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const commandQuery = useQuery({
     queryKey: ["qrm", "rental-command"],
@@ -436,6 +437,20 @@ export function RentalCommandCenterPage() {
       await queryClient.invalidateQueries({ queryKey: ["qrm", "rental-contract-queue"] });
       await queryClient.invalidateQueries({ queryKey: ["portal", "rentals"] });
       await queryClient.invalidateQueries({ queryKey: ["portal", "invoices"] });
+    },
+  });
+
+  // L9.3: RPO conversion — accrued credit becomes a real deal (idempotent
+  // per contract; the flow path creates the same deal at the 50% threshold).
+  const convertRpoMutation = useMutation({
+    mutationFn: (contractId: string) => rentalOpsApi.convertRpoToDeal({ contract_id: contractId }),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["qrm", "rental-onrent-ops"] });
+      setOpsError(null);
+      navigate(`/qrm/deals/${result.deal_id}`);
+    },
+    onError: (error) => {
+      setOpsError(error instanceof Error ? error.message : "RPO conversion failed.");
     },
   });
 
@@ -604,7 +619,7 @@ export function RentalCommandCenterPage() {
     queryFn: async () => {
       const { data: contracts, error: contractsError } = await supabase
         .from("rental_contracts")
-        .select("id, contract_number, lifecycle_state, contract_type, approved_end_date, requested_end_date, equipment_id, assignment_status, checkout_inspection_required")
+        .select("id, contract_number, lifecycle_state, contract_type, approved_end_date, requested_end_date, equipment_id, assignment_status, checkout_inspection_required, rpo_eligible, rpo_purchase_price_cents, rpo_credit_accrued_cents, rpo_exercise_deadline")
         .in("lifecycle_state", ["reserved", "on_rent", "off_rent"])
         .is("deleted_at", null)
         .order("approved_end_date", { ascending: true })
@@ -994,6 +1009,25 @@ export function RentalCommandCenterPage() {
                         </span>
                       </span>
                     </div>
+                    {contract.rpo_eligible && contract.rpo_purchase_price_cents != null ? (
+                      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-purple-500/20 bg-purple-500/5 px-2.5 py-1.5">
+                        <p className="text-[11px] text-purple-200">
+                          RPO credit ${((contract.rpo_credit_accrued_cents ?? 0) / 100).toLocaleString()} of $
+                          {(contract.rpo_purchase_price_cents / 100).toLocaleString()} buyout
+                          {contract.rpo_exercise_deadline
+                            ? ` · exercise by ${contract.rpo_exercise_deadline}`
+                            : ""}
+                        </p>
+                        <button
+                          type="button"
+                          disabled={convertRpoMutation.isPending}
+                          onClick={() => convertRpoMutation.mutate(contract.id)}
+                          className="rounded-md border border-purple-400/40 px-2 py-0.5 text-[11px] font-semibold text-purple-200 transition-colors hover:bg-purple-500/15 disabled:opacity-50"
+                        >
+                          {convertRpoMutation.isPending ? "Converting…" : "Convert to purchase"}
+                        </button>
+                      </div>
+                    ) : null}
                     {contract.lifecycle_state === "reserved" ? (() => {
                       const runs = (onRentOpsQuery.data?.inspections ?? []).filter(
                         (run) => run.rental_contract_id === contract.id,

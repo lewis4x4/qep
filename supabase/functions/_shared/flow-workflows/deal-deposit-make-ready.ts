@@ -19,7 +19,7 @@ export const dealDepositMakeReady: FlowWorkflowDefinition = {
   trigger_event_pattern: "deal.stage.changed",
   // Field root note: the condition/param resolver exposes the event's
   // properties as `payload.*` (condition-eval.ts resolveField) — NOT
-  // `event.payload.*`, which silently resolves undefined.
+  // `payload.*`, which silently resolves undefined.
   conditions: [
     { op: "eq", field: "payload.stage_name", value: "Deposit Collected" },
     { op: "exists", field: "payload.equipment_id" },

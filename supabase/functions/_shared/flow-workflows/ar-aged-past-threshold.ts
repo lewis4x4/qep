@@ -14,13 +14,13 @@ export const arAgedPastThreshold: FlowWorkflowDefinition = {
   owner_role: "accounting",
   trigger_event_pattern: "invoice.aged_past_threshold",
   conditions: [
-    { op: "gte", field: "event.payload.days_overdue", value: 60 },
+    { op: "gte", field: "payload.days_overdue", value: 60 },
   ],
   actions: [
     {
       action_key: "tag_account",
       params: {
-        company_id: "${event.payload.company_id}",
+        company_id: "${payload.company_id}",
         tag: "ar_block_pending",
       },
     },
@@ -31,7 +31,7 @@ export const arAgedPastThreshold: FlowWorkflowDefinition = {
         title: "A/R aging threshold exceeded",
         severity: "error",
         detail:
-          "Account is ${event.payload.days_overdue} days past due on $${event.payload.amount_outstanding}. Block financing until resolved.",
+          "Account is ${payload.days_overdue} days past due on $${payload.amount_outstanding}. Block financing until resolved.",
       },
     },
     {
@@ -39,7 +39,7 @@ export const arAgedPastThreshold: FlowWorkflowDefinition = {
       params: {
         subject: "AR override decision",
         detail:
-          "Controller approval required to allow continued financing on ${event.payload.company_id}.",
+          "Controller approval required to allow continued financing on ${payload.company_id}.",
         assigned_role: "accounting",
       },
       on_failure: "continue",

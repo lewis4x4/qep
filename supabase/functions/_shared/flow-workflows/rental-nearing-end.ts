@@ -11,7 +11,7 @@ export const rentalNearingEnd: FlowWorkflowDefinition = {
   owner_role: "rental",
   trigger_event_pattern: "rental.nearing_end",
   conditions: [
-    { op: "exists", field: "event.payload.rental_id" },
+    { op: "exists", field: "payload.rental_id" },
   ],
   actions: [
     {
@@ -19,7 +19,7 @@ export const rentalNearingEnd: FlowWorkflowDefinition = {
       params: {
         activity_type: "rental_off_rent_prep",
         subject: "Off-rent prep",
-        body: "Rental ${event.payload.rental_id} ends ${event.payload.ends_at}. Schedule pickup, inspection, and disposition.",
+        body: "Rental ${payload.rental_id} ends ${payload.ends_at}. Schedule pickup, inspection, and disposition.",
       },
     },
     {

@@ -12,7 +12,7 @@ export const equipmentHoursCrossedInterval: FlowWorkflowDefinition = {
   owner_role: "service",
   trigger_event_pattern: "equipment.hours_crossed_interval",
   conditions: [
-    { op: "exists", field: "event.payload.equipment_id" },
+    { op: "exists", field: "payload.equipment_id" },
   ],
   actions: [
     {
@@ -20,7 +20,7 @@ export const equipmentHoursCrossedInterval: FlowWorkflowDefinition = {
       params: {
         activity_type: "service_prompt",
         subject: "Service interval crossed",
-        body: "Equipment ${event.payload.equipment_id} has crossed the ${event.payload.interval_hours}h service interval. Schedule maintenance.",
+        body: "Equipment ${payload.equipment_id} has crossed the ${payload.interval_hours}h service interval. Schedule maintenance.",
       },
     },
     {
@@ -28,9 +28,9 @@ export const equipmentHoursCrossedInterval: FlowWorkflowDefinition = {
       params: {
         tag: "service_interval_crossed",
         metadata: {
-          equipment_id: "${event.payload.equipment_id}",
-          current_hours: "${event.payload.current_hours}",
-          interval: "${event.payload.interval_hours}",
+          equipment_id: "${payload.equipment_id}",
+          current_hours: "${payload.current_hours}",
+          interval: "${payload.interval_hours}",
         },
       },
     },

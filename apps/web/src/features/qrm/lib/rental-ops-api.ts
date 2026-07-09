@@ -128,6 +128,13 @@ export const rentalOpsApi = {
     disposition: "customer_billable" | "warranty" | "internal_wear" | "dispute";
     notes?: string | null;
   }) => rentalOpsFetch({ action: "dispose_damage", ...data }),
+  /** L9.3: RPO conversion — creates (or returns) the deal for this contract. */
+  convertRpoToDeal: (data: { contract_id: string }) =>
+    rentalOpsFetch({ action: "convert_rpo_to_deal", ...data }) as Promise<{
+      deal_id: string;
+      created: boolean;
+      warning?: string;
+    }>,
   startCheckoutInspection: (data: { contract_id: string }) =>
     rentalOpsFetch({ action: "start_checkout_inspection", ...data })
       .then((payload) => ({ run: requireRentalOpsObjectPayload(payload, "run") })),
