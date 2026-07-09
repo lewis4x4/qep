@@ -156,6 +156,11 @@ const WorkforceTechnicianPayLadderPage = lazy(() =>
 const DealRoomPage = lazy(() =>
   import("./features/deal-room/pages/DealRoomPage").then((m) => ({ default: m.DealRoomPage }))
 );
+const RentalQuotePublicPage = lazy(() =>
+  import("./features/rental-quote/pages/RentalQuotePublicPage").then((m) => ({
+    default: m.RentalQuotePublicPage,
+  }))
+);
 const IntakeKanbanPage = lazy(() =>
   import("./features/ops/pages/IntakeKanbanPage").then((m) => ({ default: m.IntakeKanbanPage }))
 );
@@ -961,6 +966,7 @@ function App() {
               <Route path="/service/track" element={<ServicePublicTrackPage />} />
               <Route path="/vendor/pricing/:accessKey" element={<VendorPricingPortalPage />} />
               <Route path="/q/:token" element={<DealRoomPage />} />
+              <Route path="/rq/:token" element={<RentalQuotePublicPage />} />
               <Route path="/portal/login" element={<PortalLoginPage authError={error} />} />
               <Route path="/portal/*" element={<Navigate to="/portal/login" replace />} />
               <Route path="/quote" element={<RedirectPreserveSearch to="/sales/quotes/new" />} />
@@ -1373,6 +1379,7 @@ function App() {
               />
               <Route path="/vendor/pricing/:accessKey" element={<VendorPricingPortalPage />} />
               <Route path="/q/:token" element={<DealRoomPage />} />
+              <Route path="/rq/:token" element={<RentalQuotePublicPage />} />
               <Route
                 path="/service/efficiency"
                 element={

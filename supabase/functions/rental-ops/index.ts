@@ -106,6 +106,13 @@ type ConvertRpoToDealPayload = {
   contract_id?: string;
 };
 
+type IssueRentalQuotePayload = {
+  action: "issue_rental_quote";
+  contract_id?: string;
+  override_rate_floor?: boolean;
+  customer_email?: string | null;
+};
+
 type StartCheckoutInspectionPayload = {
   action: "start_checkout_inspection";
   contract_id?: string;
@@ -246,6 +253,7 @@ type RentalOpsPayload =
   | CompleteCheckoutInspectionPayload
   | CompleteCheckinInspectionPayload
   | ConvertRpoToDealPayload
+  | IssueRentalQuotePayload
   | CheckOutContractPayload;
 
 const RENTAL_CHECKOUT_TEMPLATE = {
@@ -707,6 +715,120 @@ Deno.serve(async (req) => {
       }
 
       return safeJsonOk({ exchanged_line_id: oldLine.id, new_line: newLine }, origin);
+    }
+
+    if (body.action === "issue_rental_quote") {
+      // L9.5: make the quote a real customer-facing document. Runs the
+      // M4.1 rate floor on the estimate rates (quoted rates are governed
+      // the same way they are billed), transitions draft → quoted, mints
+      // the share token, and (best-effort) emails the link.
+      if (!body.contract_id) return safeJsonError("contract_id required", 400, origin);
+
+      const { data: contract, error: contractError } = await admin
+        .from("rental_contracts")
+        .select(
+          "id, contract_number, lifecycle_state, share_token, equipment_id, qrm_company_id, portal_customer_id, branch_id, estimate_daily_rate, estimate_weekly_rate, estimate_monthly_rate",
+        )
+        .eq("id", body.contract_id)
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (contractError || !contract) return safeJsonError("Rental contract not found", 404, origin);
+      if (!["draft", "quoted"].includes(String(contract.lifecycle_state))) {
+        return safeJsonError(
+          `Quotes issue from draft/quoted contracts (state: ${contract.lifecycle_state})`,
+          400,
+          origin,
+        );
+      }
+      if (!contract.qrm_company_id && !contract.portal_customer_id) {
+        return safeJsonError("Link a customer (company or portal identity) before issuing the quote", 400, origin);
+      }
+
+      const rateFloor = await evaluateRentalRateFloor(admin, {
+        workspaceId,
+        agreedDaily: contract.estimate_daily_rate == null ? null : Number(contract.estimate_daily_rate),
+        agreedWeekly: contract.estimate_weekly_rate == null ? null : Number(contract.estimate_weekly_rate),
+        agreedMonthly: contract.estimate_monthly_rate == null ? null : Number(contract.estimate_monthly_rate),
+        equipmentId: (contract.equipment_id as string | null) ?? null,
+        companyId: (contract.qrm_company_id as string | null) ?? null,
+        branchId: (contract.branch_id as string | null) ?? null,
+      });
+      const rateFloorBlock = await enforceRateFloor(
+        admin,
+        workspaceId,
+        contract.id,
+        auth.userId,
+        auth.role,
+        rateFloor,
+        body.override_rate_floor === true,
+        origin,
+      );
+      if (rateFloorBlock) return rateFloorBlock;
+
+      const shareToken = (contract.share_token as string | null) ??
+        crypto.randomUUID().replaceAll("-", "");
+
+      const { data: issued, error: issueError } = await admin
+        .from("rental_contracts")
+        .update({
+          lifecycle_state: "quoted",
+          share_token: shareToken,
+          ...(contract.share_token ? {} : { share_token_created_at: new Date().toISOString() }),
+        })
+        .eq("id", contract.id)
+        .eq("workspace_id", workspaceId)
+        .select("id, contract_number, lifecycle_state, share_token")
+        .single();
+      if (issueError || !issued) {
+        return safeJsonError(issueError?.message ?? "Failed to issue the quote", 500, origin);
+      }
+
+      const appBase = Deno.env.get("QEP_APP_BASE_URL") ?? "https://qep.blackrockai.co";
+      const shareUrl = `${appBase}/rq/${issued.share_token}`;
+
+      // Best-effort email delivery — zero-blocking.
+      let emailStatus = "skipped";
+      const resendKey = Deno.env.get("RESEND_API_KEY");
+      let recipient = typeof body.customer_email === "string" && body.customer_email.includes("@")
+        ? body.customer_email.trim()
+        : null;
+      if (!recipient && contract.portal_customer_id) {
+        const { data: pc } = await admin
+          .from("portal_customers")
+          .select("email")
+          .eq("id", contract.portal_customer_id)
+          .maybeSingle();
+        recipient = (pc?.email as string | null) ?? null;
+      }
+      if (resendKey && recipient) {
+        try {
+          const res = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              from: Deno.env.get("RESEND_FROM") ?? "QEP Rentals <onboarding@resend.dev>",
+              to: [recipient],
+              subject: `Your rental quote ${issued.contract_number ?? ""}`.trim(),
+              text: `Your rental quote is ready. Review and sign here: ${shareUrl}`,
+            }),
+          });
+          emailStatus = res.ok ? "sent" : `failed_${res.status}`;
+        } catch {
+          emailStatus = "failed";
+        }
+      }
+
+      return safeJsonOk(
+        {
+          contract_id: issued.id,
+          lifecycle_state: issued.lifecycle_state,
+          share_url: shareUrl,
+          email_status: emailStatus,
+          ...(rateFloor.belowFloor ? { rate_floor_overridden: true } : {}),
+        },
+        origin,
+      );
     }
 
     if (body.action === "convert_rpo_to_deal") {

@@ -128,6 +128,18 @@ export const rentalOpsApi = {
     disposition: "customer_billable" | "warranty" | "internal_wear" | "dispute";
     notes?: string | null;
   }) => rentalOpsFetch({ action: "dispose_damage", ...data }),
+  /** L9.5: issue the customer-facing rental quote (share link + optional email). */
+  issueRentalQuote: (data: {
+    contract_id: string;
+    override_rate_floor?: boolean;
+    customer_email?: string | null;
+  }) =>
+    rentalOpsFetch({ action: "issue_rental_quote", ...data }) as Promise<{
+      contract_id: string;
+      lifecycle_state: string;
+      share_url: string;
+      email_status: string;
+    }>,
   /** L9.3: RPO conversion — creates (or returns) the deal for this contract. */
   convertRpoToDeal: (data: { contract_id: string }) =>
     rentalOpsFetch({ action: "convert_rpo_to_deal", ...data }) as Promise<{
