@@ -70,6 +70,9 @@ export function RentalReturnsPage() {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [chargeInput, setChargeInput] = useState("");
   const [depositInput, setDepositInput] = useState("");
+  const [fuelInput, setFuelInput] = useState("");
+  const [cleaningInput, setCleaningInput] = useState("");
+  const [envInput, setEnvInput] = useState("");
   const [damageDescription, setDamageDescription] = useState("");
   const [rentalContractReference, setRentalContractReference] = useState("");
   const [creditInvoiceNumber, setCreditInvoiceNumber] = useState("");
@@ -110,9 +113,36 @@ export function RentalReturnsPage() {
     },
   });
 
+  const dollarsToCents = (value: number | null | undefined): number | null => {
+    if (value == null || !Number.isFinite(value) || value < 0) return null;
+    return Math.round(value * 100);
+  };
+
   const disposeDamageMutation = useMutation({
-    mutationFn: async ({ id, disposition }: { id: string; disposition: DamageDisposition }) =>
-      rentalOpsApi.disposeDamage({ return_id: id, disposition, notes: damageDescription.trim() || null }),
+    mutationFn: async ({
+      id,
+      disposition,
+      damageCents,
+      fuelCents,
+      cleaningCents,
+      envCents,
+    }: {
+      id: string;
+      disposition: DamageDisposition;
+      damageCents: number | null;
+      fuelCents: number | null;
+      cleaningCents: number | null;
+      envCents: number | null;
+    }) =>
+      rentalOpsApi.disposeDamage({
+        return_id: id,
+        disposition,
+        notes: damageDescription.trim() || null,
+        damage_charge_cents: damageCents,
+        fuel_charge_cents: fuelCents,
+        cleaning_charge_cents: cleaningCents,
+        environmental_fee_cents: envCents,
+      }),
     onSuccess: (payload) => {
       setStatusError(null);
       const escalated = (payload as { escalated?: boolean }).escalated;
@@ -129,7 +159,18 @@ export function RentalReturnsPage() {
   const inspectionReady = inspectionComplete(checklistItems, conditionPhotos.length);
   const chargeValue = chargeInput.trim() ? Number(chargeInput) : selectedReturn?.charge_amount ?? null;
   const depositValue = depositInput.trim() ? Number(depositInput) : selectedReturn?.deposit_amount ?? null;
-  const damageMath = computeDamageAssessment(chargeValue, depositValue);
+  const fuelValue = fuelInput.trim() ? Number(fuelInput) : null;
+  const cleaningValue = cleaningInput.trim() ? Number(cleaningInput) : null;
+  const envValue = envInput.trim() ? Number(envInput) : null;
+  const ancillaryTotal =
+    (Number(chargeValue) || 0) +
+    (Number(fuelValue) || 0) +
+    (Number(cleaningValue) || 0) +
+    (Number(envValue) || 0);
+  const damageMath = computeDamageAssessment(
+    ancillaryTotal > 0 ? ancillaryTotal : chargeValue,
+    depositValue,
+  );
 
   async function patchSelectedReturn(patch: Partial<RentalReturnRow>) {
     if (!selectedReturn) return;
@@ -467,27 +508,65 @@ export function RentalReturnsPage() {
 
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="charge-amount">Charge amount</Label>
+                    <Label htmlFor="charge-amount">Damage charge ($)</Label>
                     <Input
                       id="charge-amount"
                       type="number"
+                      min={0}
+                      step="0.01"
                       value={chargeInput}
                       onChange={(event) => setChargeInput(event.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="deposit-amount">Deposit amount</Label>
+                    <Label htmlFor="deposit-amount">Deposit amount ($)</Label>
                     <Input
                       id="deposit-amount"
                       type="number"
+                      min={0}
+                      step="0.01"
                       value={depositInput}
                       onChange={(event) => setDepositInput(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="fuel-charge">Fuel charge ($)</Label>
+                    <Input
+                      id="fuel-charge"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={fuelInput}
+                      onChange={(event) => setFuelInput(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="cleaning-charge">Cleaning charge ($)</Label>
+                    <Input
+                      id="cleaning-charge"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={cleaningInput}
+                      onChange={(event) => setCleaningInput(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="env-charge">Environmental fee ($)</Label>
+                    <Input
+                      id="env-charge"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={envInput}
+                      onChange={(event) => setEnvInput(event.target.value)}
                     />
                   </div>
                 </div>
 
                 <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-foreground">
-                  Deposit covers charges: {damageMath.depositCoversCharges == null ? "—" : damageMath.depositCoversCharges ? "Yes" : "No"} ·
+                  Total assessed: {formatCurrency(ancillaryTotal)} · Deposit covers charges:{" "}
+                  {damageMath.depositCoversCharges == null ? "—" : damageMath.depositCoversCharges ? "Yes" : "No"} ·
                   Balance due: {damageMath.balanceDue == null ? " —" : ` ${formatCurrency(damageMath.balanceDue)}`}
                 </div>
 
@@ -519,6 +598,10 @@ export function RentalReturnsPage() {
                         setStatusError("Damage description is required before disposing the damage.");
                         return;
                       }
+                      const damageCents = dollarsToCents(chargeValue);
+                      const fuelCents = dollarsToCents(fuelValue);
+                      const cleaningCents = dollarsToCents(cleaningValue);
+                      const envCents = dollarsToCents(envValue);
                       await patchSelectedReturn({
                         has_charges: true,
                         damage_description: damageDescription.trim(),
@@ -526,8 +609,19 @@ export function RentalReturnsPage() {
                         deposit_amount: depositValue,
                         deposit_covers_charges: damageMath.depositCoversCharges,
                         balance_due: damageMath.balanceDue,
+                        ...(damageCents != null ? { damage_charge_cents: damageCents } : {}),
+                        ...(fuelCents != null ? { fuel_charge_cents: fuelCents } : {}),
+                        ...(cleaningCents != null ? { cleaning_charge_cents: cleaningCents } : {}),
+                        ...(envCents != null ? { environmental_fee_cents: envCents } : {}),
+                      } as Partial<RentalReturnRow>);
+                      disposeDamageMutation.mutate({
+                        id: selectedReturn.id,
+                        disposition: damageDisposition,
+                        damageCents,
+                        fuelCents,
+                        cleaningCents,
+                        envCents,
                       });
-                      disposeDamageMutation.mutate({ id: selectedReturn.id, disposition: damageDisposition });
                     }}
                     disabled={disposeDamageMutation.isPending}
                   >
@@ -537,13 +631,21 @@ export function RentalReturnsPage() {
                   <Button
                     variant="outline"
                     onClick={() => {
+                      const damageCents = dollarsToCents(chargeValue);
+                      const fuelCents = dollarsToCents(fuelValue);
+                      const cleaningCents = dollarsToCents(cleaningValue);
+                      const envCents = dollarsToCents(envValue);
                       patchSelectedReturn({
                         charge_amount: chargeValue,
                         deposit_amount: depositValue,
                         deposit_covers_charges: damageMath.depositCoversCharges,
                         balance_due: damageMath.balanceDue,
                         status: "completed",
-                      });
+                        ...(damageCents != null ? { damage_charge_cents: damageCents } : {}),
+                        ...(fuelCents != null ? { fuel_charge_cents: fuelCents } : {}),
+                        ...(cleaningCents != null ? { cleaning_charge_cents: cleaningCents } : {}),
+                        ...(envCents != null ? { environmental_fee_cents: envCents } : {}),
+                      } as Partial<RentalReturnRow>);
                     }}
                   >
                     Finalize damaged return

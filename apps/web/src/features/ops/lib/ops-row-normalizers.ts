@@ -58,6 +58,10 @@ export interface RentalReturnRow {
   id: string;
   balance_due: number | null;
   charge_amount: number | null;
+  damage_charge_cents?: number | null;
+  fuel_charge_cents?: number | null;
+  cleaning_charge_cents?: number | null;
+  environmental_fee_cents?: number | null;
   condition_photos: Json | null;
   created_at: string;
   credit_invoice_number: string | null;

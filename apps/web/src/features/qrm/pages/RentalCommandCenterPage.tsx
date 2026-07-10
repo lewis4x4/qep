@@ -296,7 +296,11 @@ export function RentalCommandCenterPage() {
   const [counterStartDate, setCounterStartDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [counterEndDate, setCounterEndDate] = useState(() => new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10));
   const [counterDailyRate, setCounterDailyRate] = useState("");
+  const [counterWeeklyRate, setCounterWeeklyRate] = useState("");
+  const [counterMonthlyRate, setCounterMonthlyRate] = useState("");
+  const [counterRateSource, setCounterRateSource] = useState<string | null>(null);
   const [counterResult, setCounterResult] = useState<string | null>(null);
+  const [quoteShareUrl, setQuoteShareUrl] = useState<string | null>(null);
   const [exchangeUnits, setExchangeUnits] = useState<Record<string, string>>({});
   const [exchangeContinuity, setExchangeContinuity] = useState<Record<string, boolean>>({});
   const [checkoutHours, setCheckoutHours] = useState<Record<string, string>>({});
@@ -492,32 +496,109 @@ export function RentalCommandCenterPage() {
         start_date: counterStartDate,
         end_date: counterEndDate,
         daily_rate: Number(counterDailyRate) || null,
+        weekly_rate: Number(counterWeeklyRate) || null,
+        monthly_rate: Number(counterMonthlyRate) || null,
       }),
     onSuccess: async ({ contract }) => {
       const number = typeof contract.contract_number === "string" ? contract.contract_number : "created";
-      setCounterResult(`Contract ${number} opened as a draft. It moves to reserved/on-rent from the lifecycle guard.`);
+      const id = typeof contract.id === "string" ? contract.id : null;
+      setCounterResult(
+        `Contract ${number} opened as a draft${id ? ` (${id.slice(0, 8)}…)` : ""}. Issue the customer quote from Draft quotes below, then reserve/check out.`,
+      );
       setCounterCompanyId("");
       setCounterCompanySearch("");
       setCounterEquipmentId("");
       setCounterDailyRate("");
+      setCounterWeeklyRate("");
+      setCounterMonthlyRate("");
+      setCounterRateSource(null);
       await queryClient.invalidateQueries({ queryKey: ["qrm", "rental-command"] });
       await queryClient.invalidateQueries({ queryKey: ["qrm", "rental-contract-queue"] });
+      await queryClient.invalidateQueries({ queryKey: ["qrm", "rental-draft-quotes"] });
     },
     onError: (error: unknown) => {
       setCounterResult(error instanceof Error ? error.message : "Failed to create the contract.");
     },
   });
 
-  // Instant counter quote preview from the canonical rate math (L1). Day-rate
-  // book only until the resolver-backed book is wired into this card.
+  // Resolve the governed L1 book when unit + customer are chosen so the
+  // counter never starts from a day-only sticker when a full book exists.
+  const resolveCounterBook = async (equipmentId: string, companyId: string) => {
+    if (!equipmentId || !companyId) return;
+    try {
+      const { data: session } = await supabase.auth.getUser();
+      const userId = session.user?.id;
+      let workspaceId = "default";
+      if (userId) {
+        const { data: profileRow } = await supabase
+          .from("profiles")
+          .select("active_workspace_id")
+          .eq("id", userId)
+          .maybeSingle();
+        workspaceId = (profileRow?.active_workspace_id as string | null) ?? "default";
+      }
+      const { data, error } = await supabase.rpc("rental_resolve_rates", {
+        p_workspace_id: workspaceId,
+        p_equipment_id: equipmentId,
+        p_company_id: companyId,
+        p_on_date: counterStartDate,
+      });
+      if (error) throw new Error(error.message);
+      const book = (data ?? {}) as Record<string, unknown>;
+      if (typeof book.day === "number" && book.day > 0) {
+        setCounterDailyRate((book.day / 100).toFixed(2));
+      }
+      if (typeof book.week === "number" && book.week > 0) {
+        setCounterWeeklyRate((book.week / 100).toFixed(2));
+      }
+      if (typeof book.month === "number" && book.month > 0) {
+        setCounterMonthlyRate((book.month / 100).toFixed(2));
+      }
+      setCounterRateSource(typeof book.source === "string" ? book.source : "resolved");
+    } catch (error) {
+      setCounterRateSource(error instanceof Error ? error.message : "rate book unavailable");
+    }
+  };
+
+  const issueQuoteMutation = useMutation({
+    mutationFn: (contractId: string) => rentalOpsApi.issueRentalQuote({ contract_id: contractId }),
+    onSuccess: (result) => {
+      setQuoteShareUrl(result.share_url);
+      setOpsError(null);
+      queryClient.invalidateQueries({ queryKey: ["qrm", "rental-draft-quotes"] });
+    },
+    onError: (error) => {
+      setOpsError(error instanceof Error ? error.message : "Failed to issue rental quote.");
+    },
+  });
+
+  const closeContractMutation = useMutation({
+    mutationFn: (contractId: string) => rentalOpsApi.closeContract({ contract_id: contractId }),
+    onSuccess: () => {
+      setOpsError(null);
+      queryClient.invalidateQueries({ queryKey: ["qrm", "rental-onrent-ops"] });
+      queryClient.invalidateQueries({ queryKey: ["qrm", "rental-command"] });
+    },
+    onError: (error) => {
+      setOpsError(error instanceof Error ? error.message : "Failed to close contract.");
+    },
+  });
+
+  // Instant counter quote preview from the canonical rate math (L1) using the
+  // full day/week/month book when available.
   const counterPreview = useMemo(() => {
     const dayCents = Math.round((Number(counterDailyRate) || 0) * 100);
+    const weekCents = Math.round((Number(counterWeeklyRate) || 0) * 100);
+    const monthCents = Math.round((Number(counterMonthlyRate) || 0) * 100);
     const start = Date.parse(counterStartDate);
     const end = Date.parse(counterEndDate);
     if (dayCents <= 0 || !Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
     const billableDays = Math.max(1, Math.round((end - start) / 86_400_000));
     try {
-      const charge = optimizeCharge(billableDays, { day: dayCents });
+      const book: { day: number; week?: number; month?: number } = { day: dayCents };
+      if (weekCents > 0) book.week = weekCents;
+      if (monthCents > 0) book.month = monthCents;
+      const charge = optimizeCharge(billableDays, book);
       const billedAs = charge.segments
         .map((s) => `${s.qty} ${s.unit}${s.qty > 1 ? "s" : ""}`)
         .join(" + ");
@@ -525,7 +606,26 @@ export function RentalCommandCenterPage() {
     } catch {
       return null;
     }
-  }, [counterDailyRate, counterStartDate, counterEndDate]);
+  }, [counterDailyRate, counterWeeklyRate, counterMonthlyRate, counterStartDate, counterEndDate]);
+
+  const draftQuotesQuery = useQuery({
+    queryKey: ["qrm", "rental-draft-quotes"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("rental_contracts")
+        .select(
+          "id, contract_number, lifecycle_state, estimate_daily_rate, estimate_weekly_rate, estimate_monthly_rate, qrm_company_id, equipment_id, requested_start_date, requested_end_date, share_token, created_at",
+        )
+        .in("lifecycle_state", ["draft", "quoted"])
+        .eq("origination_channel", "counter")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(40);
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
 
   const utilizationQuery = useQuery({
     queryKey: ["qrm", "rental-utilization"],
@@ -620,7 +720,7 @@ export function RentalCommandCenterPage() {
       const { data: contracts, error: contractsError } = await supabase
         .from("rental_contracts")
         .select("id, contract_number, lifecycle_state, contract_type, approved_end_date, requested_end_date, equipment_id, assignment_status, checkout_inspection_required, rpo_eligible, rpo_purchase_price_cents, rpo_credit_accrued_cents, rpo_exercise_deadline")
-        .in("lifecycle_state", ["reserved", "on_rent", "off_rent"])
+        .in("lifecycle_state", ["reserved", "on_rent", "off_rent", "returned"])
         .is("deleted_at", null)
         .order("approved_end_date", { ascending: true })
         .limit(100);
@@ -888,7 +988,13 @@ export function RentalCommandCenterPage() {
                 />
                 <select
                   value={counterCompanyId}
-                  onChange={(event) => setCounterCompanyId(event.target.value)}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setCounterCompanyId(next);
+                    if (next && counterEquipmentId) {
+                      void resolveCounterBook(counterEquipmentId, next);
+                    }
+                  }}
                   className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
                 >
                   <option value="">
@@ -916,7 +1022,13 @@ export function RentalCommandCenterPage() {
               <div className="grid gap-2">
                 <select
                   value={counterEquipmentId}
-                  onChange={(event) => setCounterEquipmentId(event.target.value)}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setCounterEquipmentId(next);
+                    if (next && counterCompanyId) {
+                      void resolveCounterBook(next, counterCompanyId);
+                    }
+                  }}
                   className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
                 >
                   <option value="">Unit: assign later</option>
@@ -932,16 +1044,34 @@ export function RentalCommandCenterPage() {
                   <Input type="date" value={counterStartDate} onChange={(event) => setCounterStartDate(event.target.value)} />
                   <Input type="date" value={counterEndDate} onChange={(event) => setCounterEndDate(event.target.value)} />
                 </div>
-                <Input
-                  value={counterDailyRate}
-                  onChange={(event) => setCounterDailyRate(event.target.value)}
-                  placeholder="Daily rate (optional, resolves from rate rules later)"
-                  inputMode="decimal"
-                />
+                <div className="grid grid-cols-3 gap-2">
+                  <Input
+                    value={counterDailyRate}
+                    onChange={(event) => setCounterDailyRate(event.target.value)}
+                    placeholder="Day $"
+                    inputMode="decimal"
+                  />
+                  <Input
+                    value={counterWeeklyRate}
+                    onChange={(event) => setCounterWeeklyRate(event.target.value)}
+                    placeholder="Week $"
+                    inputMode="decimal"
+                  />
+                  <Input
+                    value={counterMonthlyRate}
+                    onChange={(event) => setCounterMonthlyRate(event.target.value)}
+                    placeholder="Month $"
+                    inputMode="decimal"
+                  />
+                </div>
+                {counterRateSource ? (
+                  <p className="text-[11px] text-muted-foreground">Rate book: {counterRateSource}</p>
+                ) : null}
                 {counterPreview ? (
                   <p className="text-xs text-muted-foreground">
                     Preview: {counterPreview.billableDays} billable days · billed as {counterPreview.billedAs} ·{" "}
                     {formatCurrency(counterPreview.total)}
+                    {counterPreview.fired ? " · best-rate applied" : ""}
                   </p>
                 ) : null}
               </div>
@@ -962,10 +1092,60 @@ export function RentalCommandCenterPage() {
           </DeckSurface>
 
           <DeckSurface className="p-4">
+            <h2 className="text-sm font-semibold text-foreground">Draft quotes</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Issue the customer-facing rental quote (share link + optional email). Backend rate floor still
+              governs below-book estimates.
+            </p>
+            {quoteShareUrl ? (
+              <p className="mt-2 break-all text-xs text-emerald-300">
+                Share URL:{" "}
+                <a className="underline" href={quoteShareUrl} target="_blank" rel="noreferrer">
+                  {quoteShareUrl}
+                </a>
+              </p>
+            ) : null}
+            <div className="mt-3 space-y-2">
+              {(draftQuotesQuery.data ?? []).length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {draftQuotesQuery.isLoading ? "Loading drafts…" : "No counter drafts waiting to quote."}
+                </p>
+              ) : (
+                (draftQuotesQuery.data ?? []).map((draft) => (
+                  <div
+                    key={draft.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded border border-white/10 px-3 py-2 text-xs"
+                  >
+                    <div>
+                      <span className="font-medium text-foreground">
+                        {draft.contract_number ?? draft.id.slice(0, 8)}
+                      </span>
+                      <span className="ml-2 text-muted-foreground">{draft.lifecycle_state}</span>
+                      {draft.estimate_daily_rate != null ? (
+                        <span className="ml-2 text-muted-foreground">
+                          day {formatCurrency(Number(draft.estimate_daily_rate))}
+                        </span>
+                      ) : null}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant={draft.lifecycle_state === "quoted" ? "outline" : "default"}
+                      disabled={issueQuoteMutation.isPending}
+                      onClick={() => issueQuoteMutation.mutate(draft.id)}
+                    >
+                      {draft.lifecycle_state === "quoted" ? "Re-issue / copy link" : "Issue quote"}
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </DeckSurface>
+
+          <DeckSurface className="p-4">
             <h2 className="text-sm font-semibold text-foreground">On-rent operations</h2>
             <p className="mt-1 text-xs text-muted-foreground">
               Code lines Off-rent (clock stops, unit awaits pickup), Return, or Hold; release holds; exchange units
-              mid-rental. The contract follows the lines automatically — downstream only.
+              mid-rental. Close returned contracts after the final invoice posts.
             </p>
             {opsError ? <p className="mt-2 text-xs text-red-300">{opsError}</p> : null}
             <div className="mt-4 space-y-3">
@@ -1003,12 +1183,29 @@ export function RentalCommandCenterPage() {
                             ? "bg-cyan-500/10 text-cyan-300"
                             : contract.lifecycle_state === "reserved"
                               ? "bg-amber-500/10 text-amber-300"
-                              : "bg-emerald-500/10 text-emerald-300"
+                              : contract.lifecycle_state === "returned"
+                                ? "bg-violet-500/10 text-violet-300"
+                                : "bg-emerald-500/10 text-emerald-300"
                         }`}>
                           {String(contract.lifecycle_state).replace(/_/g, " ")}
                         </span>
                       </span>
                     </div>
+                    {contract.lifecycle_state === "returned" ? (
+                      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-violet-500/20 bg-violet-500/5 px-2.5 py-1.5">
+                        <p className="text-[11px] text-violet-200">
+                          Final invoice posted? Close the trunk to release utilization and finish AR.
+                        </p>
+                        <button
+                          type="button"
+                          disabled={closeContractMutation.isPending}
+                          onClick={() => closeContractMutation.mutate(contract.id)}
+                          className="rounded-md border border-violet-400/40 px-2 py-0.5 text-[11px] font-semibold text-violet-200 transition-colors hover:bg-violet-500/15 disabled:opacity-50"
+                        >
+                          {closeContractMutation.isPending ? "Closing…" : "Close contract"}
+                        </button>
+                      </div>
+                    ) : null}
                     {contract.rpo_eligible && contract.rpo_purchase_price_cents != null ? (
                       <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-purple-500/20 bg-purple-500/5 px-2.5 py-1.5">
                         <p className="text-[11px] text-purple-200">

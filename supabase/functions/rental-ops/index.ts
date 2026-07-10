@@ -113,6 +113,13 @@ type IssueRentalQuotePayload = {
   customer_email?: string | null;
 };
 
+type CloseContractPayload = {
+  action: "close_contract";
+  contract_id?: string;
+  hard_close?: boolean;
+  hard_close_reason?: string | null;
+};
+
 type StartCheckoutInspectionPayload = {
   action: "start_checkout_inspection";
   contract_id?: string;
@@ -254,6 +261,7 @@ type RentalOpsPayload =
   | CompleteCheckinInspectionPayload
   | ConvertRpoToDealPayload
   | IssueRentalQuotePayload
+  | CloseContractPayload
   | CheckOutContractPayload;
 
 const RENTAL_CHECKOUT_TEMPLATE = {
@@ -479,12 +487,13 @@ Deno.serve(async (req) => {
         }
       }
 
-      const dailyRate = toCurrencyAmount(body.daily_rate);
-      const weeklyRate = toCurrencyAmount(body.weekly_rate);
-      const monthlyRate = toCurrencyAmount(body.monthly_rate);
+      let dailyRate = toCurrencyAmount(body.daily_rate);
+      let weeklyRate = toCurrencyAmount(body.weekly_rate);
+      let monthlyRate = toCurrencyAmount(body.monthly_rate);
       const deliveryMode = body.delivery_mode === "delivery" ? "delivery" : "pickup";
 
       let overbookedDetail: unknown = null;
+      let rateBookSource: string | null = null;
       if (equipmentId) {
         const availability = await consultAvailability(admin, workspaceId, equipmentId, body.start_date, body.end_date);
         if (!availability.available) {
@@ -496,6 +505,30 @@ Deno.serve(async (req) => {
             );
           }
           overbookedDetail = availability.detail;
+        }
+
+        // Fill blank counter rates from the governed L1 book so the desk
+        // never invents a day-only sticker when a full book exists.
+        if (dailyRate <= 0 || weeklyRate <= 0 || monthlyRate <= 0) {
+          const { data: book } = await admin.rpc("rental_resolve_rates", {
+            p_workspace_id: workspaceId,
+            p_equipment_id: equipmentId,
+            p_company_id: company.id,
+            p_on_date: body.start_date,
+          });
+          if (book && typeof book === "object") {
+            const b = book as Record<string, unknown>;
+            rateBookSource = typeof b.source === "string" ? b.source : "resolved";
+            if (dailyRate <= 0 && typeof b.day === "number" && b.day > 0) {
+              dailyRate = b.day / 100;
+            }
+            if (weeklyRate <= 0 && typeof b.week === "number" && b.week > 0) {
+              weeklyRate = b.week / 100;
+            }
+            if (monthlyRate <= 0 && typeof b.month === "number" && b.month > 0) {
+              monthlyRate = b.month / 100;
+            }
+          }
         }
       }
 
@@ -568,7 +601,13 @@ Deno.serve(async (req) => {
         }
       }
 
-      return safeJsonOk({ contract }, origin);
+      return safeJsonOk({
+        contract,
+        rate_book_source: rateBookSource,
+        estimate_daily_rate: dailyRate > 0 ? dailyRate : null,
+        estimate_weekly_rate: weeklyRate > 0 ? weeklyRate : null,
+        estimate_monthly_rate: monthlyRate > 0 ? monthlyRate : null,
+      }, origin);
     }
 
     if (body.action === "exchange_line") {
@@ -829,6 +868,27 @@ Deno.serve(async (req) => {
         },
         origin,
       );
+    }
+
+    if (body.action === "close_contract") {
+      if (!body.contract_id) return safeJsonError("contract_id required", 400, origin);
+      const hardClose = body.hard_close === true;
+      if (hardClose && !["manager", "admin", "owner"].includes(auth.role)) {
+        return safeJsonError("Hard close requires manager or above", 403, origin);
+      }
+      const { data: closed, error: closeError } = await admin.rpc("rental_close_contract", {
+        p_workspace_id: workspaceId,
+        p_contract_id: body.contract_id,
+        p_actor_id: auth.userId,
+        p_hard_close: hardClose,
+        p_hard_close_reason: hardClose
+          ? (typeof body.hard_close_reason === "string" ? body.hard_close_reason : null)
+          : null,
+      });
+      if (closeError || !closed) {
+        return safeJsonError(closeError?.message ?? "Failed to close contract", 400, origin);
+      }
+      return safeJsonOk({ contract: closed }, origin);
     }
 
     if (body.action === "convert_rpo_to_deal") {

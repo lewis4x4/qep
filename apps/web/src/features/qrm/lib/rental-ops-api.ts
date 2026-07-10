@@ -127,6 +127,11 @@ export const rentalOpsApi = {
     return_id: string;
     disposition: "customer_billable" | "warranty" | "internal_wear" | "dispute";
     notes?: string | null;
+    /** Dollars from the yard wizard — converted to cents server-side when cents omitted. */
+    damage_charge_cents?: number | null;
+    fuel_charge_cents?: number | null;
+    cleaning_charge_cents?: number | null;
+    environmental_fee_cents?: number | null;
   }) => rentalOpsFetch({ action: "dispose_damage", ...data }),
   /** L9.5: issue the customer-facing rental quote (share link + optional email). */
   issueRentalQuote: (data: {
@@ -140,6 +145,15 @@ export const rentalOpsApi = {
       share_url: string;
       email_status: string;
     }>,
+  /** Close a returned contract after the final invoice posts (or hard-close). */
+  closeContract: (data: {
+    contract_id: string;
+    hard_close?: boolean;
+    hard_close_reason?: string | null;
+  }) =>
+    rentalOpsFetch({ action: "close_contract", ...data }).then((payload) => ({
+      contract: requireRentalOpsObjectPayload(payload, "contract"),
+    })),
   /** L9.3: RPO conversion — creates (or returns) the deal for this contract. */
   convertRpoToDeal: (data: { contract_id: string }) =>
     rentalOpsFetch({ action: "convert_rpo_to_deal", ...data }) as Promise<{
