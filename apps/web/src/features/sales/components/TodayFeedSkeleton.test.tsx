@@ -21,7 +21,7 @@ describe("TodayFeedSkeleton", () => {
       `${HERO_EXPANDED_MIN_HEIGHT_PX}px`,
     );
     expect(screen.getByTestId("today-feed-skeleton-narrative")).toBeTruthy();
-    expect(screen.getByTestId("oem-price-impact-card-placeholder")).toBeTruthy();
+    expect(screen.queryByTestId("oem-price-impact-card-placeholder")).toBeNull();
     expect(screen.getByTestId("today-feed-skeleton-streak")).toBeTruthy();
     expect(screen.getByTestId("today-feed-skeleton-actions")).toBeTruthy();
     expect(screen.getByTestId("today-feed-skeleton-tomorrow")).toBeTruthy();

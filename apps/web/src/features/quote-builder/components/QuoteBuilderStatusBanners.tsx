@@ -11,6 +11,7 @@
  */
 
 import { ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import type {
   QuoteErrorCopy,
@@ -23,6 +24,7 @@ export interface QuoteBuilderStatusBannersProps {
   existingQuoteLoadError?: StatusBannerError;
   existingQuoteEditingMessage?: string | null;
   draftSavePausedMessage?: string | null;
+  oemImpactReviewHref?: string | null;
   pdfError?: StatusBannerError;
   saveSuccess?: boolean;
   saveErrorMessage?: StatusBannerError;
@@ -35,6 +37,7 @@ export function QuoteBuilderStatusBanners({
   existingQuoteLoadError = null,
   existingQuoteEditingMessage = null,
   draftSavePausedMessage = null,
+  oemImpactReviewHref = null,
   pdfError = null,
   saveSuccess = false,
   saveErrorMessage = null,
@@ -61,6 +64,24 @@ export function QuoteBuilderStatusBanners({
         <Card role="status" className="border-amber-500/30 bg-amber-500/5 p-4">
           <p className="text-sm font-semibold text-amber-300">Draft save paused</p>
           <p className="mt-1 text-sm text-amber-200/85">{draftSavePausedMessage}</p>
+        </Card>
+      ) : null}
+
+      {oemImpactReviewHref ? (
+        <Card role="alert" className="border-qep-orange/35 bg-qep-orange/[0.08] p-4">
+          <p className="text-sm font-semibold text-qep-orange-accessible">
+            OEM price review required
+          </p>
+          <p className="mt-1 text-sm text-foreground/85">
+            This quote has an active OEM price impact. Review the re-price before approval or send; no customer communication is sent automatically.
+          </p>
+          <Link
+            to={oemImpactReviewHref}
+            className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-qep-orange/30 bg-qep-orange/10 px-3 text-xs font-bold text-qep-orange-accessible hover:bg-qep-orange/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange-accessible"
+          >
+            Review OEM impact
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </Link>
         </Card>
       ) : null}
 

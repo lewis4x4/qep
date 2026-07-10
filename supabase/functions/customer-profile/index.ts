@@ -4,10 +4,17 @@ import {
   resolveCallerContext,
 } from "../_shared/dge-auth.ts";
 import {
-  type CustomerProfileRow,
   type FleetRow,
   mapCustomerProfileDto,
 } from "../_shared/customer-profile-dto.ts";
+import {
+  type CustomerDnaLookupInput,
+  CustomerDnaStoreError,
+  CustomerDnaTargetNotFoundError,
+  CustomerDnaWorkspaceError,
+  fetchExistingCustomerProfile,
+  resolveContactByLookup,
+} from "../_shared/customer-dna-store.ts";
 import {
   buildDgeRefreshDedupeKey,
   enqueueDgeRefreshJob,
@@ -36,7 +43,31 @@ const CUSTOMER_PROFILE_STALE_MS = Number.parseInt(
   10,
 );
 
-Deno.serve(async (req): Promise<Response> => {
+export interface CustomerProfileDependencies {
+  createAdminClient: typeof createAdminClient;
+  createCallerClient: typeof createCallerClient;
+  resolveCallerContext: typeof resolveCallerContext;
+  checkRateLimit: typeof checkRateLimit;
+  enqueueDgeRefreshJob: typeof enqueueDgeRefreshJob;
+  findOpenDgeRefreshJob: typeof findOpenDgeRefreshJob;
+  triggerDgeRefreshWorker: typeof triggerDgeRefreshWorker;
+}
+
+const defaultDependencies: CustomerProfileDependencies = {
+  createAdminClient,
+  createCallerClient,
+  resolveCallerContext,
+  checkRateLimit,
+  enqueueDgeRefreshJob,
+  findOpenDgeRefreshJob,
+  triggerDgeRefreshWorker,
+};
+
+export async function handleCustomerProfile(
+  req: Request,
+  overrides: Partial<CustomerProfileDependencies> = {},
+): Promise<Response> {
+  const dependencies = { ...defaultDependencies, ...overrides };
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") {
     return optionsResponse(origin);
@@ -51,10 +82,10 @@ Deno.serve(async (req): Promise<Response> => {
     });
   }
 
-  const adminClient = createAdminClient();
+  const adminClient = dependencies.createAdminClient();
 
   try {
-    const caller = await resolveCallerContext(req, adminClient);
+    const caller = await dependencies.resolveCallerContext(req, adminClient);
     if (!caller.isServiceRole && (!caller.userId || !caller.role)) {
       return fail({
         origin,
@@ -79,9 +110,21 @@ Deno.serve(async (req): Promise<Response> => {
       });
     }
 
-    const rateLimit = checkRateLimit({
+    const workspaceId = clean(caller.workspaceId);
+    if (!workspaceId) {
+      return fail({
+        origin,
+        status: caller.isServiceRole ? 400 : 403,
+        code: "WORKSPACE_REQUIRED",
+        message: caller.isServiceRole
+          ? "Service callers must supply x-workspace-id."
+          : "The authenticated user has no active workspace.",
+      });
+    }
+
+    const rateLimit = dependencies.checkRateLimit({
       key: caller.isServiceRole
-        ? "customer-profile:service"
+        ? `customer-profile:service:${workspaceId}`
         : `customer-profile:${caller.userId}`,
       limit: caller.isServiceRole ? 300 : 30,
     });
@@ -119,53 +162,24 @@ Deno.serve(async (req): Promise<Response> => {
       });
     }
 
-    let resolvedHubspotContactId = hubspotContactId;
-    if (!resolvedHubspotContactId && email) {
-      const { data: contactByEmail } = await adminClient
-        .from("crm_contacts")
-        .select("hubspot_contact_id")
-        .ilike("email", email)
-        .is("deleted_at", null)
-        .limit(1)
-        .maybeSingle();
-
-      resolvedHubspotContactId = clean(
-        contactByEmail?.hubspot_contact_id ?? null,
-      );
-    }
-
-    let query = adminClient.from("customer_profiles_extended").select("*")
-      .limit(1);
-    if (profileId) {
-      query = query.eq("id", profileId);
-    } else if (resolvedHubspotContactId) {
-      query = query.eq("hubspot_contact_id", resolvedHubspotContactId);
-    } else if (intellidealerCustomerId) {
-      query = query.eq("intellidealer_customer_id", intellidealerCustomerId);
-    }
-
-    const { data: profileData, error: profileError } = await query
-      .maybeSingle();
-    if (profileError) {
-      return fail({
-        origin,
-        status: 500,
-        code: "DB_READ_FAILED",
-        message: "Failed to fetch customer profile.",
-        details: { reason: profileError.message },
-      });
-    }
-
-    if (!profileData) {
-      return fail({
-        origin,
-        status: 404,
-        code: "NOT_FOUND",
-        message: "Customer profile not found.",
-      });
-    }
-
-    const profile = profileData as CustomerProfileRow;
+    const lookup: CustomerDnaLookupInput = {
+      customer_profiles_extended_id: profileId ?? undefined,
+      hubspot_contact_id: hubspotContactId ?? undefined,
+      intellidealer_customer_id: intellidealerCustomerId ?? undefined,
+      email: email ?? undefined,
+    };
+    const contact = await resolveContactByLookup(
+      adminClient,
+      lookup,
+      workspaceId,
+    );
+    const profile = await fetchExistingCustomerProfile(
+      adminClient,
+      lookup,
+      contact,
+      workspaceId,
+    );
+    if (!profile) throw new CustomerDnaTargetNotFoundError();
 
     if (!caller.isServiceRole && caller.role === "rep") {
       const hubspotId = profile.hubspot_contact_id;
@@ -178,15 +192,24 @@ Deno.serve(async (req): Promise<Response> => {
         });
       }
 
-      const callerClient = createCallerClient(caller.authHeader);
-      const { data: accessRow } = await callerClient
+      const callerClient = dependencies.createCallerClient(caller.authHeader);
+      const { data: accessRow, error: accessError } = await callerClient
         .from("crm_contacts")
         .select("id")
+        .eq("workspace_id", workspaceId)
         .eq("hubspot_contact_id", hubspotId)
         .is("deleted_at", null)
         .limit(1)
         .maybeSingle();
 
+      if (accessError) {
+        return fail({
+          origin,
+          status: 500,
+          code: "DB_READ_FAILED",
+          message: "Failed to validate rep customer access.",
+        });
+      }
       if (!accessRow) {
         return fail({
           origin,
@@ -234,7 +257,7 @@ Deno.serve(async (req): Promise<Response> => {
       caller.role === "admin" || caller.role === "manager" ||
       caller.role === "owner";
     if (includeFleet && managerFieldsVisible) {
-      const { data: fleetRows } = await adminClient
+      const { data: fleetRows, error: fleetError } = await adminClient
         .from("fleet_intelligence")
         .select(
           "id, equipment_serial, make, model, year, current_hours, predicted_replacement_date, replacement_confidence",
@@ -243,15 +266,24 @@ Deno.serve(async (req): Promise<Response> => {
         .order("predicted_replacement_date", { ascending: true })
         .limit(50);
 
+      if (fleetError) {
+        return fail({
+          origin,
+          status: 500,
+          code: "DB_READ_FAILED",
+          message: "Failed to fetch customer fleet details.",
+          details: { reason: fleetError.message },
+        });
+      }
+
       fleet = (fleetRows ?? []) as FleetRow[];
     }
 
-    const workspaceId = caller.workspaceId ?? "default";
     const dedupeKey = buildDgeRefreshDedupeKey(
       "customer_profile_refresh",
       profile.id,
     );
-    let openJob = await findOpenDgeRefreshJob(adminClient, {
+    let openJob = await dependencies.findOpenDgeRefreshJob(adminClient, {
       workspaceId,
       dedupeKey,
     });
@@ -259,7 +291,7 @@ Deno.serve(async (req): Promise<Response> => {
 
     if (refreshRequested) {
       try {
-        const enqueued = await enqueueDgeRefreshJob(adminClient, {
+        const enqueued = await dependencies.enqueueDgeRefreshJob(adminClient, {
           workspaceId,
           jobType: "customer_profile_refresh",
           dedupeKey,
@@ -283,7 +315,7 @@ Deno.serve(async (req): Promise<Response> => {
           last_error: null,
         };
         if (enqueued.enqueued) {
-          await triggerDgeRefreshWorker();
+          await dependencies.triggerDgeRefreshWorker();
         }
       } catch (error) {
         queueError = error instanceof Error ? error.message : String(error);
@@ -323,7 +355,7 @@ Deno.serve(async (req): Promise<Response> => {
       customerEin,
     });
 
-    await adminClient
+    const { error: auditError } = await adminClient
       .from("customer_profile_access_audit")
       .insert({
         customer_profile_id: profile.id,
@@ -334,9 +366,41 @@ Deno.serve(async (req): Promise<Response> => {
         access_mode: caller.isServiceRole ? "service" : "user",
         source: "customer-profile",
       });
+    if (auditError) {
+      return fail({
+        origin,
+        status: 500,
+        code: "AUDIT_WRITE_FAILED",
+        message: "Customer profile access could not be audited.",
+      });
+    }
 
     return ok(response, { origin });
   } catch (error) {
+    if (error instanceof CustomerDnaWorkspaceError) {
+      return fail({
+        origin,
+        status: 403,
+        code: "WORKSPACE_MISMATCH",
+        message: error.message,
+      });
+    }
+    if (error instanceof CustomerDnaTargetNotFoundError) {
+      return fail({
+        origin,
+        status: 404,
+        code: "NOT_FOUND",
+        message: error.message,
+      });
+    }
+    if (error instanceof CustomerDnaStoreError) {
+      return fail({
+        origin,
+        status: 500,
+        code: "DB_READ_FAILED",
+        message: "Customer profile identity resolution failed.",
+      });
+    }
     return fail({
       origin,
       status: 500,
@@ -347,4 +411,8 @@ Deno.serve(async (req): Promise<Response> => {
       },
     });
   }
-});
+}
+
+if (import.meta.main) {
+  Deno.serve((req) => handleCustomerProfile(req));
+}

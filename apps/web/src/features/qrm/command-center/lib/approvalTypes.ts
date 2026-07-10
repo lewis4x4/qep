@@ -8,6 +8,7 @@
 import type { QuoteApprovalConditionType } from "../../../../../../../shared/qep-moonshot-contracts";
 // WAVE polish (Slice 5): canonical quote-builder href helper.
 import { buildQuoteBuilderHref } from "@/features/quote-builder/lib/quote-route";
+import { extractOemRepriceApprovalEvidence } from "./oemRepriceApprovalEvidence";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -111,7 +112,7 @@ function normalizeReasonSummary(value: unknown): QuoteApprovalRow["reason_summar
   const reasons = Array.isArray(value.reasons)
     ? value.reasons.filter((reason): reason is string => typeof reason === "string")
     : null;
-  return { reasons };
+  return { ...value, reasons };
 }
 
 function formatCurrency(amount: number): string {
@@ -199,7 +200,7 @@ export interface QuoteApprovalRow {
   assigned_role: string | null;
   route_mode: "branch_sales_manager" | "branch_general_manager" | "owner_direct" | "admin_direct" | "admin_queue" | "owner_queue" | "manager_queue";
   policy_snapshot_json: Record<string, unknown> | null;
-  reason_summary_json: { reasons?: string[] | null } | null;
+  reason_summary_json: ({ reasons?: string[] | null } & Record<string, unknown>) | null;
   decision_note: string | null;
   status: string;
   requested_at: string;
@@ -456,13 +457,24 @@ export function normalizeApprovals(
       ? approval.net_total
       : Number(approval.net_total ?? 0);
     const headline = customerCompany || customerName || "Quote approval";
+    const oemReprice = extractOemRepriceApprovalEvidence(
+      approval.policy_snapshot_json,
+      approval.reason_summary_json,
+    );
     const detailBits = [
+      oemReprice ? "OEM reprice" : null,
       quoteNumber ? `Quote ${quoteNumber}` : null,
       branchName ? `Branch ${branchName}` : null,
       submittedByName ? `Rep ${submittedByName}` : null,
       assignedToName ? `Assigned to ${assignedToName}` : null,
       approval.version_number ? `v${approval.version_number}` : null,
-      Number.isFinite(marginPct) ? `Margin ${marginPct.toFixed(1)}%` : null,
+      Number.isFinite(marginPct)
+        ? `${oemReprice ? "Projected margin" : "Margin"} ${marginPct.toFixed(1)}%`
+        : null,
+      oemReprice?.totalDeltaCents != null
+        ? `Net change ${formatCurrency(oemReprice.totalDeltaCents / 100)}`
+        : null,
+      oemReprice ? "No customer auto-send" : null,
       approval.decision_note,
       ...(Array.isArray(approval.reason_summary_json?.reasons) ? approval.reason_summary_json.reasons.slice(0, 2) : []),
     ].filter(Boolean);
@@ -488,6 +500,10 @@ export function normalizeApprovals(
         status: approval.status,
         conditions: approval.conditions ?? [],
         evaluations: approval.evaluations ?? [],
+        approvalKind: oemReprice?.approvalKind ?? null,
+        policySnapshot: approval.policy_snapshot_json,
+        reasonSummary: approval.reason_summary_json,
+        oemReprice,
       },
     });
   }

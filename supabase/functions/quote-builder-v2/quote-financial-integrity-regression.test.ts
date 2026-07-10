@@ -30,6 +30,54 @@ Deno.test("quote version snapshots use computed financial metrics for approval r
   assert(amountIndex > financialsIndex);
 });
 
+Deno.test("OEM reprice approvals never advance or auto-send the customer quote", async () => {
+  const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
+  const policyGuard = source.indexOf(
+    'casePolicySnapshot.approval_kind === "oem_reprice"',
+  );
+  const noSendBranch = source.indexOf(
+    'reason: "oem_reprice_never_auto_send"',
+    policyGuard,
+  );
+  const generalAutoSend = source.indexOf(
+    "await tryAutoSendApprovedQuote({",
+    noSendBranch,
+  );
+  assert(policyGuard > -1, "OEM approval cases must be identified explicitly");
+  assert(noSendBranch > policyGuard, "OEM approval cases need an explicit no-send result");
+  assert(
+    generalAutoSend > noSendBranch,
+    "the general auto-send call must remain inside the non-OEM branch",
+  );
+  assert(source.includes("It must not advance the customer quote state"));
+});
+
+Deno.test("OEM withdrawal stays tenant-bound, no-status, and retry-aware", async () => {
+  const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
+  const withdrawStart = source.indexOf('action === "withdraw-approval-case"');
+  const withdrawEnd = source.indexOf('action === "approval-policy"', withdrawStart);
+  const withdraw = source.slice(withdrawStart, withdrawEnd);
+  assert(withdraw.includes("caseWorkspaceId !== userWorkspaceId"));
+  assert(withdraw.includes('withdrawPolicy.approval_kind === "oem_reprice"'));
+  assert(withdraw.includes("!isOemRepriceWithdrawal"));
+  assert(withdraw.includes('.eq("workspace_id", caseWorkspaceId)'));
+  assert(withdraw.includes('caseUpdateErr.code === "42501"'));
+  assert(withdraw.includes('caseUpdateErr.code === "40001"'));
+  assert(withdraw.includes('caseUpdateErr.code === "55000"'));
+  assert(
+    withdraw.indexOf("!isOemRepriceWithdrawal") <
+      withdraw.indexOf('.update({ status: "draft" })'),
+    "generic quote status reset must be guarded for OEM withdrawal",
+  );
+  const decideStart = source.indexOf('action === "decide-approval-case"');
+  const decide = source.slice(decideStart);
+  assert(decide.includes('caseUpdateErr.code === "42501"'));
+  assert(decide.includes('caseUpdateErr.code === "40001"'));
+  assert(decide.includes('caseUpdateErr.code === "55000"'));
+  assert(decide.includes('typeof caseRow.flow_approval_id === "string"'));
+  assert(decide.includes("caseRow.flow_approval_id.length > 0"));
+});
+
 Deno.test("equipment override persists as equipment_override_price_cents column", async () => {
   const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
   assert(source.includes("function resolveEquipmentOverridePriceCents("));

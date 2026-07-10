@@ -3,27 +3,17 @@
  * `QuoteBuilderV2Page.tsx`. Mechanical move — behavior unchanged.
  */
 
+import { lazy, Suspense } from "react";
 import type { CustomerStepProps } from "../steps/CustomerStep";
-import { CustomerStep } from "../steps/CustomerStep";
 import type { EquipmentStepProps } from "../steps/EquipmentStep";
-import { EquipmentStep } from "../steps/EquipmentStep";
 import type { ConfigureStepProps } from "../steps/ConfigureStep";
-import { ConfigureStep } from "../steps/ConfigureStep";
 import type { TradeInStepProps } from "../steps/TradeInStep";
-import { TradeInStep } from "../steps/TradeInStep";
 import type { PricingStepProps } from "../steps/PricingStep";
-import { PricingStep } from "../steps/PricingStep";
 import type { PromotionsStepProps } from "../steps/PromotionsStep";
-import { PromotionsStep } from "../steps/PromotionsStep";
 import type { FinancingStepProps } from "../steps/FinancingStep";
-import { FinancingStep } from "../steps/FinancingStep";
-import { DetailsStep } from "../steps/DetailsStep";
 import type { ReviewStepProps } from "../steps/ReviewStep";
-import { ReviewStep } from "../steps/ReviewStep";
 import type { DocumentStepProps } from "../steps/DocumentStep";
-import { DocumentStep } from "../steps/DocumentStep";
 import type { SendStepProps } from "../steps/SendStep";
-import { SendStep } from "../steps/SendStep";
 import {
   equipmentKeyForLine,
   metadataForCatalogEntry,
@@ -31,6 +21,54 @@ import {
 } from "../lib/quote-builder-page-helpers";
 import type { QuoteLineItemDraft } from "../../../../../../shared/qep-moonshot-contracts";
 import { useWizard } from "./useWizard";
+
+const CustomerStep = lazy(() =>
+  import("../steps/CustomerStep").then((module) => ({ default: module.CustomerStep })),
+);
+const EquipmentStep = lazy(() =>
+  import("../steps/EquipmentStep").then((module) => ({ default: module.EquipmentStep })),
+);
+const ConfigureStep = lazy(() =>
+  import("../steps/ConfigureStep").then((module) => ({ default: module.ConfigureStep })),
+);
+const TradeInStep = lazy(() =>
+  import("../steps/TradeInStep").then((module) => ({ default: module.TradeInStep })),
+);
+const PricingStep = lazy(() =>
+  import("../steps/PricingStep").then((module) => ({ default: module.PricingStep })),
+);
+const PromotionsStep = lazy(() =>
+  import("../steps/PromotionsStep").then((module) => ({ default: module.PromotionsStep })),
+);
+const FinancingStep = lazy(() =>
+  import("../steps/FinancingStep").then((module) => ({ default: module.FinancingStep })),
+);
+const DetailsStep = lazy(() =>
+  import("../steps/DetailsStep").then((module) => ({ default: module.DetailsStep })),
+);
+const ReviewStep = lazy(() =>
+  import("../steps/ReviewStep").then((module) => ({ default: module.ReviewStep })),
+);
+const DocumentStep = lazy(() =>
+  import("../steps/DocumentStep").then((module) => ({ default: module.DocumentStep })),
+);
+const SendStep = lazy(() =>
+  import("../steps/SendStep").then((module) => ({ default: module.SendStep })),
+);
+
+function QuoteWizardStepLoading({ step }: { step: string }) {
+  return (
+    <div
+      role="status"
+      aria-label={`Loading ${step} quote step`}
+      className="space-y-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4"
+    >
+      <div className="h-4 w-32 animate-pulse rounded bg-white/[0.08] motion-reduce:animate-none" />
+      <div className="h-24 animate-pulse rounded-xl bg-white/[0.045] motion-reduce:animate-none" />
+      <span className="sr-only">Loading {step} quote step…</span>
+    </div>
+  );
+}
 
 export type QuoteWizardStepRouterProps =
   CustomerStepProps
@@ -74,7 +112,7 @@ export function QuoteWizardStepRouter(props: QuoteWizardStepRouterProps) {
   };
 
   return (
-    <>
+    <Suspense fallback={<QuoteWizardStepLoading step={step} />}>
       {step === "customer" && (
         <CustomerStep
           aiPrompt={props.aiPrompt}
@@ -291,6 +329,6 @@ export function QuoteWizardStepRouter(props: QuoteWizardStepRouterProps) {
           onSaveFollowUp={props.onSaveFollowUp}
         />
       )}
-    </>
+    </Suspense>
   );
 }

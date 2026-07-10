@@ -152,6 +152,7 @@ export function QuoteBuilderV2PageMobileShell({
   existingQuoteLoadError,
   existingQuoteEditingMessage,
   draftSavePausedMessage,
+  oemImpactReviewHref,
   currentWizardStepNumber,
   marginPct,
   marginAmount,
@@ -290,6 +291,7 @@ export function QuoteBuilderV2PageMobileShell({
           <QuoteBuilderStatusBanners
             existingQuoteLoadError={existingQuoteLoadError}
             existingQuoteEditingMessage={existingQuoteEditingMessage}
+            oemImpactReviewHref={oemImpactReviewHref}
           />
         </div>
 

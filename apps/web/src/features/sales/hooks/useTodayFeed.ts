@@ -100,6 +100,7 @@ export function useTodayFeed() {
   const priceImpactsQuery = useQuery({
     queryKey: REP_PRICE_IMPACTS_QUERY_KEY,
     queryFn: fetchRepPriceImpacts,
+    enabled: loadBriefingAfterFirstPaint,
     staleTime: 60 * 1000,
     refetchInterval: 2 * 60 * 1000,
   });
@@ -156,13 +157,14 @@ export function useTodayFeed() {
     priceImpacts: priceImpactsQuery.data ?? null,
     priceImpactsLoading: priceImpactsQuery.isLoading,
     priceImpactsError: priceImpactsQuery.error,
+    refetchPriceImpacts: priceImpactsQuery.refetch,
     timeOfDay,
     // Keep the LLM-backed briefing off the first-paint loading gate. The
     // locally-derived hero/action copy can render from the fast pipeline path;
-    // AI prep/priority cards hydrate when the briefing query resolves after
-    // first paint. Price impacts stay in the gate to avoid mid-page OEM card CLS.
-    isLoading: pipelineQuery.isLoading || priceImpactsQuery.isLoading,
-    error: pipelineQuery.error || priceImpactsQuery.error || briefingQuery.error,
+    // first paint. OEM impacts are a compact, optional action chip and hydrate
+    // after first paint; they must never block the rep's core Today workflow.
+    isLoading: pipelineQuery.isLoading,
+    error: pipelineQuery.error || briefingQuery.error,
     briefingError: briefingQuery.error,
     pipelineError: pipelineQuery.error,
     hasBriefing: Boolean(briefing),

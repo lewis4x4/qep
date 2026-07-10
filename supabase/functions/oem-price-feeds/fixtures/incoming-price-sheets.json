@@ -1,0 +1,138 @@
+{
+  "sheets": [
+    {
+      "sheet": {
+        "id": "sheet-asv-2026-07",
+        "workspace_id": "fixture-workspace",
+        "brand_id": "brand-asv",
+        "status": "extracted",
+        "sheet_type": "both",
+        "published_at": null,
+        "supersedes_price_sheet_id": "sheet-asv-2026-01"
+      },
+      "items": [
+        {
+          "id": "asv-next-rt40",
+          "item_type": "model",
+          "extracted": { "model_code": "rt 40", "name_display": "RT-40", "list_price_cents": 11000000 },
+          "action": "update",
+          "review_status": "pending",
+          "applied_at": null
+        },
+        {
+          "id": "asv-next-rt50",
+          "item_type": "model",
+          "extracted": { "model_code": "RT50", "name_display": "RT-50", "list_price_cents": 19000000 },
+          "action": "update",
+          "review_status": "pending",
+          "applied_at": null
+        },
+        {
+          "id": "asv-next-rt60",
+          "item_type": "model",
+          "extracted": { "model_code": "RT-60", "name_display": "RT-60", "list_price_cents": 30000000 },
+          "action": "no_change",
+          "review_status": "approved",
+          "applied_at": null
+        },
+        {
+          "id": "asv-next-new100",
+          "item_type": "model",
+          "extracted": { "model_code": "NEW-100", "name_display": "NEW-100", "list_price_cents": 40000000 },
+          "action": "create",
+          "review_status": "pending",
+          "applied_at": null
+        },
+        {
+          "id": "asv-next-freight-se",
+          "item_type": "freight",
+          "extracted": {
+            "state_codes": ["FL", "GA"],
+            "zone_name": "Southeast",
+            "freight_large_cents": 225000,
+            "freight_small_cents": 90000
+          },
+          "action": "update",
+          "review_status": "pending",
+          "applied_at": null
+        },
+        {
+          "id": "asv-rejected-noise",
+          "item_type": "model",
+          "extracted": { "model_code": "REJECTED", "name_display": "Rejected", "list_price_cents": 1 },
+          "action": "create",
+          "review_status": "rejected",
+          "applied_at": null
+        }
+      ],
+      "programs": [
+        {
+          "id": "asv-next-rebate",
+          "program_code": "ASV CASH 26",
+          "program_type": "cash_in_lieu",
+          "extracted": {
+            "program_code": "ASV CASH 26",
+            "program_type": "cash_in_lieu",
+            "name": "ASV cash allowance",
+            "details": { "rebates": [{ "model_code": "RT-40", "amount_cents": 600000 }] },
+            "program_rules_notes": "Retail purchase only"
+          },
+          "action": "update",
+          "review_status": "pending",
+          "applied_at": null
+        },
+        {
+          "id": "asv-next-finance",
+          "program_code": "ASV-FIN-26",
+          "program_type": "low_rate_financing",
+          "extracted": {
+            "program_code": "ASV-FIN-26",
+            "program_type": "low_rate_financing",
+            "name": "ASV promotional financing",
+            "details": { "terms": [{ "months": 60, "rate_pct": 0.0099 }] },
+            "program_rules_notes": "Commercial buyers with preapproval"
+          },
+          "action": "update",
+          "review_status": "pending",
+          "applied_at": null
+        },
+        {
+          "id": "asv-next-aged",
+          "program_code": "ASV-AGED-26",
+          "program_type": "aged_inventory",
+          "extracted": {
+            "program_code": "ASV-AGED-26",
+            "program_type": "aged_inventory",
+            "name": "Aged inventory support",
+            "details": { "rebates": [{ "model_code": "RT-50", "amount_cents": 350000 }] }
+          },
+          "action": "create",
+          "review_status": "pending",
+          "applied_at": null
+        }
+      ]
+    },
+    {
+      "sheet": {
+        "id": "sheet-bobcat-2026-07",
+        "workspace_id": "fixture-workspace",
+        "brand_id": "brand-bobcat",
+        "status": "extracted",
+        "sheet_type": "price_book",
+        "published_at": null,
+        "supersedes_price_sheet_id": "sheet-bobcat-2026-01"
+      },
+      "items": [
+        {
+          "id": "bobcat-next-rt40",
+          "item_type": "model",
+          "extracted": { "model_code": "RT40", "name_display": "Bobcat RT-40", "list_price_cents": 7000000 },
+          "action": "no_change",
+          "review_status": "approved",
+          "applied_at": null
+        }
+      ],
+      "programs": []
+    }
+  ]
+}

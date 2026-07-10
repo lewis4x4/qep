@@ -64455,7 +64455,9 @@ export type Database = {
           dedupe_key: string
           job_id: string
           job_type: string
+          lease_token: string
           request_payload: Json
+          requested_by: string | null
           workspace_id: string
         }[]
       }
@@ -64532,6 +64534,7 @@ export type Database = {
         Args: {
           p_job_id: string
           p_last_error?: string
+          p_lease_token: string
           p_result_payload?: Json
           p_status: string
         }
@@ -69380,4 +69383,3 @@ export const Constants = {
 } as const
 
 export type UserRole = Database["public"]["Enums"]["user_role"]
-

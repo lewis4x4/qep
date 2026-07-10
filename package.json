@@ -6,6 +6,7 @@
     "apps/*"
   ],
   "dependencies": {
+    "@sentry/node": "^7.120.4",
     "@supabase/supabase-js": "^2.49.1"
   },
   "overrides": {
@@ -25,7 +26,7 @@
     "security:deps": "node ./scripts/security/dependency-audit.mjs",
     "pressure:parts": "bun ./scripts/parts-service-pressure/run.mjs",
     "test:edge:tax": "deno test supabase/functions/tax-calculator/tax-logic.test.ts --allow-env",
-    "test:edge:dge": "deno test supabase/functions/_shared/market-valuation-logic.test.ts supabase/functions/_shared/dge-refresh-state.test.ts supabase/functions/_shared/dge-refresh-jobs.test.ts supabase/functions/_shared/dge-auth.test.ts",
+    "test:edge:dge": "deno test supabase/functions/_shared/market-valuation-logic.test.ts supabase/functions/_shared/dge-refresh-state.test.ts supabase/functions/_shared/dge-refresh-jobs.test.ts supabase/functions/_shared/dge-auth.test.ts --allow-env",
     "dge:mixed-load": "bun ./scripts/dge/mixed-load.ts",
     "test": "bun run test:unit && bun run test:integration",
     "test:unit": "bun ./scripts/run-unit-tests.mjs",

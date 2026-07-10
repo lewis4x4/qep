@@ -16,7 +16,6 @@ import {
   deltaPct,
   dollarsToCents,
   evaluateMarginGate,
-  freightValuesFromExtracted,
   impactStateFor,
   isStockLockedLine,
   MATERIALITY_LINE_PCT_GT,
@@ -25,9 +24,38 @@ import {
   normalizeModelCode,
   parseStoredPercent,
 } from "./impact-logic.ts";
+import {
+  canonicalizePriceSheetRows,
+  type CanonicalPriceSheetDiff,
+  diffCanonicalPriceSheetRows,
+  laneForPriceSheetItemType,
+  lanesForPriceSheetType,
+  type PriceSheetHeader,
+  type PriceSheetItemSourceRow,
+  type PriceSheetLane,
+  type PriceSheetProgramSourceRow,
+  type PriorPriceSheetIdsByLane,
+  selectPriorPriceSheetIdsByLane,
+} from "./price-sheet-diff.ts";
+import {
+  collectAllKeysetRows,
+  type KeysetCollection,
+  type KeysetPage,
+} from "./keyset-pagination.ts";
+import {
+  type BrandScope,
+  type ContextualCatalogChange,
+  contextualCatalogChangesForQuote,
+  currentQuoteAssignedRepId,
+  isCustomerPriceLockActive,
+  lineMatchesBrand,
+  normalizeBrandIdentity,
+  orderedChangeCategories,
+} from "./quote-impact-logic.ts";
 
 const OPEN_QUOTE_STATUSES = [
   "draft",
+  "draft_low_margin",
   "pending_approval",
   "approved",
   "approved_with_conditions",
@@ -35,10 +63,7 @@ const OPEN_QUOTE_STATUSES = [
   "ready",
   "sent",
   "viewed",
-  "expiring",
 ];
-const OEM_REQUOTE_REASON =
-  "OEM price update created a material reprice impact for this quote.";
 const APPROVAL_POLICY = {
   numericApprovalThresholds: "margin_floor_only",
   requireManagerReviewForChangeTypes: [
@@ -52,6 +77,7 @@ const APPROVAL_POLICY = {
 
 type ServiceClient = SupabaseClient<any, "public", any>;
 type JsonObject = Record<string, unknown>;
+type IdJsonObject = JsonObject & { id: string };
 
 interface AuthContext {
   userId: string;
@@ -62,30 +88,13 @@ interface AuthContext {
   origin: string | null;
 }
 
-interface PriceSheetRow {
-  id: string;
-  workspace_id: string;
+interface PriceSheetRow extends PriceSheetHeader {
   brand_id: string;
-  status: string;
-  sheet_type: string | null;
   effective_from: string | null;
-  supersedes_price_sheet_id?: string | null;
+  published_at: string | null;
 }
 
-interface ItemDiff {
-  itemType: "list_price" | "freight" | "rebate" | "incentive";
-  modelCode: string | null;
-  normalizedCode: string | null;
-  nameDisplay: string | null;
-  oldPriceCents: number | null;
-  newPriceCents: number | null;
-  deltaCents: number;
-  deltaPct: number | null;
-  changeKind: "new" | "removed" | "increased" | "decreased" | "unchanged";
-  priorItemId: string | null;
-  newItemId: string | null;
-  metadata: JsonObject;
-}
+type ItemDiff = CanonicalPriceSheetDiff;
 
 interface ImpactLineDraft {
   quotePackageLineItemId: string | null;
@@ -101,6 +110,7 @@ interface ImpactLineDraft {
   isYardStock: boolean;
   suppressedByStockLock: boolean;
   suppressionReason: string | null;
+  quoteLineSnapshot: JsonObject;
   metadata: JsonObject;
 }
 
@@ -122,15 +132,43 @@ interface ImpactDraft {
   oldCommissionCents: number | null;
   projectedCommissionCents: number | null;
   commissionDeltaCents: number | null;
+  changeCategories: Array<"list_price" | "freight" | "rebate" | "incentive">;
+  catalogChanges: ContextualCatalogChange[];
+  contextSnapshot: JsonObject;
+  customerCompanyId: string | null;
+  suppressedByCustomerLock: boolean;
+  customerPriceLockReason: string | null;
+  customerPriceLockExpiresAt: string | null;
   state: "quiet" | "visible";
   lines: ImpactLineDraft[];
+}
+
+interface ScanEvidence {
+  scanStartedAt: string;
+  scanCompletedAt: string;
+  candidateQuoteCount: number;
+  candidateLineCount: number;
+  quotePageCount: number;
+  linePageCount: number;
+  quotePricingEpoch: number;
+  scanComplete: true;
+}
+
+interface StreamPreview {
+  streamKind: PriceSheetLane;
+  priorPriceSheetId: string | null;
+  itemDiffs: ItemDiff[];
+  impacts: ImpactDraft[];
 }
 
 interface PreviewBuild {
   sheet: PriceSheetRow;
   priorPriceSheetId: string | null;
+  priorPriceSheetIdsByLane: PriorPriceSheetIdsByLane;
   itemDiffs: ItemDiff[];
   impacts: ImpactDraft[];
+  streams: StreamPreview[];
+  scanEvidence: ScanEvidence;
 }
 
 const createAdminClient = (): ServiceClient =>
@@ -165,54 +203,20 @@ function firstDollarsAsCents(...values: unknown[]): number | null {
   }
   return null;
 }
-function changeKind(
-  oldPrice: number | null,
-  newPrice: number | null,
-): ItemDiff["changeKind"] {
-  if (oldPrice === null && newPrice !== null) return "new";
-  if (oldPrice !== null && newPrice === null) return "removed";
-  if (oldPrice === null || newPrice === null || oldPrice === newPrice) {
-    return "unchanged";
-  }
-  return newPrice > oldPrice ? "increased" : "decreased";
-}
-function diffOldPrice(item: JsonObject): number | null {
-  const diff = asObject(item.diff);
-  const lp = asObject(
-    diff.list_price_cents ?? diff.listPriceCents ?? diff.list_price,
-  );
-  return firstCents(lp.old, lp.from, lp.previous);
-}
-
 /**
- * Page through a query in fixed-size batches instead of a single capped
- * .limit(), so large workspaces aren't silently truncated (a quote past the
- * old 1000-cap was never scanned/flagged; a rep summary past 200 under-counted).
- * The caller supplies a builder that applies its filters + a STABLE .order
- * (use a unique key like id) + .range(from, to). A generous safety cap prevents
- * runaway; if hit, we log rather than fail silently.
+ * Exhaust a query with `id > cursor`, stable ascending id order, and no global
+ * row ceiling. Any page error/order violation rejects the whole scan rather
+ * than returning partial coverage as a successful preview/publish.
  */
-async function loadAllPages<T>(
+function loadAllById<T extends { id: string }>(
   build: (
-    from: number,
-    to: number,
-  ) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+    afterId: string | null,
+    limit: number,
+  ) => PromiseLike<KeysetPage<T>>,
   label: string,
   pageSize = 1000,
-  maxRows = 50_000,
-): Promise<T[]> {
-  const out: T[] = [];
-  for (let from = 0; from < maxRows; from += pageSize) {
-    const { data, error } = await build(from, from + pageSize - 1);
-    if (error) throw new Error(error.message);
-    const rows = data ?? [];
-    out.push(...rows);
-    if (rows.length < pageSize) return out;
-  }
-  console.warn(
-    `[oem-price-feeds] ${label} hit ${maxRows}-row safety cap; results truncated`,
-  );
-  return out;
+): Promise<KeysetCollection<T>> {
+  return collectAllKeysetRows(build, label, (row) => row.id, pageSize);
 }
 
 async function loadSheet(
@@ -220,187 +224,178 @@ async function loadSheet(
   priceSheetId: string,
 ): Promise<PriceSheetRow> {
   const { data, error } = await admin.from("qb_price_sheets").select(
-    "id, workspace_id, brand_id, status, sheet_type, effective_from, supersedes_price_sheet_id",
+    "id, workspace_id, brand_id, status, sheet_type, effective_from, published_at, supersedes_price_sheet_id",
   ).eq("id", priceSheetId).maybeSingle();
   if (error) throw new Error(`Failed to load price sheet: ${error.message}`);
   if (!data) throw new Error("Price sheet not found");
   return data as PriceSheetRow;
 }
 
-async function loadPriorPriceSheetId(
+const PRICE_SHEET_HEADER_COLUMNS =
+  "id, workspace_id, brand_id, status, sheet_type, effective_from, published_at, supersedes_price_sheet_id";
+
+async function loadPriceSheetsByIds(
+  admin: ServiceClient,
+  ids: string[],
+): Promise<Map<string, PriceSheetRow>> {
+  if (!ids.length) return new Map();
+  const { data, error } = await admin.from("qb_price_sheets").select(
+    PRICE_SHEET_HEADER_COLUMNS,
+  ).in("id", [...new Set(ids)]);
+  if (error) {
+    throw new Error(`Failed to load predecessor sheets: ${error.message}`);
+  }
+  return new Map(
+    ((data ?? []) as PriceSheetRow[]).map((sheet) => [sheet.id, sheet]),
+  );
+}
+
+async function loadPriorPriceSheetsByLane(
   admin: ServiceClient,
   sheet: PriceSheetRow,
-): Promise<string | null> {
-  if (sheet.supersedes_price_sheet_id) return sheet.supersedes_price_sheet_id;
-  const { data, error } = await admin.from("qb_price_sheets").select("id").eq(
-    "workspace_id",
-    sheet.workspace_id,
-  ).eq("brand_id", sheet.brand_id).eq("status", "published").neq("id", sheet.id)
-    .order("published_at", { ascending: false, nullsFirst: false }).limit(1)
-    .maybeSingle();
-  if (error) {
-    throw new Error(`Failed to load prior price sheet: ${error.message}`);
+): Promise<{
+  ids: PriorPriceSheetIdsByLane;
+  sheets: Partial<Record<PriceSheetLane, PriceSheetRow | null>>;
+}> {
+  const { data: pinned, error: pinnedError } = await admin.from(
+    "qb_price_sheet_lineage",
+  ).select("lane, predecessor_price_sheet_id").eq("price_sheet_id", sheet.id);
+  if (pinnedError) {
+    throw new Error(
+      `Failed to load price-sheet lineage: ${pinnedError.message}`,
+    );
   }
-  return (data as { id?: string } | null)?.id ?? null;
+
+  let ids: PriorPriceSheetIdsByLane;
+  if ((pinned ?? []).length) {
+    ids = {};
+    for (const row of pinned as JsonObject[]) {
+      const lane = firstString(row.lane) as PriceSheetLane | null;
+      if (lane !== "price_book" && lane !== "retail_programs") continue;
+      ids[lane] = firstString(row.predecessor_price_sheet_id);
+    }
+    for (const lane of lanesForPriceSheetType(sheet.sheet_type)) {
+      if (!(lane in ids)) {
+        throw new Error(
+          `Pinned price-sheet lineage is missing the ${lane} lane`,
+        );
+      }
+    }
+  } else {
+    const candidates = (await loadAllById<PriceSheetRow>(
+      (afterId, limit) => {
+        let query = admin.from("qb_price_sheets").select(
+          PRICE_SHEET_HEADER_COLUMNS,
+        ).eq("workspace_id", sheet.workspace_id).eq("brand_id", sheet.brand_id)
+          .in("status", ["published", "superseded"]).neq("id", sheet.id)
+          .order("id", { ascending: true }).limit(limit);
+        if (afterId) query = query.gt("id", afterId);
+        return query;
+      },
+      "prior price sheets",
+    )).rows;
+    ids = selectPriorPriceSheetIdsByLane(sheet, candidates);
+  }
+
+  const byId = await loadPriceSheetsByIds(
+    admin,
+    Object.values(ids).filter((id): id is string => Boolean(id)),
+  );
+  const sheets: Partial<Record<PriceSheetLane, PriceSheetRow | null>> = {};
+  for (const lane of lanesForPriceSheetType(sheet.sheet_type)) {
+    const id = ids[lane] ?? null;
+    const prior = id ? byId.get(id) ?? null : null;
+    if (id && !prior) {
+      throw new Error(`Pinned ${lane} predecessor ${id} was not found`);
+    }
+    if (
+      prior &&
+      (prior.workspace_id !== sheet.workspace_id ||
+        prior.brand_id !== sheet.brand_id)
+    ) {
+      throw new Error(`Pinned ${lane} predecessor is outside the sheet scope`);
+    }
+    sheets[lane] = prior;
+  }
+  return { ids, sheets };
+}
+
+interface PriceSheetSourceRows {
+  items: PriceSheetItemSourceRow[];
+  programs: PriceSheetProgramSourceRow[];
+}
+
+async function loadPriceSheetSourceRows(
+  admin: ServiceClient,
+  priceSheetId: string,
+): Promise<PriceSheetSourceRows> {
+  const [items, programs] = await Promise.all([
+    loadAllById<PriceSheetItemSourceRow>(
+      (afterId, limit) => {
+        let query = admin.from("qb_price_sheet_items").select(
+          "id, item_type, extracted, action, review_status, applied_at",
+        ).eq("price_sheet_id", priceSheetId).order("id", { ascending: true })
+          .limit(limit);
+        if (afterId) query = query.gt("id", afterId);
+        return query;
+      },
+      `price-sheet items for ${priceSheetId}`,
+    ),
+    loadAllById<PriceSheetProgramSourceRow>(
+      (afterId, limit) => {
+        let query = admin.from("qb_price_sheet_programs").select(
+          "id, program_code, program_type, extracted, action, review_status, applied_at",
+        ).eq("price_sheet_id", priceSheetId).order("id", { ascending: true })
+          .limit(limit);
+        if (afterId) query = query.gt("id", afterId);
+        return query;
+      },
+      `price-sheet programs for ${priceSheetId}`,
+    ),
+  ]);
+  return { items: items.rows, programs: programs.rows };
 }
 
 async function buildItemDiffs(
   admin: ServiceClient,
   sheet: PriceSheetRow,
+  priorSheets: Partial<Record<PriceSheetLane, PriceSheetRow | null>>,
 ): Promise<ItemDiff[]> {
-  const { data: items, error } = await admin.from("qb_price_sheet_items")
-    .select(
-      "id, item_type, extracted, proposed_model_id, proposed_attachment_id, action, diff",
-    ).eq("price_sheet_id", sheet.id);
-  if (error) {
-    throw new Error(`Failed to load price-sheet items: ${error.message}`);
-  }
-  const modelItems = (items ?? []).filter((item: JsonObject) =>
-    item.item_type === "model"
-  ) as JsonObject[];
-
-  const existingByCode = new Map<string, JsonObject>();
-  if (modelItems.length) {
-    const models = await loadAllPages<JsonObject>(
-      (from, to) =>
-        admin.from("qb_equipment_models").select(
-          "id, model_code, name_display, list_price_cents",
-        ).eq("workspace_id", sheet.workspace_id).eq(
-          "brand_id",
-          sheet.brand_id,
-        ).order("id", { ascending: true }).range(from, to),
-      "qb_equipment_models",
-    );
-    for (const model of models) {
-      const code = normalizeModelCode(model.model_code);
-      if (code) existingByCode.set(code, model);
-    }
-  }
-
-  const diffs: ItemDiff[] = [];
-  for (const item of modelItems) {
-    const extracted = asObject(item.extracted);
-    const modelCode = firstString(
-      extracted.model_code,
-      extracted.modelCode,
-      extracted.model,
-    );
-    const normalizedCode = normalizeModelCode(modelCode);
-    const existing = normalizedCode
-      ? existingByCode.get(normalizedCode)
-      : undefined;
-    const oldPrice = diffOldPrice(item) ??
-      firstCents(existing?.list_price_cents);
-    const newPrice = firstCents(
-      extracted.list_price_cents,
-      extracted.listPriceCents,
-      extracted.price_cents,
-    );
-    const delta = (newPrice ?? 0) - (oldPrice ?? 0);
-    diffs.push({
-      itemType: "list_price",
-      modelCode,
-      normalizedCode,
-      nameDisplay: firstString(
-        extracted.name_display,
-        extracted.name,
-        existing?.name_display,
-      ),
-      oldPriceCents: oldPrice,
-      newPriceCents: newPrice,
-      deltaCents: delta,
-      deltaPct: deltaPct(oldPrice, newPrice),
-      changeKind: changeKind(oldPrice, newPrice),
-      priorItemId: typeof existing?.id === "string" ? existing.id : null,
-      newItemId: typeof item.id === "string" ? item.id : null,
-      metadata: { action: item.action ?? null, source: "qb_price_sheet_items" },
-    });
-  }
-
-  const { data: programs } = await admin.from("qb_price_sheet_programs").select(
-    "id, program_code, program_type, action, extracted",
-  ).eq("price_sheet_id", sheet.id);
-  for (const program of (programs ?? []) as JsonObject[]) {
-    const programType = String(program.program_type ?? "");
-    const itemType: ItemDiff["itemType"] =
-      programType.includes("rebate") || programType.includes("cash")
-        ? "rebate"
-        : "incentive";
-    diffs.push({
-      itemType,
-      modelCode: null,
-      normalizedCode: null,
-      nameDisplay: firstString(
-        program.program_code,
-        asObject(program.extracted).name,
-      ),
-      oldPriceCents: null,
-      newPriceCents: null,
-      deltaCents: 0,
-      deltaPct: null,
-      changeKind: program.action === "create" ? "new" : "unchanged",
-      priorItemId: null,
-      newItemId: typeof program.id === "string" ? program.id : null,
-      metadata: {
-        program_type: program.program_type ?? null,
-        action: program.action ?? null,
-        source: "qb_price_sheet_programs",
-      },
-    });
-  }
-
-  // Freight changes (item_type='freight'): compare the new sheet's zone freight
-  // against the current qb_freight_zones for the brand. These surface as
-  // catalog diffs in the admin preview (changedItemCount + items) so a reviewer
-  // sees a freight move before publishing — they do NOT yet drive per-quote
-  // impact (that needs the quote's persisted destination; tracked separately).
-  const freightItems = (items ?? []).filter((item: JsonObject) =>
-    item.item_type === "freight"
-  ) as JsonObject[];
-  if (freightItems.length) {
-    const { data: priorZones } = await admin.from("qb_freight_zones")
-      .select("zone_name, state_codes, freight_large_cents, freight_small_cents")
-      .eq("brand_id", sheet.brand_id);
-    const priorZoneRows = (priorZones ?? []) as JsonObject[];
-    for (const item of freightItems) {
-      const extracted = asObject(item.extracted);
-      const stateCodes = Array.isArray(extracted.state_codes)
-        ? (extracted.state_codes as unknown[]).map((s) => String(s).toUpperCase())
-        : [];
-      const next = freightValuesFromExtracted(extracted);
-      const prior = priorZoneRows.find((zone) => {
-        const zoneStates = Array.isArray(zone.state_codes)
-          ? (zone.state_codes as unknown[]).map((s) => String(s).toUpperCase())
-          : [];
-        return zoneStates.some((s) => stateCodes.includes(s));
-      });
-      const oldLarge = prior ? centsValue(prior.freight_large_cents) : null;
-      const oldSmall = prior ? centsValue(prior.freight_small_cents) : null;
-      diffs.push({
-        itemType: "freight",
-        modelCode: null,
-        normalizedCode: null,
-        nameDisplay: firstString(extracted.zone_name) ??
-          (stateCodes.length ? `Freight: ${stateCodes.join(", ")}` : "Freight"),
-        oldPriceCents: oldLarge,
-        newPriceCents: next.largeCents,
-        deltaCents: (next.largeCents ?? 0) - (oldLarge ?? 0),
-        deltaPct: deltaPct(oldLarge, next.largeCents),
-        changeKind: changeKind(oldLarge, next.largeCents),
-        priorItemId: null,
-        newItemId: typeof item.id === "string" ? item.id : null,
-        metadata: {
-          source: "qb_freight_zones",
-          state_codes: stateCodes,
-          zone_name: extracted.zone_name ?? null,
-          new_freight_small_cents: next.smallCents,
-          prior_freight_small_cents: oldSmall,
-          action: item.action ?? null,
-        },
-      });
-    }
-  }
-  return diffs;
+  const uniquePriors = [...new Map(
+    Object.values(priorSheets).filter((value): value is PriceSheetRow =>
+      Boolean(value)
+    )
+      .map((value) => [value.id, value]),
+  ).values()];
+  const [incomingSource, ...priorSources] = await Promise.all([
+    loadPriceSheetSourceRows(admin, sheet.id),
+    ...uniquePriors.map((prior) => loadPriceSheetSourceRows(admin, prior.id)),
+  ]);
+  const supportedLanes = new Set(lanesForPriceSheetType(sheet.sheet_type));
+  const incomingRows = canonicalizePriceSheetRows(
+    sheet,
+    incomingSource.items,
+    incomingSource.programs,
+    { mode: sheet.status === "published" ? "published" : "candidate" },
+  ).filter((row) =>
+    supportedLanes.has(laneForPriceSheetItemType(row.itemType))
+  );
+  const priorSourceById = new Map(
+    uniquePriors.map((prior, index) => [prior.id, priorSources[index]]),
+  );
+  const priorRows = lanesForPriceSheetType(sheet.sheet_type).flatMap((lane) => {
+    const prior = priorSheets[lane];
+    if (!prior) return [];
+    const source = priorSourceById.get(prior.id);
+    if (!source) return [];
+    return canonicalizePriceSheetRows(
+      prior,
+      source.items,
+      source.programs,
+      { mode: "published" },
+    ).filter((row) => laneForPriceSheetItemType(row.itemType) === lane);
+  });
+  return diffCanonicalPriceSheetRows(priorRows, incomingRows);
 }
 
 function quoteLinesFromLegacyEquipment(quote: JsonObject): JsonObject[] {
@@ -472,49 +467,167 @@ async function loadMarginFloor(
     : null;
 }
 
+async function loadBrandScope(
+  admin: ServiceClient,
+  sheet: PriceSheetRow,
+): Promise<BrandScope> {
+  const { data, error } = await admin.from("qb_brands").select(
+    "id, workspace_id, code, name",
+  ).eq("id", sheet.brand_id).eq("workspace_id", sheet.workspace_id)
+    .maybeSingle();
+  if (error) throw new Error(`Failed to load OEM brand: ${error.message}`);
+  if (!data) throw new Error("OEM brand is outside the sheet workspace");
+  return {
+    id: String(data.id),
+    workspaceId: String(data.workspace_id),
+    code: String(data.code),
+    name: String(data.name),
+  };
+}
+
+async function loadProgramIdMap(
+  admin: ServiceClient,
+  sheet: PriceSheetRow,
+): Promise<Record<string, string>> {
+  const collection = await loadAllById<IdJsonObject>(
+    (afterId, limit) => {
+      let query = admin.from("qb_programs").select("id, program_code").eq(
+        "workspace_id",
+        sheet.workspace_id,
+      ).eq("brand_id", sheet.brand_id).order("id", { ascending: true }).limit(
+        limit,
+      );
+      if (afterId) query = query.gt("id", afterId);
+      return query;
+    },
+    "OEM program context",
+  );
+  const result: Record<string, string> = {};
+  for (const row of collection.rows) {
+    const code = normalizeBrandIdentity(row.program_code);
+    if (!code) continue;
+    if (result[code] && result[code] !== row.id) {
+      throw new Error(`Ambiguous normalized OEM program code ${code}`);
+    }
+    result[code] = row.id;
+  }
+  return result;
+}
+
+async function loadPriceLockCompanies(
+  admin: ServiceClient,
+  workspaceId: string,
+  companyIds: string[],
+): Promise<Map<string, JsonObject>> {
+  const result = new Map<string, JsonObject>();
+  const uniqueIds = [...new Set(companyIds)].sort();
+  const ID_CHUNK = 200;
+  for (let index = 0; index < uniqueIds.length; index += ID_CHUNK) {
+    const batch = uniqueIds.slice(index, index + ID_CHUNK);
+    const collection = await loadAllById<IdJsonObject>(
+      (afterId, limit) => {
+        let query = admin.from("qrm_companies").select(
+          "id, workspace_id, price_lock_active, price_lock_reason, price_lock_expires_at, deleted_at",
+        ).eq("workspace_id", workspaceId).in("id", batch).is(
+          "deleted_at",
+          null,
+        ).order("id", { ascending: true }).limit(limit);
+        if (afterId) query = query.gt("id", afterId);
+        return query;
+      },
+      "customer price-lock context",
+    );
+    for (const row of collection.rows) result.set(row.id, row);
+  }
+  return result;
+}
+
+async function loadQuotePricingEpoch(
+  admin: ServiceClient,
+  workspaceId: string,
+): Promise<number> {
+  const { data, error } = await admin.from("qb_workspace_pricing_epochs")
+    .select(
+      "epoch",
+    ).eq("workspace_id", workspaceId).maybeSingle();
+  if (error) {
+    throw new Error(`Failed to load quote-pricing epoch: ${error.message}`);
+  }
+  const epoch = Number((data as JsonObject | null)?.epoch ?? 0);
+  if (!Number.isSafeInteger(epoch) || epoch < 0) {
+    throw new Error("Quote-pricing epoch is outside the safe integer range");
+  }
+  return epoch;
+}
+
+interface ImpactScanResult {
+  impacts: ImpactDraft[];
+  evidence: ScanEvidence;
+}
+
 async function buildQuoteImpacts(
   admin: ServiceClient,
   sheet: PriceSheetRow,
   itemDiffs: ItemDiff[],
-): Promise<ImpactDraft[]> {
-  const listPriceDiffs = itemDiffs.filter((diff) =>
-    diff.itemType === "list_price" && diff.normalizedCode &&
-    diff.newPriceCents !== null
-  );
-  if (!listPriceDiffs.length) return [];
-  const byCode = new Map<string, ItemDiff>();
-  for (const diff of listPriceDiffs) byCode.set(diff.normalizedCode!, diff);
-  const marginFloorPct = await loadMarginFloor(
+): Promise<ImpactScanResult> {
+  const scanStartedAt = new Date().toISOString();
+  // This is read before any candidate query. The persistence RPC later locks
+  // and compares the same epoch, so inserts and previously-unmatched edits are
+  // detected even though they are absent from the impact payload.
+  const quotePricingEpoch = await loadQuotePricingEpoch(
     admin,
     sheet.workspace_id,
-    sheet.brand_id,
   );
+  const todayIso = scanStartedAt.slice(0, 10);
+  const brand = await loadBrandScope(admin, sheet);
+  const changedDiffs = itemDiffs.filter((diff) =>
+    diff.changeKind !== "unchanged"
+  );
+  const listPriceDiffs = changedDiffs.filter((diff) =>
+    diff.itemType === "list_price" && diff.normalizedCode
+  );
+  const byCode = new Map<string, ItemDiff>();
+  for (const diff of listPriceDiffs) byCode.set(diff.normalizedCode!, diff);
+  const [marginFloorPct, programIdByNormalizedCode] = await Promise.all([
+    loadMarginFloor(admin, sheet.workspace_id, sheet.brand_id),
+    loadProgramIdMap(admin, sheet),
+  ]);
 
-  const quotes = await loadAllPages<JsonObject>(
-    (from, to) =>
-      admin.from("quote_packages").select(
-        "id, workspace_id, deal_id, status, updated_at, equipment, net_total, margin_amount, margin_pct, created_by, crm_deals(assigned_rep_id)",
+  const quoteCollection = await loadAllById<IdJsonObject>(
+    (afterId, limit) => {
+      let query = admin.from("quote_packages").select(
+        "id, workspace_id, deal_id, status, updated_at, equipment, net_total, margin_amount, margin_pct, created_by, delivery_state, selected_promotion_ids, crm_deals(assigned_rep_id, company_id)",
       ).eq("workspace_id", sheet.workspace_id).in("status", OPEN_QUOTE_STATUSES)
-        .order("id", { ascending: true }).range(from, to),
-    "open quotes",
+        .order("id", { ascending: true }).limit(limit);
+      if (afterId) query = query.gt("id", afterId);
+      return query;
+    },
+    "open quote scan",
   );
-
-  const quoteIds = quotes.map((quote) => String(quote.id));
+  const quotes = quoteCollection.rows;
+  const quoteIds = quotes.map((quote) => quote.id);
   const linesByQuote = new Map<string, JsonObject[]>();
-  // Chunk the id list (URL-length safety) and paginate each batch's rows
-  // (PostgREST's implicit row cap), so no line items are silently dropped.
+  let candidateLineCount = 0;
+  let linePageCount = 0;
   const QUOTE_ID_CHUNK = 200;
-  for (let i = 0; i < quoteIds.length; i += QUOTE_ID_CHUNK) {
-    const batch = quoteIds.slice(i, i + QUOTE_ID_CHUNK);
-    const lineRows = await loadAllPages<JsonObject>(
-      (from, to) =>
-        admin.from("quote_package_line_items").select("*").in(
-          "quote_package_id",
-          batch,
-        ).order("id", { ascending: true }).range(from, to),
-      "quote_package_line_items",
+  for (let index = 0; index < quoteIds.length; index += QUOTE_ID_CHUNK) {
+    const batch = quoteIds.slice(index, index + QUOTE_ID_CHUNK);
+    const lineCollection = await loadAllById<IdJsonObject>(
+      (afterId, limit) => {
+        let query = admin.from("quote_package_line_items").select("*").eq(
+          "workspace_id",
+          sheet.workspace_id,
+        ).in("quote_package_id", batch).order("id", { ascending: true }).limit(
+          limit,
+        );
+        if (afterId) query = query.gt("id", afterId);
+        return query;
+      },
+      "quote line scan",
     );
-    for (const row of lineRows) {
+    candidateLineCount += lineCollection.rows.length;
+    linePageCount += lineCollection.pageCount;
+    for (const row of lineCollection.rows) {
       const quoteId = String(row.quote_package_id);
       const list = linesByQuote.get(quoteId) ?? [];
       list.push(row);
@@ -522,34 +635,50 @@ async function buildQuoteImpacts(
     }
   }
 
+  const joinedDealFor = (quote: JsonObject): JsonObject =>
+    asObject(
+      Array.isArray(quote.crm_deals) ? quote.crm_deals[0] : quote.crm_deals,
+    );
+  const companyIds = quotes.flatMap((quote) => {
+    const companyId = firstString(joinedDealFor(quote).company_id);
+    return companyId ? [companyId] : [];
+  });
+  const priceLockCompanies = await loadPriceLockCompanies(
+    admin,
+    sheet.workspace_id,
+    companyIds,
+  );
+
   const impacts: ImpactDraft[] = [];
-  for (const quote of (quotes ?? []) as JsonObject[]) {
-    const quoteId = String(quote.id);
-    const sourceLines = linesByQuote.get(quoteId)?.length
-      ? linesByQuote.get(quoteId)!
+  for (const quote of quotes) {
+    const quoteId = quote.id;
+    const persistedLines = linesByQuote.get(quoteId) ?? [];
+    const sourceLines = persistedLines.length
+      ? persistedLines
       : quoteLinesFromLegacyEquipment(quote);
+    if (!persistedLines.length) candidateLineCount += sourceLines.length;
+    const brandLines = sourceLines.filter((line) =>
+      (line._legacy === true || line.line_type === "equipment") &&
+      lineMatchesBrand(firstString(line.make, line.brand), brand)
+    );
+    if (!brandLines.length) continue;
+
     const impactLines: ImpactLineDraft[] = [];
+    const categories = new Set<string>();
     let proposedTotalDeltaCents = 0;
     let maxAbsLinePct = 0;
     let anyStockLocked = false;
     let allLineCostBasisCents = 0;
-    // Whole-quote cost basis is only trustworthy if EVERY line carries a cost.
-    // If any line lacks one, the summed basis understates true cost and would
-    // overstate projected margin/commission, so we fall through to null
-    // ("missing_cost_basis") rather than show a wrong number.
     let everyLineHasCost = sourceLines.length > 0;
 
     for (const line of sourceLines) {
       const quantity = Math.max(1, Number(line.quantity ?? 1) || 1);
       const lineCost = quoteLineCostCents(line);
-      if (lineCost === null) {
-        everyLineHasCost = false;
-      } else {
-        allLineCostBasisCents += lineCost * quantity;
-      }
+      if (lineCost === null) everyLineHasCost = false;
+      else allLineCostBasisCents += lineCost * quantity;
     }
 
-    for (const line of sourceLines) {
+    for (const line of brandLines) {
       const modelCode = firstString(
         line.model,
         line.model_code,
@@ -558,34 +687,37 @@ async function buildQuoteImpacts(
       const normalized = normalizeModelCode(modelCode);
       if (!normalized) continue;
       const diff = byCode.get(normalized);
-      if (!diff || diff.newPriceCents === null) continue;
+      if (!diff) continue;
+      categories.add("list_price");
       const quantity = Math.max(1, Number(line.quantity ?? 1) || 1);
-      const oldListPrice = quoteLinePriceCents(line) ?? diff.oldPriceCents;
-      // No prior price to compare against: we can't book a reprice delta, and
-      // charging the full new price as the "delta" would falsely trip
-      // materiality and inflate the rep-facing exposure. Skip the line.
-      if (oldListPrice === null) continue;
+      const quotedListPrice = quoteLinePriceCents(line);
+      const quotedDealerCost = quoteLineCostCents(line);
+      const oldListPrice = quotedListPrice ?? diff.oldPriceCents;
       const newListPrice = diff.newPriceCents;
-      const lineDelta = (newListPrice - oldListPrice) * quantity;
-      const pct = deltaPct(oldListPrice, newListPrice);
       const stockLocked = isStockLockedLine({
         sourceLocation: line.source_location,
         isYardStock: line.is_yard_stock,
       });
-      if (stockLocked) {
-        anyStockLocked = true;
+      if (stockLocked) anyStockLocked = true;
+
+      let lineDelta = 0;
+      let pct: number | null = null;
+      let catalogOnlyReason: string | null = null;
+      if (oldListPrice === null || newListPrice === null) {
+        catalogOnlyReason = newListPrice === null
+          ? "model_removed_or_discontinued"
+          : "missing_quote_line_price";
       } else {
-        proposedTotalDeltaCents += lineDelta;
-        // Only non-stock-locked lines drive materiality (OEM-DP8: a yard-stock
-        // line's dollar delta is suppressed, so it must not flip a quote to
-        // "visible" on pct alone). Use FULL-PRECISION pct for the threshold —
-        // deltaPct() rounds to 2dp for display/storage, which would let a real
-        // +2.004% round to 2.00 and read as quiet.
-        const rawPct = oldListPrice !== 0
-          ? ((newListPrice - oldListPrice) / oldListPrice) * 100
-          : null;
-        if (rawPct !== null) {
-          maxAbsLinePct = Math.max(maxAbsLinePct, Math.abs(rawPct));
+        lineDelta = (newListPrice - oldListPrice) * quantity;
+        pct = deltaPct(oldListPrice, newListPrice);
+        if (!stockLocked) {
+          proposedTotalDeltaCents += lineDelta;
+          const rawPct = oldListPrice !== 0
+            ? ((newListPrice - oldListPrice) / oldListPrice) * 100
+            : null;
+          if (rawPct !== null) {
+            maxAbsLinePct = Math.max(maxAbsLinePct, Math.abs(rawPct));
+          }
         }
       }
       impactLines.push({
@@ -602,19 +734,59 @@ async function buildQuoteImpacts(
         isYardStock: stockLocked,
         suppressedByStockLock: stockLocked,
         suppressionReason: stockLocked ? "yard_stock_price_locked" : null,
+        quoteLineSnapshot: {
+          make: firstString(line.make, line.brand),
+          model: firstString(line.model, line.model_code, line.modelCode),
+          quantity,
+          quoted_list_price_cents: quotedListPrice,
+          quoted_dealer_cost_cents: quotedDealerCost,
+          source_location: firstString(line.source_location),
+        },
         metadata: {
           normalized_code: normalized,
+          brand_id: brand.id,
+          change_kind: diff.changeKind,
+          catalog_only_reason: catalogOnlyReason,
           source: line._legacy
             ? "quote_packages.equipment"
             : "quote_package_line_items",
         },
       });
     }
-    if (!impactLines.length) continue;
 
+    const catalogChanges = contextualCatalogChangesForQuote(changedDiffs, {
+      deliveryState: firstString(quote.delivery_state),
+      selectedPromotionIds: Array.isArray(quote.selected_promotion_ids)
+        ? quote.selected_promotion_ids.map(String)
+        : [],
+      programIdByNormalizedCode,
+    });
+    for (const change of catalogChanges) categories.add(change.itemType);
+    if (!impactLines.length && !catalogChanges.length) continue;
+
+    const changeCategories = orderedChangeCategories(categories);
+    const joinedDeal = joinedDealFor(quote);
+    const customerCompanyId = firstString(joinedDeal.company_id);
+    const company = customerCompanyId
+      ? priceLockCompanies.get(customerCompanyId)
+      : undefined;
+    const suppressedByCustomerLock = isCustomerPriceLockActive(
+      company
+        ? {
+          priceLockActive: company.price_lock_active === true,
+          priceLockExpiresAt: firstString(company.price_lock_expires_at),
+          deletedAt: firstString(company.deleted_at),
+        }
+        : null,
+      todayIso,
+    );
+    const effectiveTotalDeltaCents = suppressedByCustomerLock
+      ? 0
+      : proposedTotalDeltaCents;
+    const effectiveMaxLinePct = suppressedByCustomerLock ? 0 : maxAbsLinePct;
     const trigger = classifyMateriality({
-      maxAbsLineDeltaPct: maxAbsLinePct,
-      totalDeltaCents: proposedTotalDeltaCents,
+      maxAbsLineDeltaPct: effectiveMaxLinePct,
+      totalDeltaCents: effectiveTotalDeltaCents,
     });
     const oldNetTotalCents = firstDollarsAsCents(quote.net_total);
     const oldMarginCents = firstDollarsAsCents(quote.margin_amount);
@@ -624,22 +796,27 @@ async function buildQuoteImpacts(
       : everyLineHasCost
       ? allLineCostBasisCents
       : null;
-    const policyRequiresReview = true;
     const gate = evaluateMarginGate({
       oldNetTotalCents,
-      totalDeltaCents: proposedTotalDeltaCents,
+      totalDeltaCents: effectiveTotalDeltaCents,
       oldMarginPct,
       oldMarginCents,
       costBasisCents,
       marginFloorPct,
-      policyRequiresManagerReview: policyRequiresReview,
+      policyRequiresManagerReview: !suppressedByCustomerLock &&
+        changeCategories.length > 0,
       stockLocked: anyStockLocked,
     });
-    const joinedDeal = Array.isArray(quote.crm_deals)
-      ? quote.crm_deals[0]
-      : quote.crm_deals;
+    const approvalRequiredReasons = suppressedByCustomerLock
+      ? ["customer_price_lock"]
+      : [
+        ...new Set([
+          ...gate.approvalRequiredReasons,
+          `price_change_categories:${changeCategories.join(",")}`,
+        ]),
+      ];
     const assignedRepId = firstString(
-      asObject(joinedDeal).assigned_rep_id,
+      joinedDeal.assigned_rep_id,
       quote.created_by,
     );
     impacts.push({
@@ -648,23 +825,158 @@ async function buildQuoteImpacts(
       assignedRepId,
       quoteStatusSnapshot: firstString(quote.status),
       quoteUpdatedAtSnapshot: firstString(quote.updated_at),
-      totalDeltaCents: proposedTotalDeltaCents,
-      maxLineDeltaPct: maxAbsLinePct || null,
+      totalDeltaCents: effectiveTotalDeltaCents,
+      maxLineDeltaPct: effectiveMaxLinePct || null,
       oldMarginPct: gate.oldMarginPct,
       projectedMarginPct: gate.projectedMarginPct,
       marginFloorPct: gate.marginFloorPct,
       belowMarginFloor: gate.belowMarginFloor,
       materialityTrigger: trigger,
-      requiresManagerReview: gate.requiresManagerReview,
-      approvalRequiredReasons: gate.approvalRequiredReasons,
+      requiresManagerReview: !suppressedByCustomerLock &&
+        changeCategories.length > 0,
+      approvalRequiredReasons,
       oldCommissionCents: gate.oldCommissionCents,
       projectedCommissionCents: gate.projectedCommissionCents,
       commissionDeltaCents: gate.commissionDeltaCents,
-      state: impactStateFor(trigger),
+      changeCategories,
+      catalogChanges,
+      contextSnapshot: {
+        brand_id: brand.id,
+        brand_code: brand.code,
+        matched_brand_line_count: brandLines.length,
+        delivery_state: firstString(quote.delivery_state),
+        selected_promotion_ids: Array.isArray(quote.selected_promotion_ids)
+          ? quote.selected_promotion_ids
+          : [],
+        unlocked_total_delta_cents: proposedTotalDeltaCents,
+        catalog_change_count: catalogChanges.length,
+      },
+      customerCompanyId,
+      suppressedByCustomerLock,
+      customerPriceLockReason: firstString(company?.price_lock_reason),
+      customerPriceLockExpiresAt: firstString(company?.price_lock_expires_at),
+      state: suppressedByCustomerLock ? "quiet" : impactStateFor(trigger),
       lines: impactLines,
     });
   }
-  return impacts;
+
+  return {
+    impacts,
+    evidence: {
+      scanStartedAt,
+      scanCompletedAt: new Date().toISOString(),
+      candidateQuoteCount: quotes.length,
+      candidateLineCount,
+      quotePageCount: quoteCollection.pageCount,
+      linePageCount,
+      quotePricingEpoch,
+      scanComplete: true,
+    },
+  };
+}
+
+function approvalReasonsForStream(
+  impact: ImpactDraft,
+  categories: ImpactDraft["changeCategories"],
+  streamKind: PriceSheetLane,
+): string[] {
+  if (impact.suppressedByCustomerLock) return ["customer_price_lock"];
+  const retained = impact.approvalRequiredReasons.filter((reason) =>
+    !reason.startsWith("price_change_categories:") &&
+    (streamKind === "price_book" ||
+      !["stock_lock", "below_margin_floor", "missing_cost_basis"].includes(
+        reason,
+      ))
+  );
+  return [
+    ...new Set([
+      ...retained,
+      "manager_review_policy",
+      `price_change_categories:${categories.join(",")}`,
+    ]),
+  ];
+}
+
+function impactForStream(
+  impact: ImpactDraft,
+  streamKind: PriceSheetLane,
+): ImpactDraft | null {
+  const categorySet = streamKind === "price_book"
+    ? new Set(["list_price", "freight"])
+    : new Set(["rebate", "incentive"]);
+  const changeCategories = impact.changeCategories.filter((category) =>
+    categorySet.has(category)
+  );
+  const catalogChanges = impact.catalogChanges.filter((change) =>
+    categorySet.has(change.itemType)
+  );
+  const lines = streamKind === "price_book" ? impact.lines : [];
+  if (!changeCategories.length || (!lines.length && !catalogChanges.length)) {
+    return null;
+  }
+
+  if (streamKind === "price_book") {
+    const trigger = classifyMateriality({
+      maxAbsLineDeltaPct: impact.maxLineDeltaPct,
+      totalDeltaCents: impact.totalDeltaCents,
+    });
+    return {
+      ...impact,
+      changeCategories,
+      catalogChanges,
+      lines,
+      materialityTrigger: trigger,
+      requiresManagerReview: !impact.suppressedByCustomerLock,
+      approvalRequiredReasons: approvalReasonsForStream(
+        impact,
+        changeCategories,
+        streamKind,
+      ),
+      state: impact.suppressedByCustomerLock
+        ? "quiet"
+        : impactStateFor(trigger),
+    };
+  }
+
+  return {
+    ...impact,
+    totalDeltaCents: 0,
+    maxLineDeltaPct: null,
+    projectedMarginPct: impact.oldMarginPct,
+    belowMarginFloor: false,
+    projectedCommissionCents: impact.oldCommissionCents,
+    commissionDeltaCents: impact.oldCommissionCents === null ? null : 0,
+    materialityTrigger: "quiet",
+    requiresManagerReview: !impact.suppressedByCustomerLock,
+    approvalRequiredReasons: approvalReasonsForStream(
+      impact,
+      changeCategories,
+      streamKind,
+    ),
+    changeCategories,
+    catalogChanges,
+    lines: [],
+    state: "quiet",
+  };
+}
+
+function buildStreamPreviews(
+  sheet: PriceSheetRow,
+  priorIds: PriorPriceSheetIdsByLane,
+  itemDiffs: ItemDiff[],
+  impacts: ImpactDraft[],
+): StreamPreview[] {
+  return lanesForPriceSheetType(sheet.sheet_type).map((streamKind) => ({
+    streamKind,
+    priorPriceSheetId: priorIds[streamKind] ?? null,
+    itemDiffs: itemDiffs.filter((item) =>
+      laneForPriceSheetItemType(item.itemType) === streamKind
+    ),
+    impacts: impacts.flatMap((impact) => {
+      const scoped = impactForStream(impact, streamKind);
+      return scoped ? [scoped] : [];
+    }),
+  }));
 }
 
 async function buildPreview(
@@ -676,14 +988,34 @@ async function buildPreview(
   if (sheet.workspace_id !== workspaceId) {
     throw new Error("Price sheet is outside caller workspace");
   }
-  // loadPriorPriceSheetId and buildItemDiffs both depend only on `sheet` and
-  // are independent of each other — run them concurrently.
-  const [priorPriceSheetId, itemDiffs] = await Promise.all([
-    loadPriorPriceSheetId(admin, sheet),
-    buildItemDiffs(admin, sheet),
-  ]);
-  const impacts = await buildQuoteImpacts(admin, sheet, itemDiffs);
-  return { sheet, priorPriceSheetId, itemDiffs, impacts };
+  // Resolve the exact predecessor first: the pure diff must compare immutable
+  // predecessor rows, never whichever catalog values happen to be current.
+  const prior = await loadPriorPriceSheetsByLane(admin, sheet);
+  const priorIds = [
+    ...new Set(
+      Object.values(prior.ids).filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  // Retained for backward-compatible preview consumers. A composed `both`
+  // lineage intentionally reports null here and exposes the per-lane map.
+  const priorPriceSheetId = priorIds.length === 1 ? priorIds[0] : null;
+  const itemDiffs = await buildItemDiffs(admin, sheet, prior.sheets);
+  const impactScan = await buildQuoteImpacts(admin, sheet, itemDiffs);
+  const streams = buildStreamPreviews(
+    sheet,
+    prior.ids,
+    itemDiffs,
+    impactScan.impacts,
+  );
+  return {
+    sheet,
+    priorPriceSheetId,
+    priorPriceSheetIdsByLane: prior.ids,
+    itemDiffs,
+    impacts: impactScan.impacts,
+    streams,
+    scanEvidence: impactScan.evidence,
+  };
 }
 
 function previewPayload(preview: PreviewBuild) {
@@ -696,6 +1028,8 @@ function previewPayload(preview: PreviewBuild) {
     diff: {
       priceSheetId: preview.sheet.id,
       priorPriceSheetId: preview.priorPriceSheetId,
+      priorPriceSheetIdsByLane: preview.priorPriceSheetIdsByLane,
+      brandId: preview.sheet.brand_id,
       changedItemCount:
         preview.itemDiffs.filter((item) => item.changeKind !== "unchanged")
           .length,
@@ -707,6 +1041,7 @@ function previewPayload(preview: PreviewBuild) {
       },
     },
     impactPreview: {
+      scanEvidence: preview.scanEvidence,
       totalQuotesAffected: preview.impacts.length,
       materialQuotesAffected: material.length,
       quietQuotesAffected: quiet.length,
@@ -732,24 +1067,29 @@ function previewPayload(preview: PreviewBuild) {
 
 async function maybeReturnExistingEvent(
   admin: ServiceClient,
+  workspaceId: string,
   priceSheetId: string,
   origin: string | null,
 ): Promise<Response | null> {
-  const { data: event, error } = await admin.from("qb_price_change_events")
-    .select("id, price_sheet_id, status").eq("price_sheet_id", priceSheetId)
-    .maybeSingle();
+  const { data: eventRows, error } = await admin.from("qb_price_change_events")
+    .select("id, price_sheet_id, status, stream_kind, publish_group_id")
+    .eq("workspace_id", workspaceId).eq("price_sheet_id", priceSheetId)
+    .order("stream_kind", { ascending: true });
   if (error) {
     throw new Error(`Failed to inspect existing event: ${error.message}`);
   }
-  if (!event) return null;
-  const status = String((event as JsonObject).status ?? "");
+  const events = (eventRows ?? []) as JsonObject[];
+  if (!events.length) return null;
+  const statuses = new Set(events.map((event) => String(event.status ?? "")));
   // building/failed → rebuildable; let the caller proceed to (re)build.
-  if (["building", "failed"].includes(status)) return null;
+  if ([...statuses].some((status) => ["building", "failed"].includes(status))) {
+    return null;
+  }
   // superseded → a newer sheet replaced this event. Don't silently rebuild
   // (unique(price_sheet_id) + ON DELETE CASCADE make that destructive); return
   // an explicit, honest result instead of a misleading 0-impact "idempotent
   // success".
-  if (status === "superseded") {
+  if (statuses.has("superseded")) {
     return safeJsonError(
       "This price sheet's publish was superseded by a newer sheet. Re-extract the sheet to publish it again.",
       409,
@@ -757,13 +1097,18 @@ async function maybeReturnExistingEvent(
     );
   }
   // active/closed → genuine idempotent hit; report the existing event.
-  const eventId = String((event as JsonObject).id);
+  const eventIds = events.map((event) => String(event.id));
+  const eventIdByStream = Object.fromEntries(events.map((event) => [
+    String(event.stream_kind ?? "price_book"),
+    String(event.id),
+  ]));
+  const eventId = eventIdByStream.price_book ?? eventIds[0];
   const { data: impacts } = await admin.from("qb_quote_reprice_impacts").select(
     "total_delta_cents, state",
-  ).eq("event_id", eventId);
+  ).in("event_id", eventIds);
   const { data: items } = await admin.from("qb_price_change_items").select(
     "change_kind, item_type",
-  ).eq("event_id", eventId);
+  ).in("event_id", eventIds);
   const programTypes = ["rebate", "incentive", "freight"];
   const changedItems = ((items ?? []) as JsonObject[]).filter((item) =>
     String(item.change_kind ?? "") !== "unchanged"
@@ -778,6 +1123,8 @@ async function maybeReturnExistingEvent(
   return safeJsonOk({
     ok: true,
     eventId,
+    eventIds: eventIdByStream,
+    publishGroupId: firstString(events[0]?.publish_group_id),
     priceSheetId,
     idempotent: true,
     // Count only changed items (exclude 'unchanged'), and split programs out
@@ -791,26 +1138,11 @@ async function maybeReturnExistingEvent(
     ).length,
     materialQuotesAffected: material.length,
     totalDeltaCents: material.reduce(
-      (sum, impact) => sum + Number(impact.total_delta_cents ?? 0),
+      (sum, impact) =>
+        sum + Number(impact.total_delta_cents ?? 0),
       0,
     ),
   }, origin);
-}
-
-async function clearRebuildableEvent(
-  admin: ServiceClient,
-  priceSheetId: string,
-): Promise<void> {
-  const { data: event } = await admin.from("qb_price_change_events").select(
-    "id, status",
-  ).eq("price_sheet_id", priceSheetId).maybeSingle();
-  if (!event) return;
-  const status = String((event as JsonObject).status ?? "");
-  if (status !== "building" && status !== "failed") return;
-  await admin.from("qb_price_change_events").delete().eq(
-    "id",
-    String((event as JsonObject).id),
-  );
 }
 
 async function invokePublish(
@@ -824,256 +1156,123 @@ async function invokePublish(
   );
   if (error) throw new Error(`publish-price-sheet failed: ${error.message}`);
   const payload = asObject(data);
+  const itemsSkipped = Number(payload.itemsSkipped ?? 0);
+  const programsSkipped = Number(payload.programsSkipped ?? 0);
+  if (itemsSkipped !== 0 || programsSkipped !== 0) {
+    throw new Error(
+      `Atomic price-sheet publish reported partial work (${itemsSkipped} items, ${programsSkipped} programs skipped)`,
+    );
+  }
   return {
     itemsApplied: Number(payload.itemsApplied ?? 0),
     programsApplied: Number(payload.programsApplied ?? 0),
   };
 }
 
+async function pinResolvedLineage(
+  admin: ServiceClient,
+  preview: PreviewBuild,
+): Promise<void> {
+  const lineage = preview.streams.map((stream) => ({
+    lane: stream.streamKind,
+    predecessorPriceSheetId: stream.priorPriceSheetId,
+  }));
+  const { error } = await admin.rpc("pin_qb_price_sheet_lineage", {
+    p_workspace_id: preview.sheet.workspace_id,
+    p_price_sheet_id: preview.sheet.id,
+    p_lineage: lineage,
+  });
+  if (error) {
+    throw new Error(`Failed to pin price-sheet lineage: ${error.message}`);
+  }
+}
+
+class OemScanConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OemScanConflictError";
+  }
+}
+
+interface PersistedEventGroup {
+  eventId: string;
+  eventIds: Record<string, string>;
+  publishGroupId: string;
+}
+
 async function persistEvent(
   ctx: AuthContext,
   preview: PreviewBuild,
-): Promise<string> {
-  const { admin, userId } = ctx;
-  await clearRebuildableEvent(admin, preview.sheet.id);
-  const { data: priorActiveEvents, error: priorActiveErr } = await admin.from(
-    "qb_price_change_events",
-  ).select("id").eq("workspace_id", preview.sheet.workspace_id).eq(
-    "brand_id",
-    preview.sheet.brand_id,
-  ).eq("status", "active");
-  if (priorActiveErr) {
-    throw new Error(
-      `Failed to inspect active OEM events: ${priorActiveErr.message}`,
-    );
-  }
-  const priorActiveEventIds = ((priorActiveEvents ?? []) as JsonObject[]).map((
-    event,
-  ) => String(event.id));
-
-  const { data: event, error: eventErr } = await admin.from(
-    "qb_price_change_events",
-  ).insert({
-    workspace_id: preview.sheet.workspace_id,
-    brand_id: preview.sheet.brand_id,
-    price_sheet_id: preview.sheet.id,
-    prior_price_sheet_id: preview.priorPriceSheetId,
-    source_type: "manual_upload",
-    source_metadata: { sheet_status_at_preview: preview.sheet.status },
-    effective_date: preview.sheet.effective_from,
-    materiality_rule: {
-      line_pct_gt: MATERIALITY_LINE_PCT_GT,
-      quote_delta_cents_gt: MATERIALITY_QUOTE_DELTA_CENTS_GT,
+): Promise<PersistedEventGroup> {
+  const sourceMetadata = {
+    sheet_status_at_scan: preview.sheet.status,
+    scan_complete: preview.scanEvidence.scanComplete,
+    scan_started_at: preview.scanEvidence.scanStartedAt,
+    scan_completed_at: preview.scanEvidence.scanCompletedAt,
+    candidate_quote_count: preview.scanEvidence.candidateQuoteCount,
+    candidate_line_count: preview.scanEvidence.candidateLineCount,
+    quote_page_count: preview.scanEvidence.quotePageCount,
+    line_page_count: preview.scanEvidence.linePageCount,
+    quote_pricing_epoch: preview.scanEvidence.quotePricingEpoch,
+    canonical_diff_item_count: preview.itemDiffs.length,
+    stream_kinds: preview.streams.map((stream) => stream.streamKind),
+  };
+  const publishGroupId = crypto.randomUUID();
+  const { data, error } = await ctx.admin.rpc(
+    "persist_qb_oem_price_change_event",
+    {
+      p_workspace_id: preview.sheet.workspace_id,
+      p_brand_id: preview.sheet.brand_id,
+      p_price_sheet_id: preview.sheet.id,
+      p_publish_group_id: publishGroupId,
+      p_created_by: ctx.userId,
+      p_source_metadata: sourceMetadata,
+      p_effective_date: preview.sheet.effective_from,
+      p_quote_pricing_epoch: preview.scanEvidence.quotePricingEpoch,
+      p_materiality_rule: {
+        line_pct_gt: MATERIALITY_LINE_PCT_GT,
+        quote_delta_cents_gt: MATERIALITY_QUOTE_DELTA_CENTS_GT,
+      },
+      p_approval_policy: APPROVAL_POLICY,
+      p_streams: preview.streams,
     },
-    approval_policy: APPROVAL_POLICY,
-    status: "building",
-    created_by: userId,
-    published_at: new Date().toISOString(),
-  }).select("id").single();
-  if (eventErr || !event) {
-    throw new Error(
-      `Failed to create price-change event: ${eventErr?.message ?? "unknown"}`,
-    );
+  );
+  if (error) {
+    const message = error.message ?? "Atomic OEM event persistence failed";
+    if (
+      error.code === "40001" || message.includes("OEM_SCAN_CONFLICT") ||
+      message.includes("predecessor changed") ||
+      message.includes("epoch changed") ||
+      message.includes("stream changed")
+    ) {
+      throw new OemScanConflictError(message);
+    }
+    throw new Error(`Atomic OEM event persistence failed: ${message}`);
   }
-  const eventId = String((event as JsonObject).id);
-
-  try {
-    if (preview.itemDiffs.length) {
-      const { error: itemErr } = await admin.from("qb_price_change_items")
-        .insert(preview.itemDiffs.map((diff) => ({
-          event_id: eventId,
-          workspace_id: preview.sheet.workspace_id,
-          item_type: diff.itemType,
-          model_code: diff.modelCode,
-          normalized_code: diff.normalizedCode,
-          name_display: diff.nameDisplay,
-          old_price_cents: diff.oldPriceCents,
-          new_price_cents: diff.newPriceCents,
-          delta_cents: diff.deltaCents,
-          delta_pct: diff.deltaPct,
-          change_kind: diff.changeKind,
-          prior_item_id: diff.priorItemId,
-          new_item_id: diff.newItemId,
-          metadata: diff.metadata,
-        })));
-      if (itemErr) {
-        throw new Error(
-          `Failed to persist price-change items: ${itemErr.message}`,
-        );
-      }
-    }
-
-    if (preview.impacts.length) {
-      // Batch the per-quote upsert and the per-line insert into two set-based
-      // round-trips instead of 2N. (Equivalent to the old loop: in the normal
-      // flow the event is fresh — clearRebuildableEvent removed any building/
-      // failed predecessor via cascade — so there are no pre-existing rows to
-      // duplicate.)
-      const { data: impactRows, error: impactErr } = await admin.from(
-        "qb_quote_reprice_impacts",
-      ).upsert(
-        preview.impacts.map((impact) => ({
-          event_id: eventId,
-          workspace_id: preview.sheet.workspace_id,
-          quote_package_id: impact.quotePackageId,
-          deal_id: impact.dealId,
-          assigned_rep_id: impact.assignedRepId,
-          quote_status_snapshot: impact.quoteStatusSnapshot,
-          quote_updated_at_snapshot: impact.quoteUpdatedAtSnapshot,
-          total_delta_cents: impact.totalDeltaCents,
-          max_line_delta_pct: impact.maxLineDeltaPct,
-          old_margin_pct: impact.oldMarginPct,
-          projected_margin_pct: impact.projectedMarginPct,
-          margin_floor_pct: impact.marginFloorPct,
-          below_margin_floor: impact.belowMarginFloor,
-          materiality_trigger: impact.materialityTrigger,
-          requires_manager_review: impact.requiresManagerReview,
-          approval_required_reasons: impact.approvalRequiredReasons,
-          old_commission_cents: impact.oldCommissionCents,
-          projected_commission_cents: impact.projectedCommissionCents,
-          commission_delta_cents: impact.commissionDeltaCents,
-          state: impact.state,
-        })),
-        { onConflict: "event_id,quote_package_id" },
-      ).select("id, quote_package_id");
-      if (impactErr || !impactRows) {
-        throw new Error(
-          `Failed to persist quote impacts: ${impactErr?.message ?? "unknown"}`,
-        );
-      }
-      const impactIdByQuote = new Map(
-        (impactRows as JsonObject[]).map((row) => [
-          String(row.quote_package_id),
-          String(row.id),
-        ]),
-      );
-      const allLines = preview.impacts.flatMap((impact) => {
-        const impactId = impactIdByQuote.get(impact.quotePackageId);
-        if (!impactId) return [];
-        return impact.lines.map((line) => ({
-          impact_id: impactId,
-          quote_package_line_item_id: line.quotePackageLineItemId,
-          equipment_line_id: line.equipmentLineId,
-          model_code: line.modelCode,
-          make: line.make,
-          quantity: line.quantity,
-          old_list_price_cents: line.oldListPriceCents,
-          new_list_price_cents: line.newListPriceCents,
-          delta_cents: line.deltaCents,
-          delta_pct: line.deltaPct,
-          source_location: line.sourceLocation,
-          is_yard_stock: line.isYardStock,
-          suppressed_by_stock_lock: line.suppressedByStockLock,
-          suppression_reason: line.suppressionReason,
-          metadata: line.metadata,
-        }));
-      });
-      if (allLines.length) {
-        const { error: lineErr } = await admin.from(
-          "qb_quote_reprice_impact_lines",
-        ).insert(allLines);
-        if (lineErr) {
-          throw new Error(`Failed to persist impact lines: ${lineErr.message}`);
-        }
-      }
-    }
-
-    const visibleQuoteIds = preview.impacts.filter((impact) =>
-      impact.state === "visible"
-    ).map((impact) => impact.quotePackageId);
-    const priorVisibleQuoteIds = new Set<string>();
-    if (priorActiveEventIds.length) {
-      const { data: priorImpacts, error: priorImpactErr } = await admin.from(
-        "qb_quote_reprice_impacts",
-      ).select("quote_package_id").in("event_id", priorActiveEventIds).in(
-        "state",
-        ["visible", "draft_created", "approval_pending", "approved"],
-      );
-      if (priorImpactErr) {
-        throw new Error(
-          `Failed to inspect prior OEM impacts: ${priorImpactErr.message}`,
-        );
-      }
-      for (const impact of (priorImpacts ?? []) as JsonObject[]) {
-        if (typeof impact.quote_package_id === "string") {
-          priorVisibleQuoteIds.add(impact.quote_package_id);
-        }
-      }
-    }
-    if (visibleQuoteIds.length) {
-      const { error: flagErr } = await admin.from("quote_packages").update({
-        requires_requote: true,
-        requote_reason: OEM_REQUOTE_REASON,
-      }).in("id", visibleQuoteIds);
-      if (flagErr) {
-        throw new Error(
-          `Failed to flag quote packages for requote: ${flagErr.message}`,
-        );
-      }
-    }
-    if (priorActiveEventIds.length) {
-      await admin.from("qb_quote_reprice_impacts").update({
-        state: "superseded",
-      }).in("event_id", priorActiveEventIds).eq(
-        "workspace_id",
-        preview.sheet.workspace_id,
-      ).in("state", [
-        "visible",
-        "draft_created",
-        "approval_pending",
-        "approved",
-      ]);
-      await admin.from("qb_price_change_events").update({
-        status: "superseded",
-      }).in("id", priorActiveEventIds);
-      const visibleSet = new Set(visibleQuoteIds);
-      let clearIds = [...priorVisibleQuoteIds].filter((id) =>
-        !visibleSet.has(id)
-      );
-      // requote_reason is a shared constant across all OEM events, so a blind
-      // clear keyed on it would strip the flag off a quote that a DIFFERENT
-      // still-active event (e.g. another brand) legitimately owns. Drop any
-      // quote that remains visible in an active, non-superseded event. (The
-      // prior events were just set status='superseded' above, and the new
-      // event is still 'building' here, so both are correctly excluded.)
-      if (clearIds.length) {
-        const { data: stillFlagged } = await admin.from(
-          "qb_quote_reprice_impacts",
-        ).select("quote_package_id, qb_price_change_events!inner(status)")
-          .in("quote_package_id", clearIds)
-          .eq("qb_price_change_events.status", "active")
-          .in("state", [
-            "visible",
-            "draft_created",
-            "approval_pending",
-            "approved",
-          ]);
-        const stillFlaggedIds = new Set(
-          ((stillFlagged ?? []) as JsonObject[]).map((row) =>
-            String(row.quote_package_id)
-          ),
-        );
-        clearIds = clearIds.filter((id) => !stillFlaggedIds.has(id));
-      }
-      if (clearIds.length) {
-        await admin.from("quote_packages").update({
-          requires_requote: false,
-          requote_reason: null,
-        }).in("id", clearIds).eq("requote_reason", OEM_REQUOTE_REASON);
-      }
-    }
-    await admin.from("qb_price_change_events").update({ status: "active" }).eq(
-      "id",
-      eventId,
-    );
-    return eventId;
-  } catch (err) {
-    await admin.from("qb_price_change_events").update({
-      status: "failed",
-      source_metadata: { error: errorMessage(err) },
-    }).eq("id", eventId);
-    throw err;
-  }
+  const payload = asObject(data);
+  const eventIdsPayload = asObject(payload.event_ids ?? payload.eventIds);
+  const eventIds = Object.fromEntries(
+    Object.entries(eventIdsPayload).flatMap(([stream, value]) => {
+      const id = firstString(value);
+      return id ? [[stream, id]] : [];
+    }),
+  );
+  const eventId = firstString(
+    payload.event_id,
+    payload.eventId,
+    eventIds.price_book,
+    Object.values(eventIds)[0],
+  );
+  if (!eventId) throw new Error("Atomic OEM persistence returned no event id");
+  return {
+    eventId,
+    eventIds,
+    publishGroupId: firstString(
+      payload.publish_group_id,
+      payload.publishGroupId,
+      publishGroupId,
+    )!,
+  };
 }
 
 async function handlePreview(
@@ -1122,11 +1321,12 @@ async function handlePublish(
   }
   const existing = await maybeReturnExistingEvent(
     ctx.admin,
+    ctx.workspaceId,
     priceSheetId,
     ctx.origin,
   );
   if (existing) return existing;
-  const preview = await buildPreview(ctx.admin, priceSheetId, ctx.workspaceId);
+  let preview = await buildPreview(ctx.admin, priceSheetId, ctx.workspaceId);
   if (!["extracted", "published"].includes(preview.sheet.status)) {
     return safeJsonError(
       `Sheet must be extracted or already published before OEM publish; got ${preview.sheet.status}`,
@@ -1134,20 +1334,48 @@ async function handlePublish(
       ctx.origin,
     );
   }
+  // Persist fallback resolution before any catalog mutation. Replays and event
+  // rebuilds then compare against the exact same predecessor.
+  await pinResolvedLineage(ctx.admin, preview);
   const didPublish = preview.sheet.status !== "published";
   const publishCounts = didPublish
     ? await invokePublish(ctx, priceSheetId, body.autoApprovePending !== false)
     : { itemsApplied: 0, programsApplied: 0 };
-  const eventId = await persistEvent(ctx, preview);
+  if (didPublish) {
+    // Rebuild from the now-published, approved/applied row set. This matters
+    // when autoApprovePending=false: the event must never include a candidate
+    // row that publish-price-sheet did not actually apply.
+    preview = await buildPreview(ctx.admin, priceSheetId, ctx.workspaceId);
+  }
+  let persisted: PersistedEventGroup;
+  try {
+    persisted = await persistEvent(ctx, preview);
+  } catch (error) {
+    if (!(error instanceof OemScanConflictError)) throw error;
+    // One bounded retry closes the normal race where a rep saved a quote after
+    // the read-only scan but before the transaction acquired quote locks.
+    preview = await buildPreview(ctx.admin, priceSheetId, ctx.workspaceId);
+    try {
+      persisted = await persistEvent(ctx, preview);
+    } catch (retryError) {
+      if (!(retryError instanceof OemScanConflictError)) throw retryError;
+      return safeJsonError(
+        "A quote changed while OEM impacts were being scanned. No impact rows or requote flags were committed; retry publish.",
+        409,
+        ctx.origin,
+      );
+    }
+  }
   const material = preview.impacts.filter((impact) =>
     impact.state === "visible"
   );
-  const changedItemCount = preview.itemDiffs.filter((item) =>
-    item.changeKind !== "unchanged"
-  ).length;
+  const changedItemCount =
+    preview.itemDiffs.filter((item) => item.changeKind !== "unchanged").length;
   return safeJsonOk({
     ok: true,
-    eventId,
+    eventId: persisted.eventId,
+    eventIds: persisted.eventIds,
+    publishGroupId: persisted.publishGroupId,
     priceSheetId,
     // When we actually invoked publish, report its true applied count (even 0)
     // rather than masking a real zero with the changed-item count. When the
@@ -1163,31 +1391,231 @@ async function handlePublish(
   }, ctx.origin);
 }
 
-async function handleRepImpacts(ctx: AuthContext): Promise<Response> {
-  // Inner-join the parent event and require status='active'. Without this an
-  // impact whose event was superseded or failed (partial publish) would still
-  // surface here — handleRepImpacts otherwise filters only on impact state.
-  // Page through the full set (no .limit(200)) so the rep queue isn't
-  // truncated and the summary counts/sums cover every matching impact, not
-  // just the first page. Order by id for stable pagination — the client sorts
-  // for display.
-  let impacts: JsonObject[];
-  try {
-    impacts = await loadAllPages<JsonObject>((from, to) => {
-      let q = ctx.admin.from("qb_quote_reprice_impacts").select(
-        "*, qb_quote_reprice_impact_lines(*), qb_price_change_events!inner(status)",
+const ACTIVE_IMPACT_STATES = [
+  "visible",
+  "draft_created",
+  "approval_pending",
+  "approved",
+  "applied",
+];
+const IMPACT_ENRICHMENT_SELECT =
+  "*, qb_quote_reprice_impact_lines(*), qb_quote_reprice_drafts(id,status,approval_case_id,applied_at,reversed_at), qb_price_change_events!inner(status,stream_kind,publish_group_id)";
+
+function joinedDealForAssignment(quote: JsonObject): JsonObject | null {
+  const joined = Array.isArray(quote.crm_deals)
+    ? quote.crm_deals[0]
+    : quote.crm_deals;
+  return joined && typeof joined === "object" ? asObject(joined) : null;
+}
+
+async function loadCurrentQuoteAssignees(
+  admin: ServiceClient,
+  workspaceId: string,
+  quoteIds: string[],
+): Promise<Map<string, string | null>> {
+  const result = new Map<string, string | null>();
+  const uniqueIds = [...new Set(quoteIds)].sort();
+  const ID_CHUNK = 200;
+  for (let index = 0; index < uniqueIds.length; index += ID_CHUNK) {
+    const batch = uniqueIds.slice(index, index + ID_CHUNK);
+    const collection = await loadAllById<IdJsonObject>(
+      (afterId, limit) => {
+        let query = admin.from("quote_packages").select(
+          "id, workspace_id, deal_id, created_by, crm_deals(id,workspace_id,assigned_rep_id,deleted_at)",
+        ).eq("workspace_id", workspaceId).in("id", batch).order("id", {
+          ascending: true,
+        }).limit(limit);
+        if (afterId) query = query.gt("id", afterId);
+        return query;
+      },
+      "current quote assignment",
+    );
+    for (const quote of collection.rows) {
+      const deal = joinedDealForAssignment(quote);
+      result.set(
+        quote.id,
+        currentQuoteAssignedRepId({
+          workspaceId,
+          dealId: firstString(quote.deal_id),
+          createdBy: firstString(quote.created_by),
+          deal: deal
+            ? {
+              workspaceId: firstString(deal.workspace_id),
+              assignedRepId: firstString(deal.assigned_rep_id),
+              deletedAt: firstString(deal.deleted_at),
+            }
+            : null,
+        }),
+      );
+    }
+  }
+  return result;
+}
+
+async function loadEnrichedImpacts(
+  ctx: AuthContext,
+  authorizedImpactIds?: string[],
+): Promise<IdJsonObject[]> {
+  if (authorizedImpactIds && !authorizedImpactIds.length) return [];
+  const idBatches = authorizedImpactIds
+    ? Array.from(
+      { length: Math.ceil(authorizedImpactIds.length / 200) },
+      (_, index) => authorizedImpactIds.slice(index * 200, (index + 1) * 200),
+    )
+    : [null];
+  const result: IdJsonObject[] = [];
+  for (const batch of idBatches) {
+    const collection = await loadAllById<IdJsonObject>((afterId, limit) => {
+      let query = ctx.admin.from("qb_quote_reprice_impacts").select(
+        IMPACT_ENRICHMENT_SELECT,
       ).eq("workspace_id", ctx.workspaceId).eq(
         "qb_price_change_events.status",
         "active",
-      ).in("state", [
-        "visible",
-        "draft_created",
-        "approval_pending",
-        "approved",
-      ]).order("id", { ascending: true }).range(from, to);
-      if (ctx.role === "rep") q = q.eq("assigned_rep_id", ctx.userId);
-      return q;
-    }, "rep-impacts");
+      ).in("state", ACTIVE_IMPACT_STATES).order("id", { ascending: true })
+        .limit(limit);
+      if (batch) query = query.in("id", batch);
+      if (afterId) query = query.gt("id", afterId);
+      return query;
+    }, "enriched rep impacts");
+    result.push(...collection.rows);
+  }
+  return result;
+}
+
+async function attachAuthorizedRepriceHistory(
+  ctx: AuthContext,
+  impacts: IdJsonObject[],
+): Promise<IdJsonObject[]> {
+  if (!impacts.length) return impacts;
+  const impactIds = impacts.map((impact) => impact.id);
+  const audits: IdJsonObject[] = [];
+  for (let index = 0; index < impactIds.length; index += 200) {
+    const batch = impactIds.slice(index, index + 200);
+    const collection = await loadAllById<IdJsonObject>((afterId, limit) => {
+      let query = ctx.admin.from("qb_quote_reprice_audits").select(
+        "id,impact_id,action,apply_audit_id,draft_id,actor_role,before_version_number,after_version_number,created_at",
+      ).eq("workspace_id", ctx.workspaceId).in("impact_id", batch).order("id", {
+        ascending: true,
+      }).limit(limit);
+      if (afterId) query = query.gt("id", afterId);
+      return query;
+    }, "authorized OEM reprice audit history");
+    audits.push(...collection.rows);
+  }
+
+  const auditsByImpact = new Map<string, IdJsonObject[]>();
+  for (const audit of audits) {
+    const impactId = String(audit.impact_id ?? "");
+    if (!impactId) continue;
+    auditsByImpact.set(impactId, [
+      ...(auditsByImpact.get(impactId) ?? []),
+      audit,
+    ]);
+  }
+  const now = Date.now();
+  return impacts.map((impact) => {
+    const impactAudits = auditsByImpact.get(impact.id) ?? [];
+    const reversalByApply = new Map<string, string>();
+    for (const audit of impactAudits) {
+      if (audit.action === "reverse" && typeof audit.apply_audit_id === "string") {
+        reversalByApply.set(audit.apply_audit_id, audit.id);
+      }
+    }
+    const drafts = Array.isArray(impact.qb_quote_reprice_drafts)
+      ? impact.qb_quote_reprice_drafts.map(asObject)
+      : [];
+    const appliedDraftIds = new Set(
+      drafts.filter((draft) => draft.status === "applied").map((draft) =>
+        String(draft.id)
+      ),
+    );
+    const history = impactAudits.map((audit) => {
+      const createdAt = typeof audit.created_at === "string"
+        ? audit.created_at
+        : "";
+      const createdAtMs = Date.parse(createdAt);
+      const reversalDeadlineMs = Number.isFinite(createdAtMs)
+        ? createdAtMs + 7 * 24 * 60 * 60 * 1000
+        : Number.NaN;
+      const reversedByAuditId = audit.action === "apply"
+        ? reversalByApply.get(audit.id) ?? null
+        : null;
+      return {
+        ...audit,
+        created_at: createdAt,
+        can_reverse: audit.action === "apply" &&
+          impact.state === "applied" &&
+          appliedDraftIds.has(String(audit.draft_id)) &&
+          reversedByAuditId === null &&
+          Number.isFinite(reversalDeadlineMs) &&
+          now <= reversalDeadlineMs,
+        reversal_deadline: Number.isFinite(reversalDeadlineMs)
+          ? new Date(reversalDeadlineMs).toISOString()
+          : null,
+        reversed_by_audit_id: reversedByAuditId,
+        customer_communication: "none",
+      };
+    }).sort((left, right) =>
+      Date.parse(String(right.created_at)) - Date.parse(String(left.created_at))
+    );
+    return { ...impact, reprice_history: history };
+  });
+}
+
+async function handleRepImpacts(ctx: AuthContext): Promise<Response> {
+  if (!["rep", "admin", "manager", "owner"].includes(ctx.role)) {
+    return safeJsonError("Forbidden", 403, ctx.origin);
+  }
+  let impacts: IdJsonObject[];
+  try {
+    if (ctx.role === "rep") {
+      // Phase one intentionally loads no lines/drafts/history. Enrichment is
+      // allowed only after current CRM assignment has been checked.
+      const scopes = (await loadAllById<IdJsonObject>((afterId, limit) => {
+        let query = ctx.admin.from("qb_quote_reprice_impacts").select(
+          "id, quote_package_id, qb_price_change_events!inner(status)",
+        ).eq("workspace_id", ctx.workspaceId).eq(
+          "qb_price_change_events.status",
+          "active",
+        ).in("state", ACTIVE_IMPACT_STATES).order("id", { ascending: true })
+          .limit(limit);
+        if (afterId) query = query.gt("id", afterId);
+        return query;
+      }, "rep impact authorization scope")).rows;
+      const assignees = await loadCurrentQuoteAssignees(
+        ctx.admin,
+        ctx.workspaceId,
+        scopes.map((impact) => String(impact.quote_package_id)),
+      );
+      const authorizedIds = scopes.filter((impact) =>
+        assignees.get(String(impact.quote_package_id)) === ctx.userId
+      ).map((impact) => impact.id);
+      impacts = await loadEnrichedImpacts(ctx, authorizedIds);
+      // Re-check after enrichment so a reassignment between the two reads can
+      // only remove data from the response, never expose it to the former rep.
+      const currentAssignees = await loadCurrentQuoteAssignees(
+        ctx.admin,
+        ctx.workspaceId,
+        impacts.map((impact) => String(impact.quote_package_id)),
+      );
+      impacts = impacts.filter((impact) =>
+        currentAssignees.get(String(impact.quote_package_id)) === ctx.userId
+      );
+    } else {
+      impacts = await loadEnrichedImpacts(ctx);
+    }
+    // Audit rows are attached only after current assignment/workspace
+    // authorization; a former rep never receives immutable pricing history.
+    impacts = await attachAuthorizedRepriceHistory(ctx, impacts);
+    // Applied impacts remain operational only for their inclusive seven-day
+    // reversal window. They never count in the Today action summary below.
+    impacts = impacts.filter((impact) =>
+      impact.state !== "applied" ||
+      (Array.isArray(impact.reprice_history) &&
+        impact.reprice_history.some((entry) =>
+          asObject(entry).can_reverse === true
+        ))
+    );
   } catch (err) {
     return safeJsonError(
       `Failed to load OEM quote impacts: ${errorMessage(err)}`,
@@ -1195,18 +1623,21 @@ async function handleRepImpacts(ctx: AuthContext): Promise<Response> {
       ctx.origin,
     );
   }
+  const actionableImpacts = impacts.filter((impact) => impact.state !== "applied");
   return safeJsonOk({
     summary: {
-      visibleImpactCount: impacts.length,
-      affectedQuoteCount: new Set(impacts.map((impact) =>
+      visibleImpactCount: actionableImpacts.length,
+      affectedQuoteCount: new Set(actionableImpacts.map((impact) =>
         impact.quote_package_id
       )).size,
-      totalDeltaCents: impacts.reduce(
+      totalDeltaCents: actionableImpacts.reduce(
         (sum, impact) => sum + Number(impact.total_delta_cents ?? 0),
         0,
       ),
       needsApprovalCount:
-        impacts.filter((impact) => impact.requires_manager_review === true)
+        actionableImpacts.filter((impact) =>
+          impact.requires_manager_review === true
+        )
           .length,
     },
     impacts,
@@ -1217,8 +1648,35 @@ async function loadImpactForAction(
   ctx: AuthContext,
   impactId: string,
 ): Promise<JsonObject> {
+  if (!["rep", "admin", "manager", "owner"].includes(ctx.role)) {
+    throw new Error("Forbidden");
+  }
+  const { data: scope, error: scopeError } = await ctx.admin.from(
+    "qb_quote_reprice_impacts",
+  ).select("id, quote_package_id, qb_price_change_events!inner(status)")
+    .eq("id", impactId).eq("workspace_id", ctx.workspaceId)
+    .eq("qb_price_change_events.status", "active").maybeSingle();
+  if (scopeError) {
+    throw new Error(`Failed to load impact: ${scopeError.message}`);
+  }
+  if (!scope) throw new Error("Impact not found");
+  const quotePackageId = String((scope as JsonObject).quote_package_id);
+  if (ctx.role === "rep") {
+    const assignees = await loadCurrentQuoteAssignees(
+      ctx.admin,
+      ctx.workspaceId,
+      [quotePackageId],
+    );
+    if (assignees.get(quotePackageId) !== ctx.userId) {
+      throw new Error("Forbidden");
+    }
+  }
+
+  // Fetch line and draft history only after current assignment authorization.
   const { data, error } = await ctx.admin.from("qb_quote_reprice_impacts")
-    .select("*, qb_quote_reprice_impact_lines(*), qb_price_change_events!inner(status)")
+    .select(
+      IMPACT_ENRICHMENT_SELECT,
+    )
     .eq("id", impactId).eq(
       "workspace_id",
       ctx.workspaceId,
@@ -1226,10 +1684,20 @@ async function loadImpactForAction(
   if (error) throw new Error(`Failed to load impact: ${error.message}`);
   if (!data) throw new Error("Impact not found");
   const impact = data as JsonObject;
-  if (ctx.role === "rep" && impact.assigned_rep_id !== ctx.userId) {
-    throw new Error("Forbidden");
+  if (ctx.role === "rep") {
+    const assignees = await loadCurrentQuoteAssignees(
+      ctx.admin,
+      ctx.workspaceId,
+      [quotePackageId],
+    );
+    if (assignees.get(quotePackageId) !== ctx.userId) {
+      throw new Error("Forbidden");
+    }
   }
-  return impact;
+  const [withHistory] = await attachAuthorizedRepriceHistory(ctx, [
+    impact as IdJsonObject,
+  ]);
+  return withHistory ?? impact;
 }
 
 async function handleDismiss(
@@ -1256,6 +1724,12 @@ async function handleDismiss(
   // 'quiet'). Dismissing one already in review/approved would silently discard
   // work and bypass the approval trail — reserve that for a manager/owner.
   const dismissState = String(impact.state ?? "");
+  if (dismissState === "dismissed") {
+    return safeJsonOk(
+      { ok: true, impactId, state: "dismissed", idempotent: true },
+      ctx.origin,
+    );
+  }
   const privileged = ["manager", "owner", "admin"].includes(ctx.role);
   if (!["visible", "quiet"].includes(dismissState) && !privileged) {
     return safeJsonError(
@@ -1264,29 +1738,41 @@ async function handleDismiss(
       ctx.origin,
     );
   }
-  const { error } = await ctx.admin.from("qb_quote_reprice_impacts").update({
-    state: "dismissed",
-    dismissed_reason: reason,
-  }).eq("id", impactId).in("state", [
-    "visible",
-    "quiet",
-    "draft_created",
-    "approval_pending",
-    "approved",
-  ]);
+  const { data, error } = await ctx.admin.rpc(
+    "dismiss_qb_oem_reprice_impact",
+    {
+      p_workspace_id: ctx.workspaceId,
+      p_impact_id: impactId,
+      p_actor_id: ctx.userId,
+      p_actor_role: ctx.role,
+      p_reason: reason,
+    },
+  );
   if (error) {
     return safeJsonError(
       `Failed to dismiss impact: ${error.message}`,
-      500,
+      error.code === "42501"
+        ? 403
+        : error.code === "P0002"
+        ? 404
+        : error.code === "40001" || error.code === "55000"
+        ? 409
+        : 500,
       ctx.origin,
     );
   }
-  return safeJsonOk({ ok: true, impactId, state: "dismissed" }, ctx.origin);
+  return safeJsonOk({
+    ok: true,
+    impactId,
+    state: "dismissed",
+    idempotent: asObject(data).idempotent === true,
+  }, ctx.origin);
 }
 
 async function handleDraft(
   ctx: AuthContext,
   impactId: string,
+  req: Request,
 ): Promise<Response> {
   let impact: JsonObject;
   try {
@@ -1298,90 +1784,69 @@ async function handleDraft(
       ctx.origin,
     );
   }
-  // State guard: only a 'visible' impact can spawn a draft. Without this a
-  // superseded/dismissed/already-drafted impact could be resurrected into the
-  // live queue and its state rewritten back to draft_created/approval_pending.
+  // The governed RPC owns the active-draft idempotency key. Permit the two
+  // post-submit states so a network retry returns its existing draft/case;
+  // every terminal/non-actionable state remains blocked here and in SQL.
   const draftState = String(impact.state ?? "");
-  if (draftState !== "visible") {
+  if (!["visible", "approval_pending", "approved"].includes(draftState)) {
     return safeJsonError(
       `A reprice draft can only be created from a visible impact; this one is "${draftState}".`,
       409,
       ctx.origin,
     );
   }
-  const lines = Array.isArray(impact.qb_quote_reprice_impact_lines)
-    ? impact.qb_quote_reprice_impact_lines as JsonObject[]
-    : [];
-  const approvalRequired = impact.requires_manager_review === true;
-  const status = approvalRequired ? "approval_pending" : "draft";
-  const proposedPatch = {
-    eventId: impact.event_id,
-    lines: lines.filter((line) => line.suppressed_by_stock_lock !== true).map((
-      line,
-    ) => ({
-      quotePackageLineItemId: line.quote_package_line_item_id ?? null,
-      equipmentLineId: line.equipment_line_id ?? null,
-      modelCode: line.model_code,
-      oldPriceCents: line.old_list_price_cents,
-      newPriceCents: line.new_list_price_cents,
-      quantity: line.quantity,
-      deltaCents: line.delta_cents,
-    })),
-    totals: {
-      projectedDeltaCents: impact.total_delta_cents,
-      oldMarginPct: impact.old_margin_pct,
-      projectedMarginPct: impact.projected_margin_pct,
-      oldCommissionCents: impact.old_commission_cents,
-      projectedCommissionCents: impact.projected_commission_cents,
+  const body = await req.json().catch(() => ({})) as JsonObject;
+  const submissionNote = typeof body.submissionNote === "string"
+    ? body.submissionNote.trim().slice(0, 1000)
+    : typeof body.submission_note === "string"
+    ? body.submission_note.trim().slice(0, 1000)
+    : "";
+  const { data, error } = await ctx.admin.rpc(
+    "create_qb_oem_reprice_draft_for_approval",
+    {
+      p_workspace_id: ctx.workspaceId,
+      p_impact_id: impactId,
+      p_actor_id: ctx.userId,
+      p_actor_role: ctx.role,
+      p_submission_note: submissionNote || null,
     },
-  };
-  const { data: draft, error } = await ctx.admin.from("qb_quote_reprice_drafts")
-    .insert({
-      impact_id: impactId,
-      quote_package_id: impact.quote_package_id,
-      workspace_id: ctx.workspaceId,
-      created_by: ctx.userId,
-      status,
-      proposed_patch: proposedPatch,
-      before_snapshot: {
-        quote_updated_at_snapshot: impact.quote_updated_at_snapshot,
-        status: impact.quote_status_snapshot,
-      },
-      projected_totals: proposedPatch.totals,
-    }).select("id").single();
-  if (error || !draft) {
-    // Unique-violation from the partial index (one active draft per impact) —
-    // a concurrent double-submit lost the race. Surface it as a clean 409.
-    if ((error as { code?: string } | null)?.code === "23505") {
-      return safeJsonError(
-        "A reprice draft already exists for this impact.",
-        409,
-        ctx.origin,
-      );
-    }
+  );
+  if (error) {
     return safeJsonError(
-      `Failed to create reprice draft: ${error?.message ?? "unknown"}`,
-      500,
+      `Failed to create governed reprice draft: ${error.message}`,
+      mutationErrorStatus(error.code),
       ctx.origin,
     );
   }
-  await ctx.admin.from("qb_quote_reprice_impacts").update({
-    state: approvalRequired ? "approval_pending" : "draft_created",
-  }).eq("id", impactId).eq("state", "visible");
+  const result = asObject(data);
+  const idempotent = result.idempotent === true;
   return safeJsonOk(
     {
       ok: true,
-      draftId: String((draft as JsonObject).id),
-      status,
-      approvalRequired,
+      draftId: String(result.draft_id ?? ""),
+      approvalCaseId: typeof result.approval_case_id === "string"
+        ? result.approval_case_id
+        : null,
+      status: String(result.status ?? "approval_pending"),
+      approvalRequired: result.approval_required !== false,
       approvalReasons: Array.isArray(impact.approval_required_reasons)
         ? impact.approval_required_reasons
         : [],
       emailDraftId: null,
+      customerCommunication: "none",
+      idempotent,
     },
     ctx.origin,
-    201,
+    idempotent ? 200 : 201,
   );
+}
+
+function mutationErrorStatus(code: string | undefined): number {
+  if (code === "42501") return 403;
+  if (code === "P0002") return 404;
+  if (code === "22023") return 400;
+  if (code === "40001" || code === "55000" || code === "23505") return 409;
+  return 500;
 }
 
 async function handleApplyDraft(
@@ -1404,11 +1869,46 @@ async function handleApplyDraft(
   if (ctx.role === "rep" && (draft as JsonObject).created_by !== ctx.userId) {
     return safeJsonError("Forbidden", 403, ctx.origin);
   }
-  return safeJsonError(
-    "Draft apply is intentionally not enabled in Phase 1 core; create/review draft only",
-    409,
-    ctx.origin,
+  const { data, error: applyError } = await ctx.admin.rpc(
+    "apply_qb_oem_reprice_draft",
+    {
+      p_workspace_id: ctx.workspaceId,
+      p_draft_id: draftId,
+      p_actor_id: ctx.userId,
+      p_actor_role: ctx.role,
+    },
   );
+  if (applyError) {
+    return safeJsonError(
+      `Failed to apply governed reprice draft: ${applyError.message}`,
+      mutationErrorStatus(applyError.code),
+      ctx.origin,
+    );
+  }
+  return safeJsonOk(data, ctx.origin);
+}
+
+async function handleReverseApply(
+  ctx: AuthContext,
+  applyAuditId: string,
+): Promise<Response> {
+  const { data, error } = await ctx.admin.rpc(
+    "reverse_qb_oem_reprice_apply",
+    {
+      p_workspace_id: ctx.workspaceId,
+      p_apply_audit_id: applyAuditId,
+      p_actor_id: ctx.userId,
+      p_actor_role: ctx.role,
+    },
+  );
+  if (error) {
+    return safeJsonError(
+      `Failed to reverse governed OEM re-price: ${error.message}`,
+      mutationErrorStatus(error.code),
+      ctx.origin,
+    );
+  }
+  return safeJsonOk(data, ctx.origin);
 }
 
 function routeParts(req: Request): string[] {
@@ -1451,10 +1951,14 @@ Deno.serve(async (req: Request) => {
     if (
       req.method === "POST" && first === "impacts" && second &&
       third === "draft"
-    ) return await handleDraft(ctx, second);
+    ) return await handleDraft(ctx, second, req);
     if (
       req.method === "POST" && first === "drafts" && second && third === "apply"
     ) return await handleApplyDraft(ctx, second);
+    if (
+      req.method === "POST" && first === "applies" && second &&
+      third === "reverse"
+    ) return await handleReverseApply(ctx, second);
     return safeJsonError("Not found", 404, origin);
   } catch (err) {
     console.error("[oem-price-feeds]", err);

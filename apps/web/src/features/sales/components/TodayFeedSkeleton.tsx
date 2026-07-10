@@ -3,7 +3,6 @@ import {
   HERO_EXPANDED_MIN_HEIGHT_PX,
   readHeroCollapsedState,
 } from "./EveningBriefingHero";
-import { OemPriceImpactCardPlaceholder } from "./OemPriceImpactCard";
 
 function SkeletonLine({ className }: { className: string }) {
   return <div className={`rounded bg-white/[0.07] ${className}`} />;
@@ -84,7 +83,6 @@ export function TodayFeedSkeleton() {
         </div>
       </div>
 
-      <OemPriceImpactCardPlaceholder />
 
       <div
         data-testid="today-feed-skeleton-streak"

@@ -9,7 +9,6 @@
 
 import { createElement, useState, useCallback, useRef } from "react";
 import type { QuotePDFData } from "../components/QuotePDFDocument";
-import { openPrintableQuoteSheet } from "../lib/quote-print-html";
 
 export interface QuotePdfGenerationResult {
   blob: Blob | null;
@@ -104,6 +103,10 @@ export function useQuotePDF() {
       } catch (err) {
         logPdfGenerationFailure(data, err);
         try {
+          // The printable renderer is a sizeable fallback-only module. Keep it
+          // out of the Quote Builder route until the PDF renderer actually
+          // fails and the operator needs the browser-print path.
+          const { openPrintableQuoteSheet } = await import("../lib/quote-print-html");
           await openPrintableQuoteSheet(data);
           setError(null);
           return { blob: null, filename, mode: "printable_fallback" };

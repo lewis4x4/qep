@@ -115,6 +115,8 @@ function ApprovalCard({
 }) {
   const config = TYPE_CONFIG[item.type];
   const Icon = config.icon;
+  const isOemReprice = item.meta.approvalKind === "oem_reprice";
+  const actionLabel = isOemReprice ? "Review Reprice" : config.actionLabel;
   const valueLabel = item.amount > 0 ? formatCurrency(item.amount) : null;
   const viewHref = item.viewHref ?? (item.dealId ? `/qrm/deals/${item.dealId}` : null);
 
@@ -139,6 +141,11 @@ function ApprovalCard({
               <Icon className="h-3 w-3 mr-1" />
               {config.label}
             </Badge>
+            {isOemReprice && (
+              <Badge className="border border-qep-orange/30 bg-qep-orange/10 text-[9px] font-bold uppercase tracking-wider text-qep-orange">
+                OEM reprice
+              </Badge>
+            )}
             {item.urgency === "high" && (
               <Badge variant="outline" className="border-rose-500/30 text-rose-400 text-[9px]">
                 Overdue
@@ -165,6 +172,11 @@ function ApprovalCard({
             )}
             <span>{item.detail}</span>
           </div>
+          {isOemReprice && (
+            <p className="mt-2 text-[11px] font-medium text-emerald-300">
+              Manager-gated projection · no customer communication is sent by this decision
+            </p>
+          )}
         </div>
 
         {/* Right: action buttons */}
@@ -194,7 +206,7 @@ function ApprovalCard({
             size="sm"
             onClick={onApprove}
             disabled={isApproving}
-            aria-label={`${config.actionLabel} for ${item.dealName}`}
+            aria-label={`${actionLabel} for ${item.dealName}`}
             className="rounded-full bg-qep-orange hover:bg-qep-orange/80 text-white min-h-[44px] px-4 text-xs font-semibold"
           >
             {isApproving ? (
@@ -202,7 +214,7 @@ function ApprovalCard({
             ) : (
               <>
                 <Check className="h-3.5 w-3.5 mr-1" />
-                {config.actionLabel}
+                {actionLabel}
               </>
             )}
           </Button>

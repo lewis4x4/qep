@@ -7905,6 +7905,24 @@ Deno.serve(async (req) => {
       if (caseErr) return safeJsonError(caseErr.message, 500, origin);
       if (!caseRow?.id) return safeJsonError("Quote approval case not found", 404, origin);
 
+      const caseWorkspaceId = typeof caseRow.workspace_id === "string" && caseRow.workspace_id.trim()
+        ? caseRow.workspace_id.trim()
+        : "default";
+      // This query uses the service client, so tenant and current ownership
+      // must be enforced before even the idempotent response is disclosed.
+      if (caseWorkspaceId !== userWorkspaceId) {
+        return safeJsonError("Quote approval case not found", 404, origin);
+      }
+      if (typeof caseRow.submitted_by !== "string" || caseRow.submitted_by !== user.id) {
+        return safeJsonError("Only the rep who submitted this approval can withdraw it.", 403, origin);
+      }
+      const withdrawPolicy = caseRow.policy_snapshot_json &&
+          typeof caseRow.policy_snapshot_json === "object" &&
+          !Array.isArray(caseRow.policy_snapshot_json)
+        ? caseRow.policy_snapshot_json as Record<string, unknown>
+        : {};
+      const isOemRepriceWithdrawal = withdrawPolicy.approval_kind === "oem_reprice";
+
       // Idempotent short-circuit: already-cancelled case returns the row
       // as-is so the rep's double-tap doesn't flash an error.
       if (String(caseRow.status ?? "") === "cancelled") {
@@ -7917,9 +7935,6 @@ Deno.serve(async (req) => {
       // Authorization: only the submitter can withdraw, only before a
       // manager decision, and only while the case is still in a routable
       // state (pending or escalated).
-      if (typeof caseRow.submitted_by !== "string" || caseRow.submitted_by !== user.id) {
-        return safeJsonError("Only the rep who submitted this approval can withdraw it.", 403, origin);
-      }
       if (caseRow.decided_at) {
         return safeJsonError("This approval has already been decided and cannot be withdrawn.", 403, origin);
       }
@@ -7942,16 +7957,29 @@ Deno.serve(async (req) => {
           decided_by_name: typeof caseRow.submitted_by_name === "string" ? caseRow.submitted_by_name : null,
         })
         .eq("id", caseRow.id);
-      if (caseUpdateErr) return safeJsonError(caseUpdateErr.message, 500, origin);
+      if (caseUpdateErr) {
+        return safeJsonError(
+          caseUpdateErr.message,
+          caseUpdateErr.code === "42501"
+            ? 403
+            : caseUpdateErr.code === "40001" || caseUpdateErr.code === "55000"
+            ? 409
+            : 500,
+          origin,
+        );
+      }
 
       // Flip the linked quote back to draft so the rep can edit and
       // resubmit. Skipped silently if the package vanished underneath us
-      // (the case FK has on delete cascade so this is defensive only).
-      if (typeof caseRow.quote_package_id === "string") {
+      // (the case FK has on delete cascade so this is defensive only). OEM
+      // approval authorizes/cancels only the governed reprice draft and must
+      // never mutate customer quote delivery state.
+      if (!isOemRepriceWithdrawal && typeof caseRow.quote_package_id === "string") {
         const { error: pkgErr } = await admin
           .from("quote_packages")
           .update({ status: "draft" })
-          .eq("id", caseRow.quote_package_id);
+          .eq("id", caseRow.quote_package_id)
+          .eq("workspace_id", caseWorkspaceId);
         if (pkgErr) return safeJsonError(pkgErr.message, 500, origin);
       }
 
@@ -8148,28 +8176,36 @@ Deno.serve(async (req) => {
           namedBranchSalesManagerPrimary: policy.namedBranchSalesManagerPrimary,
           namedBranchGeneralManagerFallback: policy.namedBranchGeneralManagerFallback,
         });
-        const { error: flowErr } = await admin
-          .from("flow_approvals")
-          .update({
-            status: "escalated",
-            assigned_to: approvalRoute.assignedTo,
-            assigned_role: approvalRoute.assignedRole,
-            decision_reason: decisionNote,
-            due_at: new Date(Date.now() + policy.submitSlaHours * 60 * 60 * 1000).toISOString(),
-            escalate_at: new Date(Date.now() + policy.escalationSlaHours * 60 * 60 * 1000).toISOString(),
-            context_summary: {
-              ...(caseRow.reason_summary_json && typeof caseRow.reason_summary_json === "object" ? caseRow.reason_summary_json : {}),
-              quote_package_id: caseRow.quote_package_id,
-              branch_slug: approvalRoute.branchSlug,
-              branch_name: approvalRoute.branchName,
+        // OEM reprice cases are created directly by the governed DB RPC and
+        // intentionally have no generic flow_approval row. Escalate their QAC
+        // routing below without issuing an invalid UUID `eq.null` request.
+        if (
+          typeof caseRow.flow_approval_id === "string" &&
+          caseRow.flow_approval_id.length > 0
+        ) {
+          const { error: flowErr } = await admin
+            .from("flow_approvals")
+            .update({
+              status: "escalated",
               assigned_to: approvalRoute.assignedTo,
-              assigned_to_name: approvalRoute.assignedToName,
               assigned_role: approvalRoute.assignedRole,
-              route_mode: approvalRoute.routeMode,
-            },
-          })
-          .eq("id", caseRow.flow_approval_id);
-        if (flowErr) return safeJsonError(flowErr.message, 500, origin);
+              decision_reason: decisionNote,
+              due_at: new Date(Date.now() + policy.submitSlaHours * 60 * 60 * 1000).toISOString(),
+              escalate_at: new Date(Date.now() + policy.escalationSlaHours * 60 * 60 * 1000).toISOString(),
+              context_summary: {
+                ...(caseRow.reason_summary_json && typeof caseRow.reason_summary_json === "object" ? caseRow.reason_summary_json : {}),
+                quote_package_id: caseRow.quote_package_id,
+                branch_slug: approvalRoute.branchSlug,
+                branch_name: approvalRoute.branchName,
+                assigned_to: approvalRoute.assignedTo,
+                assigned_to_name: approvalRoute.assignedToName,
+                assigned_role: approvalRoute.assignedRole,
+                route_mode: approvalRoute.routeMode,
+              },
+            })
+            .eq("id", caseRow.flow_approval_id);
+          if (flowErr) return safeJsonError(flowErr.message, 500, origin);
+        }
 
         const { error: caseUpdateErr } = await admin
           .from("quote_approval_cases")
@@ -8184,7 +8220,17 @@ Deno.serve(async (req) => {
             escalate_at: new Date(Date.now() + policy.escalationSlaHours * 60 * 60 * 1000).toISOString(),
           })
           .eq("id", caseRow.id);
-        if (caseUpdateErr) return safeJsonError(caseUpdateErr.message, 500, origin);
+        if (caseUpdateErr) {
+          return safeJsonError(
+            caseUpdateErr.message,
+            caseUpdateErr.code === "42501"
+              ? 403
+              : caseUpdateErr.code === "40001" || caseUpdateErr.code === "55000"
+              ? 409
+              : 500,
+            origin,
+          );
+        }
 
         await notifyRepOfApprovalDecision({
           admin,
@@ -8217,6 +8263,20 @@ Deno.serve(async (req) => {
           : decision === "approved"
             ? "approved"
             : "rejected";
+      const casePolicySnapshot = caseRow.policy_snapshot_json &&
+          typeof caseRow.policy_snapshot_json === "object" &&
+          !Array.isArray(caseRow.policy_snapshot_json)
+        ? caseRow.policy_snapshot_json as Record<string, unknown>
+        : {};
+      const isOemRepriceApproval =
+        casePolicySnapshot.approval_kind === "oem_reprice";
+      if (isOemRepriceApproval && decision === "approved_with_conditions") {
+        return safeJsonError(
+          "OEM re-price actions require an explicit approve, changes-requested, or reject decision.",
+          400,
+          origin,
+        );
+      }
 
       await saveQuoteApprovalConditions({
         admin,
@@ -8234,7 +8294,17 @@ Deno.serve(async (req) => {
           decided_at: nowIso,
         })
         .eq("id", caseRow.id);
-      if (caseUpdateErr) return safeJsonError(caseUpdateErr.message, 500, origin);
+      if (caseUpdateErr) {
+        return safeJsonError(
+          caseUpdateErr.message,
+          caseUpdateErr.code === "42501"
+            ? 403
+            : caseUpdateErr.code === "40001" || caseUpdateErr.code === "55000"
+            ? 409
+            : 500,
+          origin,
+        );
+      }
 
       const flowDecision = decision === "approved" || decision === "approved_with_conditions"
         ? "approved"
@@ -8280,25 +8350,49 @@ Deno.serve(async (req) => {
           : nextCaseStatus === "approved"
             ? "approved"
             : "rejected";
-      const { error: quoteStatusErr } = await admin
-        .from("quote_packages")
-        .update({ status: nextQuoteStatus })
-        .eq("id", caseRow.quote_package_id);
-      if (quoteStatusErr) return safeJsonError(quoteStatusErr.message, 500, origin);
+      let autoSendResult: Awaited<ReturnType<typeof tryAutoSendApprovedQuote>>;
+      if (isOemRepriceApproval) {
+        // OEM-DP2: this approval authorizes only the prepared re-price action.
+        // It must not advance the customer quote state, advance the deal, or
+        // invoke the general post-approval auto-send path.
+        autoSendResult = {
+          attempted: false,
+          sent: false,
+          reason: "oem_reprice_never_auto_send",
+        };
+      } else {
+        const { error: quoteStatusErr } = await admin
+          .from("quote_packages")
+          .update({ status: nextQuoteStatus })
+          .eq("id", caseRow.quote_package_id);
+        if (quoteStatusErr) {
+          return safeJsonError(quoteStatusErr.message, 500, origin);
+        }
 
-      if (nextQuoteStatus === "approved" || nextQuoteStatus === "approved_with_conditions") {
-        await advanceQuoteDealStage({
-          admin,
-          workspaceId: typeof caseRow.workspace_id === "string" ? caseRow.workspace_id : "default",
-          dealId: typeof caseRow.deal_id === "string" ? caseRow.deal_id : null,
-          target: QUOTE_PIPELINE_STAGE_TARGETS.quoteCreated,
-          source: "quote_approval_decision",
-        });
+        if (
+          nextQuoteStatus === "approved" ||
+          nextQuoteStatus === "approved_with_conditions"
+        ) {
+          await advanceQuoteDealStage({
+            admin,
+            workspaceId: typeof caseRow.workspace_id === "string"
+              ? caseRow.workspace_id
+              : "default",
+            dealId: typeof caseRow.deal_id === "string"
+              ? caseRow.deal_id
+              : null,
+            target: QUOTE_PIPELINE_STAGE_TARGETS.quoteCreated,
+            source: "quote_approval_decision",
+          });
+        }
+        autoSendResult =
+          nextQuoteStatus === "approved" ||
+            nextQuoteStatus === "approved_with_conditions"
+            ? await tryAutoSendApprovedQuote({
+              quotePackageId: String(caseRow.quote_package_id),
+            })
+            : { attempted: false, sent: false, reason: "quote_not_approved" };
       }
-      const autoSendResult =
-        nextQuoteStatus === "approved" || nextQuoteStatus === "approved_with_conditions"
-          ? await tryAutoSendApprovedQuote({ quotePackageId: String(caseRow.quote_package_id) })
-          : { attempted: false, sent: false, reason: "quote_not_approved" };
 
       await notifyRepOfApprovalDecision({
         admin,

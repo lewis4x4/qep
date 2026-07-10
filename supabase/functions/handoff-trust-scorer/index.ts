@@ -14,7 +14,7 @@
  * Trigger: nightly via pg_cron or manual POST.
  * Auth: service_role (cron) or manager/owner (manual).
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
@@ -40,12 +40,14 @@ interface UnscoredHandoff {
   handoff_at: string;
 }
 
+type AdminClient = SupabaseClient<any, "public", any>;
+
 /**
  * Determine outcome by comparing subject state before and after handoff.
  * For deals: check if stage advanced (probability increased) or deal was won.
  */
 async function determineOutcome(
-  admin: ReturnType<typeof createClient>,
+  admin: AdminClient,
   subjectType: string,
   subjectId: string,
   handoffAt: string,

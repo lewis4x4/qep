@@ -191,6 +191,51 @@ describe("normalizeApprovals", () => {
     ]);
   });
 
+  test("surfaces OEM reprice economics and manager no-send evidence", () => {
+    const rows = normalizeQuoteApprovalRows([{
+      id: "approval-oem-1",
+      quote_package_id: "pkg-oem-1",
+      quote_package_version_id: "ver-oem-1",
+      version_number: 4,
+      route_mode: "manager_queue",
+      policy_snapshot_json: {
+        approval_kind: "oem_reprice",
+        oem_reprice: { auto_send_customer: false },
+      },
+      reason_summary_json: {
+        approval_kind: "oem_reprice",
+        reasons: ["price_change_categories:list_price"],
+        change_categories: ["list_price"],
+        current_net_total_cents: 8200000,
+        projected_net_total_cents: 8350000,
+        total_delta_cents: 150000,
+        old_margin_pct: 8.2,
+        projected_margin_pct: 7.1,
+        below_margin_floor: true,
+        customer_communication: "none",
+        lines: [{ modelCode: "333G", oldPriceCents: 8000000, newPriceCents: 8150000 }],
+      },
+      status: "pending",
+      created_at: "2026-07-09T12:00:00.000Z",
+      net_total: 83500,
+      margin_pct: 7.1,
+    }]);
+    const approvals = normalizeApprovals([], [], [], [], rows, Date.parse("2026-07-09T13:00:00.000Z"));
+
+    expect(approvals[0]?.detail).toContain("OEM reprice");
+    expect(approvals[0]?.detail).toContain("Projected margin 7.1%");
+    expect(approvals[0]?.detail).toContain("No customer auto-send");
+    expect(approvals[0]?.meta).toMatchObject({
+      approvalKind: "oem_reprice",
+      oemReprice: {
+        currentNetTotalCents: 8200000,
+        projectedNetTotalCents: 8350000,
+        belowMarginFloor: true,
+        customerCommunication: "none",
+      },
+    });
+  });
+
   test("returns empty approval query row arrays for non-array inputs", () => {
     expect(normalizeMarginRows(null)).toEqual([]);
     expect(normalizeDepositRows({ id: "deposit-1" })).toEqual([]);

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { planNextInvoice, type BillingContractSnapshot } from "./rental-billing-core";
+import {
+  aggregateReturnCharges,
+  planNextInvoice,
+  type BillingContractSnapshot,
+  type RentalReturnAssessmentSnapshot,
+} from "./rental-billing-core";
 
 const BASE_CONTRACT: BillingContractSnapshot = {
   id: "c-1",
@@ -17,6 +22,248 @@ const BASE_CONTRACT: BillingContractSnapshot = {
   damage_waiver_accepted: true,
   damage_waiver_rate_pct: 0.1,
 };
+
+function returnAssessment(
+  overrides: Partial<RentalReturnAssessmentSnapshot> = {},
+): RentalReturnAssessmentSnapshot {
+  return {
+    id: "return-1",
+    workspace_id: "default",
+    rental_contract_id: BASE_CONTRACT.id,
+    equipment_id: "equipment-1",
+    created_at: "2026-06-20T10:00:00Z",
+    updated_at: "2026-06-20T10:00:00Z",
+    fuel_charge_cents: null,
+    cleaning_charge_cents: null,
+    damage_charge_cents: null,
+    environmental_fee_cents: null,
+    damage_disposition: "pending",
+    ...overrides,
+  };
+}
+
+describe("rental return charge aggregation", () => {
+  it("sums every distinct equipment return and produces cent-level source evidence", () => {
+    const aggregation = aggregateReturnCharges([
+      returnAssessment({
+        id: "return-equipment-1",
+        equipment_id: "equipment-1",
+        fuel_charge_cents: 8_000,
+        cleaning_charge_cents: 5_000,
+        damage_charge_cents: 40_000,
+        environmental_fee_cents: 2_500,
+        damage_disposition: "customer_billable",
+      }),
+      returnAssessment({
+        id: "return-equipment-2",
+        equipment_id: "equipment-2",
+        fuel_charge_cents: 3_000,
+        cleaning_charge_cents: 2_000,
+        damage_charge_cents: 10_000,
+        environmental_fee_cents: 500,
+        damage_disposition: "customer_billable",
+      }),
+    ], { contract_id: BASE_CONTRACT.id, workspace_id: "default" });
+
+    expect(aggregation.charges).toEqual({
+      fuel_charge_cents: 11_000,
+      cleaning_charge_cents: 7_000,
+      damage_charge_cents: 50_000,
+      environmental_fee_cents: 3_000,
+      damage_disposition: "customer_billable",
+    });
+    expect(aggregation.billed_return_ids).toEqual([
+      "return-equipment-1",
+      "return-equipment-2",
+    ]);
+    expect(aggregation.sources).toEqual([
+      {
+        return_id: "return-equipment-1",
+        equipment_id: "equipment-1",
+        legacy_null_equipment_fallback: false,
+        damage_disposition: "customer_billable",
+        fuel_charge_cents: 8_000,
+        cleaning_charge_cents: 5_000,
+        damage_charge_cents: 40_000,
+        environmental_fee_cents: 2_500,
+      },
+      {
+        return_id: "return-equipment-2",
+        equipment_id: "equipment-2",
+        legacy_null_equipment_fallback: false,
+        damage_disposition: "customer_billable",
+        fuel_charge_cents: 3_000,
+        cleaning_charge_cents: 2_000,
+        damage_charge_cents: 10_000,
+        environmental_fee_cents: 500,
+      },
+    ]);
+
+    const plan = planNextInvoice(
+      {
+        ...BASE_CONTRACT,
+        lifecycle_state: "returned",
+        returned_at: "2026-06-20T08:00:00Z",
+      },
+      [],
+      {
+        count: 1,
+        last_period_end: "2026-06-10",
+        rental_charge_cents_total: 90_000,
+      },
+      aggregation.charges,
+      "2026-06-21",
+    );
+    expect(plan?.kind).toBe("final");
+    expect(plan?.charges.rental_charge_cents).toBe(0);
+    expect(plan?.charges.fuel_charge_cents).toBe(11_000);
+    expect(plan?.charges.cleaning_charge_cents).toBe(7_000);
+    expect(plan?.charges.damage_charge_cents).toBe(50_000);
+    expect(plan?.charges.other_charge_cents).toBe(3_000);
+    expect(plan?.charges.subtotal_cents).toBe(86_000); // 71k returns + 15k pickup
+  });
+
+  it("excludes pending damage per unit while preserving its other charges", () => {
+    const aggregation = aggregateReturnCharges([
+      returnAssessment({
+        id: "pending-damage",
+        equipment_id: "equipment-1",
+        fuel_charge_cents: 8_000,
+        cleaning_charge_cents: 1_000,
+        damage_charge_cents: 40_000,
+        damage_disposition: "pending",
+      }),
+      returnAssessment({
+        id: "billable-damage",
+        equipment_id: "equipment-2",
+        cleaning_charge_cents: 2_000,
+        damage_charge_cents: 10_000,
+        environmental_fee_cents: 500,
+        damage_disposition: "customer_billable",
+      }),
+    ], { contract_id: BASE_CONTRACT.id, workspace_id: "default" });
+
+    expect(aggregation.charges?.fuel_charge_cents).toBe(8_000);
+    expect(aggregation.charges?.cleaning_charge_cents).toBe(3_000);
+    expect(aggregation.charges?.damage_charge_cents).toBe(10_000);
+    expect(aggregation.charges?.environmental_fee_cents).toBe(500);
+    expect(aggregation.sources.find((source) => source.return_id === "pending-damage")
+      ?.damage_charge_cents).toBe(0);
+  });
+
+  it("keeps aggregated return charges off interim invoices", () => {
+    const aggregation = aggregateReturnCharges([
+      returnAssessment({
+        fuel_charge_cents: 8_000,
+        cleaning_charge_cents: 5_000,
+        damage_charge_cents: 40_000,
+        environmental_fee_cents: 2_500,
+        damage_disposition: "customer_billable",
+      }),
+    ], { contract_id: BASE_CONTRACT.id, workspace_id: "default" });
+
+    const plan = planNextInvoice(
+      BASE_CONTRACT,
+      [],
+      { count: 0, last_period_end: null, rental_charge_cents_total: 0 },
+      aggregation.charges,
+      "2026-06-30",
+    );
+    expect(plan?.kind).toBe("interim");
+    expect(plan?.charges.fuel_charge_cents).toBe(0);
+    expect(plan?.charges.cleaning_charge_cents).toBe(0);
+    expect(plan?.charges.damage_charge_cents).toBe(0);
+    expect(plan?.charges.other_charge_cents).toBe(0);
+  });
+
+  it("lets the latest corrected assessment supersede an older row for the same equipment", () => {
+    const aggregation = aggregateReturnCharges([
+      returnAssessment({
+        id: "original-assessment",
+        equipment_id: "equipment-1",
+        created_at: "2026-06-20T10:00:00Z",
+        updated_at: "2026-06-20T10:00:00Z",
+        fuel_charge_cents: 8_000,
+        cleaning_charge_cents: 5_000,
+        damage_charge_cents: 40_000,
+        damage_disposition: "customer_billable",
+      }),
+      returnAssessment({
+        id: "corrected-assessment",
+        equipment_id: "equipment-1",
+        created_at: "2026-06-20T10:05:00Z",
+        updated_at: "2026-06-20T10:05:00Z",
+        fuel_charge_cents: 6_000,
+        cleaning_charge_cents: 2_000,
+        damage_charge_cents: 15_000,
+        damage_disposition: "customer_billable",
+      }),
+    ], { contract_id: BASE_CONTRACT.id, workspace_id: "default" });
+
+    expect(aggregation.charges?.fuel_charge_cents).toBe(6_000);
+    expect(aggregation.charges?.cleaning_charge_cents).toBe(2_000);
+    expect(aggregation.charges?.damage_charge_cents).toBe(15_000);
+    expect(aggregation.selected_return_ids).toEqual(["corrected-assessment"]);
+    expect(aggregation.superseded_return_ids).toEqual(["original-assessment"]);
+  });
+
+  it("uses one latest-only fallback bucket for legacy NULL-equipment rows", () => {
+    const aggregation = aggregateReturnCharges([
+      returnAssessment({
+        id: "identified-unit",
+        equipment_id: "equipment-1",
+        fuel_charge_cents: 1_000,
+      }),
+      returnAssessment({
+        id: "legacy-original",
+        equipment_id: null,
+        created_at: "2026-06-20T09:00:00Z",
+        updated_at: "2026-06-20T09:00:00Z",
+        fuel_charge_cents: 7_000,
+      }),
+      returnAssessment({
+        id: "legacy-correction",
+        equipment_id: null,
+        created_at: "2026-06-20T11:00:00Z",
+        updated_at: "2026-06-20T11:00:00Z",
+        fuel_charge_cents: 4_000,
+      }),
+    ], { contract_id: BASE_CONTRACT.id, workspace_id: "default" });
+
+    // The identified unit plus ONE legacy bucket are billable; ambiguous
+    // legacy rows never stack as if they proved multiple physical units.
+    expect(aggregation.charges?.fuel_charge_cents).toBe(5_000);
+    expect(aggregation.legacy_null_equipment_return_id).toBe("legacy-correction");
+    expect(aggregation.selected_return_ids).toEqual([
+      "identified-unit",
+      "legacy-correction",
+    ]);
+    expect(aggregation.superseded_return_ids).toEqual(["legacy-original"]);
+  });
+
+  it("rejects cross-contract, cross-workspace, and soft-deleted assessments", () => {
+    const valid = returnAssessment({ id: "valid", fuel_charge_cents: 1_000 });
+    const rows = [
+      valid,
+      returnAssessment({ id: "other-contract", rental_contract_id: "c-2", fuel_charge_cents: 20_000 }),
+      returnAssessment({ id: "other-workspace", workspace_id: "other", fuel_charge_cents: 30_000 }),
+      returnAssessment({ id: "soft-deleted", deleted_at: "2026-06-21T00:00:00Z", fuel_charge_cents: 40_000 }),
+    ];
+
+    const forward = aggregateReturnCharges(rows, {
+      contract_id: BASE_CONTRACT.id,
+      workspace_id: "default",
+    });
+    const reversed = aggregateReturnCharges([...rows].reverse(), {
+      contract_id: BASE_CONTRACT.id,
+      workspace_id: "default",
+    });
+
+    expect(forward.charges?.fuel_charge_cents).toBe(1_000);
+    expect(forward.selected_return_ids).toEqual(["valid"]);
+    expect(reversed).toEqual(forward); // query order cannot change money/evidence
+  });
+});
 
 describe("rental-billing-core planner (blueprint §3)", () => {
   it("bills the first 28-day cycle in arrears with delivery fee and waiver on base only", () => {

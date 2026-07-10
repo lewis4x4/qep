@@ -30,7 +30,7 @@
 
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -46,9 +46,14 @@ import { ApprovalActivityLog } from "@/features/quote-builder/components/Approva
 import { getQuoteApprovalCase } from "@/features/quote-builder/lib/quote-api";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/format";
 
 import { useDecideQuoteApproval } from "../hooks/useApprovals";
 import type { ApprovalItem } from "../lib/approvalTypes";
+import {
+  extractOemRepriceApprovalEvidence,
+  isOemRepriceDecisionNoteRequired,
+} from "../lib/oemRepriceApprovalEvidence";
 import type {
   QuoteApprovalCaseSummary,
   QuoteApprovalConditionDraft,
@@ -150,6 +155,20 @@ function resolveTarget(input: NormalizedApproval | QuoteApprovalCaseSummary): Re
   };
 }
 
+function formatCents(value: number | null): string {
+  return value == null ? "—" : formatCurrency(value / 100);
+}
+
+function formatSignedCents(value: number | null): string {
+  if (value == null) return "—";
+  const prefix = value > 0 ? "+" : "";
+  return `${prefix}${formatCurrency(value / 100)}`;
+}
+
+function formatPct(value: number | null): string {
+  return value == null ? "—" : `${value.toFixed(1)}%`;
+}
+
 // ─── Component ─────────────────────────────────────────────────────────────
 
 export function QuoteApprovalDecisionDialog({
@@ -188,12 +207,46 @@ export function QuoteApprovalDecisionDialog({
     staleTime: 5_000,
   });
 
-  const liveCase: QuoteApprovalCaseSummary | null = caseQuery.data
-    ?? (isApprovalItem(approvalCase) ? null : approvalCase);
+  // The package endpoint returns its current case, which is not necessarily
+  // the exact queue row a manager clicked. Never substitute another case's
+  // evidence or activity into this decision.
+  const liveCase: QuoteApprovalCaseSummary | null = caseQuery.data?.id === target.approvalCaseId
+    ? caseQuery.data
+    : (!isApprovalItem(approvalCase) && approvalCase.id === target.approvalCaseId
+      ? approvalCase
+      : null);
 
-  const noteRequired = decision === "rejected" || decision === "escalated";
-  const conditionsRequired = decision === "approved_with_conditions";
-  const conditionsBuilderVisible = decision === "approved_with_conditions" || decision === "changes_requested";
+  const itemPolicy = isApprovalItem(approvalCase)
+    ? approvalCase.meta.policySnapshot
+    : approvalCase.policySnapshot;
+  const itemReason = isApprovalItem(approvalCase)
+    ? approvalCase.meta.reasonSummary
+    : approvalCase.reasonSummary;
+  const oemRepriceEvidence = extractOemRepriceApprovalEvidence(
+    itemPolicy,
+    itemReason,
+  ) ?? extractOemRepriceApprovalEvidence(
+    liveCase?.policySnapshot,
+    liveCase?.reasonSummary,
+  );
+  const isOemReprice = oemRepriceEvidence !== null;
+
+  const noteRequired = decision === "rejected"
+    || decision === "escalated"
+    || isOemRepriceDecisionNoteRequired(oemRepriceEvidence, decision);
+  const conditionsRequired = !isOemReprice && decision === "approved_with_conditions";
+  const conditionsBuilderVisible = !isOemReprice
+    && (decision === "approved_with_conditions" || decision === "changes_requested");
+  const decisionOptions = isOemReprice
+    ? DECISION_OPTIONS.filter((option) => option.value !== "approved_with_conditions")
+    : DECISION_OPTIONS;
+
+  useEffect(() => {
+    if (isOemReprice && decision === "approved_with_conditions") {
+      setDecision("approved");
+      setConditions([]);
+    }
+  }, [decision, isOemReprice]);
 
   const submitDisabled = decideQuote.isPending
     || (conditionsRequired && conditions.length === 0)
@@ -241,6 +294,11 @@ export function QuoteApprovalDecisionDialog({
               title: "Quote approved and auto-sent",
               description: "Post-approval routing auto-delivered the quote to the customer.",
             });
+          } else if (isOemReprice) {
+            toast({
+              title: "OEM reprice decision recorded",
+              description: "No quote was sent and no customer communication was created.",
+            });
           } else {
             toast({ title: "Decision recorded" });
           }
@@ -261,9 +319,13 @@ export function QuoteApprovalDecisionDialog({
     >
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Quote Approval Decision</DialogTitle>
+          <DialogTitle>
+            {isOemReprice ? "Authorize OEM Reprice" : "Quote Approval Decision"}
+          </DialogTitle>
           <DialogDescription>
-            {target.headline
+            {isOemReprice
+              ? "Authorize a governed quote reprice. This decision cannot send or draft customer communication."
+              : target.headline
               ? `Review ${target.headline} and choose the manager action.`
               : "Review the quote and choose the manager action."}
           </DialogDescription>
@@ -274,6 +336,118 @@ export function QuoteApprovalDecisionDialog({
             <p className="text-sm font-medium text-foreground">{target.headline}</p>
             <p className="mt-1 text-xs text-muted-foreground">{target.detail}</p>
           </Card>
+
+          {oemRepriceEvidence && (
+            <Card className="space-y-4 border-qep-orange/30 bg-qep-orange/[0.05] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-qep-orange" />
+                    <p className="text-sm font-semibold text-foreground">OEM reprice evidence</p>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Review the persisted projection before authorizing any quote mutation.
+                  </p>
+                </div>
+                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-300">
+                  No customer auto-send
+                </span>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-lg border border-border/60 bg-background/50 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Current net</p>
+                  <p className="mt-1 text-sm font-semibold tabular-nums text-foreground">
+                    {formatCents(oemRepriceEvidence.currentNetTotalCents)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-background/50 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Projected net</p>
+                  <p className="mt-1 text-sm font-semibold tabular-nums text-foreground">
+                    {formatCents(oemRepriceEvidence.projectedNetTotalCents)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-background/50 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Net change</p>
+                  <p className="mt-1 text-sm font-semibold tabular-nums text-qep-orange">
+                    {formatSignedCents(oemRepriceEvidence.totalDeltaCents)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-3 text-xs sm:grid-cols-2">
+                <div className="rounded-lg border border-border/60 bg-background/50 p-3">
+                  <p className="font-medium text-foreground">Margin</p>
+                  <p className="mt-1 tabular-nums text-muted-foreground">
+                    {formatPct(oemRepriceEvidence.oldMarginPct)} → {formatPct(oemRepriceEvidence.projectedMarginPct)}
+                    {oemRepriceEvidence.marginFloorPct != null
+                      ? ` · floor ${formatPct(oemRepriceEvidence.marginFloorPct)}`
+                      : ""}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-background/50 p-3">
+                  <p className="font-medium text-foreground">Rep commission projection</p>
+                  <p className="mt-1 tabular-nums text-muted-foreground">
+                    {formatCents(oemRepriceEvidence.oldCommissionCents)} → {formatCents(oemRepriceEvidence.projectedCommissionCents)}
+                    {oemRepriceEvidence.commissionDeltaCents != null
+                      ? ` · ${formatSignedCents(oemRepriceEvidence.commissionDeltaCents)}`
+                      : ""}
+                  </p>
+                </div>
+              </div>
+
+              {oemRepriceEvidence.belowMarginFloor && (
+                <div className="flex gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <p>
+                    Projected margin is below policy floor. Approval requires an explicit exception reason in the decision note.
+                  </p>
+                </div>
+              )}
+
+              {oemRepriceEvidence.changeCategories.length > 0 && (
+                <div className="flex flex-wrap gap-2" aria-label="OEM change categories">
+                  {oemRepriceEvidence.changeCategories.map((category) => (
+                    <span
+                      key={category}
+                      className="rounded border border-border/70 bg-background/60 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                    >
+                      {category.replace(/_/g, " ")}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div>
+                <p className="text-xs font-medium text-foreground">
+                  Affected quote lines ({oemRepriceEvidence.lines.length})
+                </p>
+                {oemRepriceEvidence.lines.length === 0 ? (
+                  <p className="mt-2 text-xs text-muted-foreground">No normalized line evidence is available.</p>
+                ) : (
+                  <div className="mt-2 max-h-52 space-y-2 overflow-y-auto pr-1">
+                    {oemRepriceEvidence.lines.map((line, index) => (
+                      <div
+                        key={line.impactLineId ?? line.quotePackageLineItemId ?? `${line.modelCode}-${index}`}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-background/50 px-3 py-2 text-xs"
+                      >
+                        <div>
+                          <span className="font-medium text-foreground">{line.modelCode ?? "Quote line"}</span>
+                          <span className="ml-2 text-muted-foreground">Qty {line.quantity}</span>
+                          {line.suppressedByStockLock && (
+                            <span className="ml-2 text-amber-300">Yard-stock locked</span>
+                          )}
+                        </div>
+                        <span className="tabular-nums text-muted-foreground">
+                          {formatCents(line.oldPriceCents)} → {formatCents(line.newPriceCents)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
 
           {/* Approval Activity Log — surfaces the rep's submission_note
               and any prior decisions ahead of the action picker. */}
@@ -289,7 +463,7 @@ export function QuoteApprovalDecisionDialog({
             aria-label="Decision"
             className="grid gap-3 sm:grid-cols-5"
           >
-            {DECISION_OPTIONS.map((option) => (
+            {decisionOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"
@@ -318,7 +492,9 @@ export function QuoteApprovalDecisionDialog({
               aria-required={noteRequired}
               aria-invalid={noteRequired && note.trim().length === 0}
               className="min-h-[96px] w-full rounded border border-input bg-card px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange"
-              placeholder="Explain the decision so the rep and audit trail are clear."
+              placeholder={isOemReprice && oemRepriceEvidence?.belowMarginFloor
+                ? "Required: explain why this below-floor reprice is authorized."
+                : "Explain the decision so the rep and audit trail are clear."}
             />
           </label>
 

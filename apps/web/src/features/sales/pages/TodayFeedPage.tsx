@@ -10,10 +10,10 @@ import { SalesQuickTools } from "../components/SalesQuickTools";
 import { TomorrowFirstMove } from "../components/TomorrowFirstMove";
 import { LiveSignalsStrip } from "../components/LiveSignalsStrip";
 import {
-  OemPriceImpactCard,
-  OemPriceImpactCardEmpty,
-  OemPriceImpactCardPlaceholder,
-} from "../components/OemPriceImpactCard";
+  TodayPriceImpactChip,
+  TodayPriceImpactChipError,
+  TodayPriceImpactChipLoading,
+} from "../components/TodayPriceImpactChip";
 import { StreakBadge } from "../components/StreakBadge";
 import { TodayFeedSkeleton } from "../components/TodayFeedSkeleton";
 import { PrepCard } from "../components/PrepCard";
@@ -114,6 +114,8 @@ export function TodayFeedPage() {
     pipeline,
     priceImpacts,
     priceImpactsLoading,
+    priceImpactsError,
+    refetchPriceImpacts,
     timeOfDay,
     isLoading,
   } = useTodayFeed();
@@ -225,16 +227,19 @@ export function TodayFeedPage() {
       )}
 
       {priceImpactsLoading ? (
-        <OemPriceImpactCardPlaceholder />
+        <TodayPriceImpactChipLoading />
+      ) : priceImpactsError ? (
+        <TodayPriceImpactChipError
+          onRetry={() => {
+            void refetchPriceImpacts();
+          }}
+        />
       ) : showPriceImpactCard && priceImpacts ? (
-        <OemPriceImpactCard
+        <TodayPriceImpactChip
           summary={priceImpacts.summary}
-          impacts={priceImpacts.impacts}
           onReview={() => navigate("/sales/price-impacts")}
         />
-      ) : (
-        <OemPriceImpactCardEmpty />
-      )}
+      ) : null}
 
       <StreakBadge
         currentStreak={streaks.currentStreak}
