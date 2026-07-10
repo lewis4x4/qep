@@ -49,6 +49,7 @@ export interface QuoteBuilderV2PageShellProps {
   existingQuoteLoadError: string | null;
   existingQuoteEditingMessage: string | null;
   draftSavePausedMessage: string | null;
+  oemImpactReviewHref?: string | null;
   currentWizardStepNumber: number;
   signalsReady: boolean;
   marginPct: number;
@@ -113,6 +114,7 @@ export function QuoteBuilderV2PageShell({
   existingQuoteLoadError,
   existingQuoteEditingMessage,
   draftSavePausedMessage,
+  oemImpactReviewHref,
   currentWizardStepNumber,
   signalsReady,
   marginPct,
@@ -265,6 +267,7 @@ export function QuoteBuilderV2PageShell({
           <QuoteBuilderStatusBanners
             existingQuoteLoadError={existingQuoteLoadError}
             existingQuoteEditingMessage={existingQuoteEditingMessage}
+            oemImpactReviewHref={oemImpactReviewHref}
           />
 
           {/*

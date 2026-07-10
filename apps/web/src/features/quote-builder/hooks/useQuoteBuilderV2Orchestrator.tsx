@@ -1007,6 +1007,9 @@ export function useQuoteBuilderV2Orchestrator() {
           ? `Editing saved quote${typeof existingQuote.quote_number === "string" && existingQuote.quote_number ? ` ${existingQuote.quote_number}` : ""}. Update any step below, then save to keep working in the same quote.`
           : null,
         draftSavePausedMessage: lowMarginDraftReasonMessage,
+        oemImpactReviewHref: existingQuote?.requires_requote === true
+          ? `/sales/price-impacts?quote_package_id=${encodeURIComponent(activeQuotePackageId ?? packageId)}`
+          : null,
         currentWizardStepNumber,
         signalsReady,
         marginPct,
@@ -1129,4 +1132,3 @@ export function useQuoteBuilderV2Orchestrator() {
     />
   );
 }
-
