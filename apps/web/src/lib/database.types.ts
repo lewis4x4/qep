@@ -54896,6 +54896,7 @@ export type Database = {
           ar_statement_day_of_month: number
           cpa_adjustment_posting_target: string
           created_at: string
+          feature_flags: Json
           iron_escalation_slack_channel: string
           iron_high_value_threshold_cents: number
           iron_user_daily_hard_cap_tokens: number
@@ -54917,6 +54918,7 @@ export type Database = {
           ar_statement_day_of_month?: number
           cpa_adjustment_posting_target?: string
           created_at?: string
+          feature_flags?: Json
           iron_escalation_slack_channel?: string
           iron_high_value_threshold_cents?: number
           iron_user_daily_hard_cap_tokens?: number
@@ -54938,6 +54940,7 @@ export type Database = {
           ar_statement_day_of_month?: number
           cpa_adjustment_posting_target?: string
           created_at?: string
+          feature_flags?: Json
           iron_escalation_slack_channel?: string
           iron_high_value_threshold_cents?: number
           iron_user_daily_hard_cap_tokens?: number
