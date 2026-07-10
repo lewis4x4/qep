@@ -1,0 +1,56 @@
+{
+  "segment": "rental-worldclass-822-release",
+  "timestamp": "2026-07-10T15:45:00Z",
+  "verdict": "PASS",
+  "mission_alignment": {
+    "operator": "rental desk, rental manager, finance",
+    "changed_decision": "commission attribution, cycle-due alerts, and low-availability alerts are now trustworthy (correct math) and tenant-isolated (service-only mutation surface); operators act on real signals instead of over-counted demand and mis-dated cycle boundaries",
+    "residual_risk": "design-review UI gate still blocked on the banned Floor audit login; alert threshold tuning deferred to one observed billing cycle"
+  },
+  "steps": {
+    "R1_commit": {
+      "commit": "57595f22",
+      "gates": {
+        "migrations_check": "pass (001..822)",
+        "sql_822_tests": "8/8 pass (bun test, scratch Postgres; macOS needs LC_ALL set)",
+        "iron_actions_tests": "4/4 pass (deno)",
+        "deno_check": "rental-ops, flow-runner, iron-execute-flow-step, flow-synthesize",
+        "root_build": "pass"
+      }
+    },
+    "R2_migration": {
+      "applied": "822_rental_worldclass_security_and_signal_hardening.sql via db:push:apply",
+      "verified": "prod schema_migrations tops at 822"
+    },
+    "R3_deploys": {
+      "rental-ops": "v39 2026-07-10T15:32:42Z",
+      "flow-runner": "v55 2026-07-10T15:32:45Z",
+      "flow-synthesize": "v31 2026-07-10T15:32:48Z",
+      "iron-execute-flow-step": "v52 2026-07-10T15:32:51Z",
+      "quote-builder-v2": "v94 2026-07-10T15:32:55Z",
+      "verified_via": "Management API functions list (not CLI exit codes)"
+    },
+    "R4_hostile_probes": {
+      "suite_822": "18/18 PASS (scratchpad hostile-822-probes.ts): anon denied all 7 targets (42501); authenticated rep denied commission/fence/scanner/candidates/pressure; rep own-workspace conversion board OK (rows=3); rep foreign-workspace denied (workspace_denied); service-role positive controls OK (idempotent commission split=100 role=originator; geofence evaluator ran)",
+      "suite_779": "verify:rental-lockdown ALL_PROBES_PASS (m779 family regression)"
+    },
+    "R5_fixtures": {
+      "method": "single prod transaction under session_replication_role=replica, force-rolled-back via RAISE carrying evidence; zero rows persisted, zero events emitted",
+      "first_cycle": { "last_period_end": null, "next_cycle_due": "2026-07-10", "expected": "on_rent_at(2026-06-12)+28d" },
+      "second_cycle": { "last_period_end": "2026-06-11", "next_cycle_due": "2026-07-10", "expected": "last_period_end+29d" },
+      "not_due_10d_contract_hits": 0,
+      "availability": {
+        "fleet_count": 2,
+        "peak_demand": 1,
+        "headroom": 1,
+        "critical_date": "2026-07-11",
+        "proves": "3rd unit in_service excluded from supply; sequential bookings on one unit not summed; hold linked to active line deduplicated"
+      }
+    }
+  },
+  "remaining": [
+    "cdo.design-review gate blocked: Floor audit login user banned in GoTrue (restore/replace, rerun bun run design:review)",
+    "roadmap rows for world-class waves 1-3 + 822 (implementation/ticket alignment)",
+    "observe one billing cycle before tuning alert thresholds"
+  ]
+}
