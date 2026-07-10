@@ -48,6 +48,13 @@ function str(x: unknown, max = 500): string | null {
   return s.slice(0, max);
 }
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuid(value: string | null): value is string {
+  return value != null && UUID_PATTERN.test(value);
+}
+
 const DEFAULT_FOLLOW_UP_HOUR_UTC = 14;
 const WEEKDAYS = new Map([
   ["sunday", 0],
@@ -948,19 +955,83 @@ const iron_open_rental_contract: FlowAction = {
   async execute(_params, ctx, deps) {
     if (deps.dry_run) return dryRunSkip("iron_open_rental_contract");
 
+    if (ctx.event.workspace_id !== deps.workspace_id) {
+      return {
+        status: "failed",
+        error: "iron_open_rental_contract: event workspace mismatch",
+        retryable: false,
+      };
+    }
+
     const s = slots(ctx);
     const companyId = str(s.qrm_company_id, 64);
     const startDate = str(s.start_date, 10);
     const endDate = str(s.end_date, 10);
-    if (!companyId) {
-      return { status: "failed", error: "iron_open_rental_contract: qrm_company_id slot missing", retryable: false };
+    if (!isUuid(companyId)) {
+      return {
+        status: "failed",
+        error: "iron_open_rental_contract: valid qrm_company_id slot required",
+        retryable: false,
+      };
     }
-    if (!startDate || !endDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate) || endDate < startDate) {
-      return { status: "failed", error: "iron_open_rental_contract: valid start_date/end_date (YYYY-MM-DD) required", retryable: false };
+    if (
+      !startDate || !endDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(endDate) || endDate < startDate
+    ) {
+      return {
+        status: "failed",
+        error:
+          "iron_open_rental_contract: valid start_date/end_date (YYYY-MM-DD) required",
+        retryable: false,
+      };
     }
-    const contractType = ["reservation", "rental", "demo", "loaner"].includes(String(s.contract_type ?? ""))
+    const contractType = ["reservation", "rental", "demo", "loaner"].includes(
+        String(s.contract_type ?? ""),
+      )
       ? String(s.contract_type)
       : "rental";
+
+    const eventProps = (ctx.event.properties ?? {}) as Record<string, unknown>;
+    // Actor identity must come from runner-owned event context, never an
+    // LLM-populated slot. Workspace membership is verified before any write.
+    const actorId = str(eventProps.user_id ?? eventProps.actor_id, 64);
+    if (!isUuid(actorId)) {
+      return {
+        status: "failed",
+        error: "iron_open_rental_contract: verified actor identity required",
+        retryable: false,
+      };
+    }
+
+    const { data: company, error: companyError } = await deps.admin
+      .from("qrm_companies")
+      .select("id")
+      .eq("workspace_id", deps.workspace_id)
+      .eq("id", companyId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (companyError || !company) {
+      return {
+        status: "failed",
+        error: "iron_open_rental_contract: company not found in workspace",
+        retryable: false,
+      };
+    }
+
+    const { data: actorMembership, error: actorError } = await deps.admin
+      .from("profile_workspaces")
+      .select("profile_id")
+      .eq("workspace_id", deps.workspace_id)
+      .eq("profile_id", actorId)
+      .maybeSingle();
+    if (actorError || !actorMembership) {
+      return {
+        status: "failed",
+        error:
+          "iron_open_rental_contract: actor is not a member of the workspace",
+        retryable: false,
+      };
+    }
 
     const equipmentId = str(s.equipment_id, 64);
     if (equipmentId) {
@@ -972,16 +1043,20 @@ const iron_open_rental_contract: FlowAction = {
         .eq("ownership", "rental_fleet")
         .maybeSingle();
       if (unitErr || !unit) {
-        return { status: "failed", error: "iron_open_rental_contract: unit not found in the rental fleet", retryable: false };
+        return {
+          status: "failed",
+          error:
+            "iron_open_rental_contract: unit not found in the rental fleet",
+          retryable: false,
+        };
       }
     }
 
     const dailyRate = num(s.daily_rate);
-    const eventProps = (ctx.event.properties ?? {}) as Record<string, unknown>;
-    const actorId = str(eventProps.user_id ?? eventProps.actor_id ?? s.actor_id, 64);
-    const channel = String(s.origination_channel ?? "").toLowerCase() === "voice"
-      ? "voice"
-      : "iron";
+    const channel =
+      String(s.origination_channel ?? "").toLowerCase() === "voice"
+        ? "voice"
+        : "iron";
     const { data, error } = await deps.admin
       .from("rental_contracts")
       .insert({
@@ -1015,25 +1090,23 @@ const iron_open_rental_contract: FlowAction = {
       .select("id, contract_number")
       .single();
     if (error || !data?.id) {
-      return { status: "failed", error: `iron_open_rental_contract: ${error?.message ?? "unknown"}`, retryable: true };
+      return {
+        status: "failed",
+        error: `iron_open_rental_contract: ${error?.message ?? "unknown"}`,
+        retryable: true,
+      };
     }
 
-    // Wave 3: seed default commission attribution for the speaking rep.
-    if (actorId) {
-      try {
-        await deps.admin.rpc("rental_ensure_default_commission", {
-          p_workspace_id: deps.workspace_id,
-          p_contract_id: data.id,
-          p_salesperson_id: actorId,
-        });
-      } catch {
-        /* non-blocking: on_rent trigger re-seeds */
-      }
-    }
+    // Migration 822 seeds commission attribution atomically from the contract
+    // insert trigger. No second service-role write is needed here.
 
     return {
       status: "succeeded",
-      result: { entity_type: "rental_contract", entity_id: data.id, contract_number: data.contract_number },
+      result: {
+        entity_type: "rental_contract",
+        entity_id: data.id,
+        contract_number: data.contract_number,
+      },
     };
   },
 };

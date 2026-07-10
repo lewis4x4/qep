@@ -217,7 +217,7 @@ export const RENTAL_FLOW_DEFINITIONS: FlowWorkflowDefinition[] = [
           activity_type: "follow_up",
           subject: "Cycle bill due: ${payload.contract_number}",
           body:
-            "Contract ${payload.contract_number} has a cycle boundary near ${payload.last_period_end}. Confirm the rental-billing-runner includes it tonight.",
+            "Contract ${payload.contract_number} is due for its next cycle bill on ${payload.next_cycle_due}. Confirm the rental-billing-runner includes it tonight.",
         },
       },
     ],

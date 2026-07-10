@@ -686,18 +686,6 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Wave 3: seed default commission for the originating rep (also
-      // re-asserted by the on_rent trigger when checkout happens).
-      try {
-        await admin.rpc("rental_ensure_default_commission", {
-          p_workspace_id: workspaceId,
-          p_contract_id: contract.id,
-          p_salesperson_id: auth.userId,
-        });
-      } catch {
-        /* non-blocking: commission can seed at on_rent */
-      }
-
       return safeJsonOk({
         contract,
         rate_book_source: rateBookSource,
@@ -1281,17 +1269,6 @@ Deno.serve(async (req) => {
           );
         }
         return safeJsonError(message, 400, origin);
-      }
-
-      // Wave 3: commission attribution for the originator (idempotent).
-      try {
-        await admin.rpc("rental_ensure_default_commission", {
-          p_workspace_id: workspaceId,
-          p_contract_id: contract.id,
-          p_salesperson_id: auth.userId,
-        });
-      } catch {
-        /* non-blocking */
       }
 
       // Activate lines (or create line 1 for a single-unit counter contract).
