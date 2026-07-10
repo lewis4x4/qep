@@ -14,56 +14,17 @@ import {
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
 import { mirrorToFulfillmentRun } from "../_shared/parts-fulfillment-mirror.ts";
-
 import { captureEdgeException } from "../_shared/sentry.ts";
+import {
+  finiteRuleHours,
+  includeOwnedReservations,
+  isPlannableRequirementStatus,
+  planServiceParts,
+  toReconciliationRows,
+} from "./planning-core.ts";
+
 interface PlanRequest {
   job_id: string;
-}
-
-type ActionKind = "pick" | "transfer" | "order";
-
-interface PlannedRow {
-  requirementId: string;
-  actionType: ActionKind;
-  nextLineStatus: string;
-  fromBranch: string | null;
-  toBranch: string | null;
-  expectedDelivery: Date | null;
-  needByIso: string;
-  vendorId: string | null;
-  meta: Record<string, unknown>;
-}
-
-function finiteRuleHours(v: unknown, fallback: number): number {
-  const n = Number(v);
-  if (!Number.isFinite(n) || n < 0 || n > 8760) return fallback;
-  return n;
-}
-
-function getEdgeLead(
-  edgeMap: Map<string, number>,
-  from: string,
-  to: string,
-  defaultHours: number,
-): number {
-  const a = `${from}|${to}`;
-  const b = `${to}|${from}`;
-  if (edgeMap.has(a)) return edgeMap.get(a)!;
-  if (edgeMap.has(b)) return edgeMap.get(b)!;
-  return defaultHours;
-}
-
-/** Mutate nested map qty for part at branch */
-function takeStock(
-  byBranch: Map<string, Map<string, number>>,
-  branch: string,
-  part: string,
-  qty: number,
-): void {
-  const m = byBranch.get(branch);
-  if (!m) return;
-  const cur = m.get(part) ?? 0;
-  m.set(part, Math.max(0, cur - qty));
 }
 
 Deno.serve(async (req) => {
@@ -90,52 +51,51 @@ Deno.serve(async (req) => {
         "id, workspace_id, branch_id, haul_required, scheduled_start_at, status_flags, fulfillment_run_id",
       )
       .eq("id", body.job_id)
+      .eq("workspace_id", auth.workspaceId)
       .single();
 
     if (jobErr || !job) return safeJsonError("Job not found", 404, origin);
 
     const jobBranchId = job.branch_id ? String(job.branch_id) : null;
 
-    const { data: requirementsRaw } = await supabase
+    const { data: requirementsRaw, error: requirementsError } = await supabase
       .from("service_parts_requirements")
       .select("*")
       .eq("job_id", body.job_id)
-      .neq("status", "cancelled");
+      .eq("workspace_id", job.workspace_id);
+
+    if (requirementsError) {
+      console.error("service parts requirements:", requirementsError.message);
+      return safeJsonError("Unable to load parts requirements", 400, origin);
+    }
 
     const skippedSuggested = (requirementsRaw ?? []).filter(
-      (r: { intake_line_status?: string | null }) =>
-        (r.intake_line_status ?? "accepted") === "suggested",
+      (r: { intake_line_status?: string | null; status?: string | null }) =>
+        (r.intake_line_status ?? "accepted") === "suggested" &&
+        isPlannableRequirementStatus(r.status ?? "pending"),
+    ).length;
+
+    const skippedPostProcurement = (requirementsRaw ?? []).filter(
+      (r: { status?: string | null }) =>
+        !isPlannableRequirementStatus(r.status ?? "pending"),
     ).length;
 
     const requirements = (requirementsRaw ?? []).filter(
-      (r: { intake_line_status?: string | null }) =>
+      (r: { intake_line_status?: string | null; status?: string | null }) =>
+        isPlannableRequirementStatus(r.status ?? "pending") &&
         (r.intake_line_status ?? "accepted") !== "suggested",
     );
 
-    if (!requirementsRaw || requirementsRaw.length === 0) {
-      return safeJsonOk({
-        message: "No parts requirements to plan",
-        actions_created: 0,
-      }, origin);
-    }
-
-    if (requirements.length === 0) {
-      return safeJsonOk({
-        message:
-          "All lines are still suggested — accept lines in the job drawer before planning",
-        actions_created: 0,
-        skipped_suggested_count: skippedSuggested,
-      }, origin);
-    }
+    const noEligibleMessage = (requirementsRaw ?? []).length === 0
+      ? "No parts requirements to plan"
+      : requirements.length === 0 && skippedSuggested > 0
+      ? "All active procurement lines are suggested — accept lines before planning"
+      : requirements.length === 0
+      ? "All parts requirements are already received, staged, consumed, returned, or cancelled"
+      : null;
 
     const planBatchId = crypto.randomUUID();
-    const supersedeAt = new Date().toISOString();
-    await supabase
-      .from("service_parts_actions")
-      .update({ superseded_at: supersedeAt })
-      .eq("job_id", body.job_id)
-      .is("completed_at", null)
-      .is("superseded_at", null);
+    const plannedAt = new Date();
 
     const vendorIds = [
       ...new Set(
@@ -143,12 +103,20 @@ Deno.serve(async (req) => {
           .filter(Boolean),
       ),
     ] as string[];
-    const { data: vendorRows } = vendorIds.length > 0
+    const { data: vendorRows, error: vendorError } = vendorIds.length > 0
       ? await supabase
         .from("vendor_profiles")
         .select("id, avg_lead_time_hours")
+        .eq("workspace_id", job.workspace_id)
         .in("id", vendorIds)
-      : { data: [] as { id: string; avg_lead_time_hours: number | null }[] };
+      : {
+        data: [] as { id: string; avg_lead_time_hours: number | null }[],
+        error: null,
+      };
+    if (vendorError) {
+      console.error("service parts vendors:", vendorError.message);
+      return safeJsonError("Unable to load parts vendors", 400, origin);
+    }
     const vendorLead = new Map(
       (vendorRows ?? []).map((
         v,
@@ -163,12 +131,16 @@ Deno.serve(async (req) => {
 
     let plannerRules: Record<string, unknown> = {};
     if (jobBranchId) {
-      const { data: cfg } = await supabase
+      const { data: cfg, error: configError } = await supabase
         .from("service_branch_config")
         .select("planner_rules")
         .eq("workspace_id", job.workspace_id)
         .eq("branch_id", jobBranchId)
         .maybeSingle();
+      if (configError) {
+        console.error("service planner config:", configError.message);
+        return safeJsonError("Unable to load planner rules", 400, origin);
+      }
       const raw = cfg?.planner_rules;
       if (raw && typeof raw === "object" && !Array.isArray(raw)) {
         plannerRules = raw as Record<string, unknown>;
@@ -178,10 +150,6 @@ Deno.serve(async (req) => {
     const defaultTransferLead = finiteRuleHours(
       plannerRules.transfer_default_lead_hours,
       8,
-    );
-    const transferVsOrderSlack = finiteRuleHours(
-      plannerRules.transfer_vs_order_slack_hours,
-      0,
     );
 
     const partNumbers = [
@@ -193,11 +161,15 @@ Deno.serve(async (req) => {
     ].filter(Boolean);
 
     const edgeMap = new Map<string, number>();
-    const { data: edgeRows } = await supabase
+    const { data: edgeRows, error: edgeError } = await supabase
       .from("branch_transfer_edges")
       .select("from_branch, to_branch, lead_time_hours")
       .eq("workspace_id", job.workspace_id)
       .eq("active", true);
+    if (edgeError) {
+      console.error("service transfer edges:", edgeError.message);
+      return safeJsonError("Unable to load transfer routes", 400, origin);
+    }
 
     for (const e of edgeRows ?? []) {
       const f = String(e.from_branch ?? "").trim();
@@ -214,21 +186,38 @@ Deno.serve(async (req) => {
      * location carries so pick/transfer logic keeps matching job branch ids). */
     const stockByBranch = new Map<string, Map<string, number>>();
     if (partNumbers.length > 0) {
-      const { data: stockRows } = await supabase
+      const { data: stockRows, error: stockError } = await supabase
         .from("parts_stock")
-        .select("qty_on_hand, qty_reserved, branch_slug, parts:part_id(part_number), parts_locations:location_id(branch_id, branch_slug)")
+        .select(
+          "qty_on_hand, qty_reserved, branch_slug, parts:part_id(part_number), parts_locations:location_id(branch_id, branch_slug)",
+        )
         .eq("workspace_id", job.workspace_id)
         .is("deleted_at", null);
+      if (stockError) {
+        console.error("service parts stock:", stockError.message);
+        return safeJsonError("Unable to load parts availability", 400, origin);
+      }
 
       for (const row of (stockRows ?? []) as Array<Record<string, unknown>>) {
         const part = Array.isArray(row.parts) ? row.parts[0] : row.parts;
-        const pn = String((part as { part_number?: string } | null)?.part_number ?? "").trim();
+        const pn = String(
+          (part as { part_number?: string } | null)?.part_number ?? "",
+        ).trim();
         if (!pn || !partNumbers.includes(pn)) continue;
-        const location = Array.isArray(row.parts_locations) ? row.parts_locations[0] : row.parts_locations;
-        const available = Math.max(0, Number(row.qty_on_hand ?? 0) - Number(row.qty_reserved ?? 0));
+        const location = Array.isArray(row.parts_locations)
+          ? row.parts_locations[0]
+          : row.parts_locations;
+        const available = Math.max(
+          0,
+          Number(row.qty_on_hand ?? 0) - Number(row.qty_reserved ?? 0),
+        );
         const handles = [
-          String((location as { branch_id?: string } | null)?.branch_id ?? "").trim(),
-          String(row.branch_slug ?? (location as { branch_slug?: string } | null)?.branch_slug ?? "").trim(),
+          String((location as { branch_id?: string } | null)?.branch_id ?? "")
+            .trim(),
+          String(
+            row.branch_slug ??
+              (location as { branch_slug?: string } | null)?.branch_slug ?? "",
+          ).trim(),
         ].filter((handle) => handle.length > 0);
         for (const bid of new Set(handles)) {
           if (!stockByBranch.has(bid)) stockByBranch.set(bid, new Map());
@@ -238,467 +227,165 @@ Deno.serve(async (req) => {
       }
     }
 
-    const planned: PlannedRow[] = [];
+    const planningRequirements =
+      (requirements as Array<Record<string, unknown>>)
+        .map((requirement) => ({
+          id: String(requirement.id),
+          partNumber: String(requirement.part_number ?? "").trim(),
+          quantity: Math.max(1, Math.trunc(Number(requirement.quantity ?? 1))),
+          vendorId: requirement.vendor_id
+            ? String(requirement.vendor_id)
+            : null,
+          unitCost: Number(requirement.unit_cost ?? 0),
+        }));
 
-    for (let i = 0; i < requirements.length; i++) {
-      const req = requirements[i] as Record<string, unknown> & {
-        id: string;
-        vendor_id?: string | null;
-        part_number: string;
-        quantity?: number;
-      };
-      const pn = String(req.part_number ?? "").trim();
-      const needQty = Math.max(1, Number(req.quantity ?? 1));
-      const vendorLeadH = req.vendor_id
-        ? (vendorLead.get(req.vendor_id) ?? 48)
-        : 48;
-
-      const baseDate = job.scheduled_start_at
-        ? new Date(job.scheduled_start_at as string)
-        : new Date(Date.now() + 48 * 3600_000);
-      const bufferHours = 4 + (job.haul_required ? 24 : 0);
-
-      if (plannerHeuristicLegacy) {
-        let actionType: ActionKind = "order";
-        let nextLineStatus = "ordering";
-        if (!isMachineDown && jobBranchId && i === 0) {
-          actionType = "pick";
-          nextLineStatus = "picking";
-        } else if (!isMachineDown && jobBranchId && i === 1) {
-          actionType = "transfer";
-          nextLineStatus = "transferring";
-        }
-        const leadMs = actionType === "order" ? vendorLeadH * 3600_000 : 0;
-        const needBy = new Date(
-          baseDate.getTime() - bufferHours * 3600_000 - leadMs,
-        );
-        const effectiveNeedBy = isMachineDown
-          ? new Date(Date.now() + 8 * 3600_000)
-          : needBy;
-        const expectedDelivery = actionType === "order"
-          ? new Date(effectiveNeedBy.getTime())
-          : null;
-
-        const meta: Record<string, unknown> = {
-          confidence: "medium",
-          planned_at: new Date().toISOString(),
-          plan_batch_id: planBatchId,
-          planner_rules: plannerRules,
-          planner_mode: "legacy_line_index",
-          heuristic: "branch_first_pick_then_transfer_then_order",
-          inventory_assumption: "legacy_heuristic_no_inventory",
-        };
-        if (actionType === "transfer" && jobBranchId) {
-          meta.from_branch = jobBranchId;
-          meta.to_branch = jobBranchId;
-        }
-        if (actionType === "order") {
-          meta.vendor_lead_time_hours = vendorLeadH;
-        }
-
-        planned.push({
-          requirementId: req.id,
-          actionType,
-          nextLineStatus,
-          fromBranch: actionType === "transfer" ? jobBranchId : null,
-          toBranch: actionType === "transfer" ? jobBranchId : null,
-          expectedDelivery,
-          needByIso: effectiveNeedBy.toISOString(),
-          vendorId: req.vendor_id ?? null,
-          meta,
-        });
-        continue;
-      }
-
-      // Stock-first + cross-branch transfer scoring
-      if (!jobBranchId) {
-        const leadMs = vendorLeadH * 3600_000;
-        const needBy = new Date(
-          baseDate.getTime() - bufferHours * 3600_000 - leadMs,
-        );
-        const effectiveNeedBy = isMachineDown
-          ? new Date(Date.now() + 8 * 3600_000)
-          : needBy;
-        planned.push({
-          requirementId: req.id,
-          actionType: "order",
-          nextLineStatus: "ordering",
-          fromBranch: null,
-          toBranch: null,
-          expectedDelivery: new Date(effectiveNeedBy.getTime()),
-          needByIso: effectiveNeedBy.toISOString(),
-          vendorId: req.vendor_id ?? null,
-          meta: {
-            confidence: "high",
-            planned_at: new Date().toISOString(),
-            plan_batch_id: planBatchId,
-            planner_rules: plannerRules,
-            planner_mode: "stock_first",
-            heuristic: "no_job_branch_vendor_order",
-            inventory_assumption: "parts_inventory_branch_qty",
-            vendor_lead_time_hours: vendorLeadH,
-          },
-        });
-        continue;
-      }
-
-      const localAvail = stockByBranch.get(jobBranchId)?.get(pn) ?? 0;
-
-      let bestRemote: { branch: string; leadH: number } | null = null;
-      for (const [otherBranch, pmap] of stockByBranch) {
-        if (otherBranch === jobBranchId) continue;
-        const avail = pmap.get(pn) ?? 0;
-        if (avail < needQty) continue;
-        const leadH = getEdgeLead(
-          edgeMap,
-          otherBranch,
-          jobBranchId,
-          defaultTransferLead,
-        );
-        if (!bestRemote || leadH < bestRemote.leadH) {
-          bestRemote = { branch: otherBranch, leadH };
-        }
-      }
-
-      const transferWins = isMachineDown && bestRemote !== null
-        ? true
-        : bestRemote !== null &&
-          bestRemote.leadH <= vendorLeadH + transferVsOrderSlack;
-
-      if (!isMachineDown && localAvail >= needQty) {
-        takeStock(stockByBranch, jobBranchId, pn, needQty);
-        const leadMs = 0;
-        const needBy = new Date(
-          baseDate.getTime() - bufferHours * 3600_000 - leadMs,
-        );
-        const effectiveNeedByPick = isMachineDown
-          ? new Date(Date.now() + 8 * 3600_000)
-          : needBy;
-        planned.push({
-          requirementId: req.id,
-          actionType: "pick",
-          nextLineStatus: "picking",
-          fromBranch: null,
-          toBranch: null,
-          expectedDelivery: null,
-          needByIso: effectiveNeedByPick.toISOString(),
-          vendorId: req.vendor_id ?? null,
-          meta: {
-            confidence: "high",
-            planned_at: new Date().toISOString(),
-            plan_batch_id: planBatchId,
-            planner_rules: plannerRules,
-            planner_mode: "stock_first",
-            heuristic: "parts_inventory_stock_first_local_pick",
-            inventory_assumption: "parts_inventory_branch_qty",
-            scoring: {
-              local_pick: true,
-              machine_down: isMachineDown,
-            },
-          },
-        });
-        continue;
-      }
-
-      if (transferWins && bestRemote) {
-        takeStock(stockByBranch, bestRemote.branch, pn, needQty);
-        const leadMs = bestRemote.leadH * 3600_000;
-        const needBy = new Date(
-          baseDate.getTime() - bufferHours * 3600_000 - leadMs,
-        );
-        const effectiveNeedByTx = isMachineDown
-          ? new Date(Date.now() + 8 * 3600_000)
-          : needBy;
-        planned.push({
-          requirementId: req.id,
-          actionType: "transfer",
-          nextLineStatus: "transferring",
-          fromBranch: bestRemote.branch,
-          toBranch: jobBranchId,
-          expectedDelivery: effectiveNeedByTx,
-          needByIso: effectiveNeedByTx.toISOString(),
-          vendorId: req.vendor_id ?? null,
-          meta: {
-            confidence: "high",
-            planned_at: new Date().toISOString(),
-            plan_batch_id: planBatchId,
-            planner_rules: plannerRules,
-            planner_mode: "stock_first",
-            heuristic: "parts_inventory_transfer_vs_order",
-            inventory_assumption: "parts_inventory_branch_qty",
-            transfer_lead_hours: bestRemote.leadH,
-            vendor_lead_time_hours: vendorLeadH,
-            scoring: {
-              chosen: "transfer",
-              machine_down: isMachineDown,
-              slack_hours: transferVsOrderSlack,
-            },
-          },
-        });
-        continue;
-      }
-
-      {
-        const leadMs = vendorLeadH * 3600_000;
-        const needBy = new Date(
-          baseDate.getTime() - bufferHours * 3600_000 - leadMs,
-        );
-        const effectiveNeedByOrd = isMachineDown
-          ? new Date(Date.now() + 8 * 3600_000)
-          : needBy;
-        planned.push({
-          requirementId: req.id,
-          actionType: "order",
-          nextLineStatus: "ordering",
-          fromBranch: null,
-          toBranch: null,
-          expectedDelivery: new Date(effectiveNeedByOrd.getTime()),
-          needByIso: effectiveNeedByOrd.toISOString(),
-          vendorId: req.vendor_id ?? null,
-          meta: {
-            confidence: "high",
-            planned_at: new Date().toISOString(),
-            plan_batch_id: planBatchId,
-            planner_rules: plannerRules,
-            planner_mode: "stock_first",
-            heuristic: "parts_inventory_vendor_order",
-            inventory_assumption: "parts_inventory_branch_qty",
-            vendor_lead_time_hours: vendorLeadH,
-            scoring: {
-              chosen: "order",
-              had_transfer_candidate: bestRemote !== null,
-              machine_down: isMachineDown,
-            },
-          },
-        });
-      }
+    const { data: ownedReservationsRaw, error: ownedReservationsError } =
+      await supabase
+        .from("service_parts_reservations")
+        .select("requirement_id, branch_id, part_number, quantity")
+        .eq("workspace_id", job.workspace_id)
+        .eq("job_id", body.job_id)
+        .eq("status", "active");
+    if (ownedReservationsError) {
+      console.error(
+        "service parts reservations:",
+        ownedReservationsError.message,
+      );
+      return safeJsonError("Unable to load existing parts holds", 400, origin);
     }
-
-    let trafficTicketId: string | null = null;
-    const hasTransfer = planned.some((p) => p.actionType === "transfer");
-    if (hasTransfer) {
-      const first = planned.find((p) => p.actionType === "transfer");
-      const fromLabel = first?.fromBranch ?? "unknown";
-      const toLabel = first?.toBranch ?? jobBranchId ?? "unknown";
-      const { data: ticket, error: tErr } = await supabase
-        .from("traffic_tickets")
-        .insert({
-          workspace_id: job.workspace_id,
-          stock_number: `PARTS-${planBatchId.replace(/-/g, "").slice(0, 10)}`,
-          equipment_id: null,
-          from_location: `Branch ${fromLabel}`,
-          to_location: `Branch ${toLabel}`,
-          to_contact_name: "Parts / Service",
-          to_contact_phone: "—",
-          shipping_date: new Date().toISOString().slice(0, 10),
-          department: "Service",
-          billing_comments:
-            `Parts transfer plan ${planBatchId} for service job ${body.job_id}.`,
-          ticket_type: "location_transfer",
-          status: "haul_pending",
-          requested_by: actorId,
-          service_job_id: body.job_id,
-        })
-        .select("id")
-        .single();
-
-      if (tErr) {
-        console.error("traffic ticket for parts transfer:", tErr);
-        return safeJsonError(tErr.message, 400, origin);
-      }
-      trafficTicketId = ticket?.id ?? null;
-    }
-
-    const actionsToInsert: Record<string, unknown>[] = [];
-    const requirementUpdates: {
-      id: string;
-      status: string;
-      need_by_date: string | null;
-    }[] = [];
-
-    for (const row of planned) {
-      const meta = { ...row.meta };
-      if (row.actionType === "transfer" && trafficTicketId) {
-        meta.traffic_ticket_id = trafficTicketId;
-      }
-      if (row.actionType === "transfer" && row.fromBranch && row.toBranch) {
-        meta.from_branch = row.fromBranch;
-        meta.to_branch = row.toBranch;
-      }
-
-      actionsToInsert.push({
-        workspace_id: job.workspace_id,
-        requirement_id: row.requirementId,
-        job_id: body.job_id,
-        action_type: row.actionType,
-        vendor_id: row.vendorId,
-        from_branch: row.fromBranch,
-        to_branch: row.toBranch,
-        expected_date: row.expectedDelivery?.toISOString() ?? null,
-        plan_batch_id: planBatchId,
-        metadata: meta,
-      });
-
-      requirementUpdates.push({
-        id: row.requirementId,
-        status: row.nextLineStatus,
-        need_by_date: row.needByIso,
-      });
-    }
-
-    // ── N3.1 additions ──────────────────────────────────────────────────
-    const reqById = new Map(
-      (requirements as Array<Record<string, unknown>>).map((r) => [
-        String(r.id),
-        {
-          pn: String(r.part_number ?? "").trim(),
-          qty: Math.max(1, Number(r.quantity ?? 1)),
-          vendorId: (r.vendor_id as string | null) ?? null,
-          unitCost: Number(r.unit_cost ?? 0),
-        },
-      ]),
+    const eligibleRequirementIds = new Set(
+      planningRequirements.map((requirement) => requirement.id),
+    );
+    const planningStock = includeOwnedReservations(
+      stockByBranch,
+      (ownedReservationsRaw ?? []).map((reservation) => ({
+        requirementId: String(reservation.requirement_id),
+        branchId: String(reservation.branch_id ?? ""),
+        partNumber: String(reservation.part_number ?? ""),
+        quantity: Number(reservation.quantity ?? 0),
+      })),
+      eligibleRequirementIds,
     );
 
-    // Reserve planned picks on the canonical ledger so counter sales can't
-    // take them off the shelf first. Best-effort: an unreservable part
-    // (no stock row) leaves the plan intact.
-    if (jobBranchId) {
-      for (const row of planned) {
-        if (row.actionType !== "pick") continue;
-        const req = reqById.get(String(row.requirementId));
-        if (!req?.pn) continue;
-        const { data: reserved, error: reserveErr } = await supabase.rpc("reserve_service_part", {
-          p_workspace_id: job.workspace_id,
-          p_branch_id: jobBranchId,
-          p_part_number: req.pn,
-          p_qty: req.qty,
-        });
-        if (reserveErr) console.error("reserve_service_part:", reserveErr.message);
-        else if (reserved !== true) console.warn(`reservation not placed for ${req.pn} (no stock row or insufficient)`);
-      }
+    const planned = planServiceParts({
+      requirements: planningRequirements,
+      stockByBranch: planningStock,
+      edgeLeadHours: edgeMap,
+      vendorLeadHours: vendorLead,
+      jobBranchId,
+      scheduledStartAt: job.scheduled_start_at
+        ? String(job.scheduled_start_at)
+        : null,
+      haulRequired: job.haul_required === true,
+      isMachineDown,
+      plannerRules,
+      legacyMode: plannerHeuristicLegacy,
+      planBatchId,
+      now: plannedAt,
+    });
+
+    const hasTransfer = planned.some((row) => row.actionType === "transfer");
+    const reconciliationRows = toReconciliationRows(planned);
+    const { data: reconciliationRaw, error: reconciliationError } =
+      await supabase.rpc("reconcile_service_parts_plan", {
+        p_workspace_id: String(job.workspace_id),
+        p_job_id: body.job_id,
+        p_actor_id: actorId,
+        p_plan_batch_id: planBatchId,
+        p_plan: reconciliationRows,
+      });
+
+    if (reconciliationError) {
+      console.error(
+        "reconcile_service_parts_plan:",
+        reconciliationError.message,
+      );
+      const conflictMessage = reconciliationError.message ?? "";
+      const isReservationConflict = conflictMessage.includes(
+        "SERVICE_PART_RESERVATION_UNAVAILABLE",
+      );
+      const isReceivedConflict = conflictMessage.includes(
+        "SERVICE_PART_DEMAND_ALREADY_RECEIVED",
+      );
+      const isActiveDemandConflict = conflictMessage.includes(
+        "SERVICE_PART_ACTIVE_DEMAND_CONFLICT",
+      );
+      const isConflict = isReservationConflict || isReceivedConflict ||
+        isActiveDemandConflict;
+      return safeJsonError(
+        isReservationConflict
+          ? "Parts availability changed while planning; run the planner again"
+          : isReceivedConflict
+          ? "Received vendor demand cannot be replaced automatically"
+          : isActiveDemandConflict
+          ? "Another planner call changed this job; run the planner again"
+          : "Unable to reconcile service parts plan",
+        isConflict ? 409 : 400,
+        origin,
+      );
     }
 
-    // Vendor demand becomes a real PO: group order actions by vendor,
-    // create purchase_orders + lines linked to the requirement, and write
-    // the po_number back onto the action rows — which is exactly what the
-    // vendor escalator chases when missing.
-    const orderRowsByVendor = new Map<string, typeof planned>();
-    for (const row of planned) {
-      if (row.actionType !== "order") continue;
-      const key = row.vendorId ?? "unassigned";
-      if (!orderRowsByVendor.has(key)) orderRowsByVendor.set(key, []);
-      orderRowsByVendor.get(key)!.push(row);
-    }
-    const poByRequirement = new Map<string, string>();
-    for (const [vendorKey, rows] of orderRowsByVendor) {
-      const poNumber = `PO-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
-      const expectedAt = rows
-        .map((r) => r.expectedDelivery?.toISOString() ?? null)
-        .filter((d): d is string => d != null)
-        .sort()
-        .pop() ?? null;
-      const { data: po, error: poErr } = await supabase
-        .from("purchase_orders")
-        .insert({
-          workspace_id: job.workspace_id,
-          po_number: poNumber,
-          vendor_id: vendorKey === "unassigned" ? null : vendorKey,
-          status: "submitted",
-          order_type: "special_order",
-          expected_at: expectedAt,
-        })
-        .select("id")
-        .single();
-      if (poErr || !po) {
-        console.error("purchase order insert:", poErr?.message);
-        continue;
-      }
-      const { error: lineErr } = await supabase
-        .from("purchase_order_lines")
-        .insert(rows.map((r, index) => {
-          const req = reqById.get(String(r.requirementId));
-          return {
-            workspace_id: job.workspace_id,
-            purchase_order_id: po.id,
-            line_number: index + 1,
-            part_number: req?.pn ?? "",
-            qty_ordered: req?.qty ?? 1,
-            unit_cost_cents: Math.round((req?.unitCost ?? 0) * 100),
-            service_parts_requirement_id: r.requirementId,
-          };
-        }));
-      if (lineErr) console.error("purchase order lines insert:", lineErr.message);
-      for (const r of rows) poByRequirement.set(String(r.requirementId), poNumber);
-    }
-    if (poByRequirement.size > 0) {
-      for (const action of actionsToInsert) {
-        const poNumber = poByRequirement.get(String(action.requirement_id));
-        if (poNumber && action.action_type === "order") {
-          (action as Record<string, unknown>).po_reference = poNumber;
-        }
-      }
-    }
+    const reconciliation = reconciliationRaw &&
+        typeof reconciliationRaw === "object" &&
+        !Array.isArray(reconciliationRaw)
+      ? reconciliationRaw as Record<string, unknown>
+      : {};
+    const actionsCreated = Number(reconciliation.actions_created ?? 0);
+    const actionsReused = Number(reconciliation.actions_reused ?? 0);
+    const actionsSuperseded = Number(
+      reconciliation.actions_superseded ?? 0,
+    );
+    const trafficTicketId = typeof reconciliation.traffic_ticket_id === "string"
+      ? reconciliation.traffic_ticket_id
+      : null;
 
-    // Flag the job for reschedule when the latest planned arrival lands
-    // after the scheduled start (cleared by the receive path in m796).
-    if (job.scheduled_start_at) {
-      const latestArrival = planned
-        .filter((r) => r.actionType !== "pick")
-        .map((r) => r.expectedDelivery?.toISOString() ?? null)
-        .filter((d): d is string => d != null)
-        .sort()
-        .pop() ?? null;
-      if (latestArrival && latestArrival > String(job.scheduled_start_at)) {
-        await supabase
-          .from("service_jobs")
-          .update({ parts_delay_expected_at: latestArrival })
-          .eq("id", body.job_id);
-      }
-    }
-    // ── end N3.1 additions ──────────────────────────────────────────────
-
-    if (actionsToInsert.length > 0) {
-      const { error: insertErr } = await supabase
-        .from("service_parts_actions")
-        .insert(actionsToInsert);
-      if (insertErr) {
-        console.error("parts actions insert error:", insertErr);
-        return safeJsonError(insertErr.message, 400, origin);
-      }
-      if (job.fulfillment_run_id) {
-        await mirrorToFulfillmentRun(supabase, {
-          jobId: body.job_id,
-          workspaceId: job.workspace_id as string,
-          eventType: "shop_parts_plan_batch",
-          auditChannel: "shop",
-          payload: {
-            plan_batch_id: planBatchId,
-            actions_created: actionsToInsert.length,
-            is_machine_down: isMachineDown,
-            traffic_ticket_id: trafficTicketId,
-            transfer_count: planned.filter((p) =>
-              p.actionType === "transfer"
-            ).length,
-          },
-        });
-      }
-    }
-
-    for (const upd of requirementUpdates) {
-      await supabase
-        .from("service_parts_requirements")
-        .update({
-          status: upd.status,
-          need_by_date: upd.need_by_date,
-          intake_line_status: "planned",
-        })
-        .eq("id", upd.id);
+    if (
+      job.fulfillment_run_id &&
+      (actionsCreated > 0 || actionsSuperseded > 0)
+    ) {
+      await mirrorToFulfillmentRun(supabase, {
+        jobId: body.job_id,
+        workspaceId: job.workspace_id as string,
+        eventType: "shop_parts_plan_batch",
+        auditChannel: "shop",
+        payload: {
+          plan_batch_id: planBatchId,
+          actions_created: actionsCreated,
+          actions_reused: actionsReused,
+          actions_superseded: actionsSuperseded,
+          is_machine_down: isMachineDown,
+          traffic_ticket_id: trafficTicketId,
+          transfer_count: planned.filter((row) =>
+            row.actionType === "transfer"
+          ).length,
+        },
+      });
     }
 
     return safeJsonOk({
-      actions_created: actionsToInsert.length,
-      requirements_updated: requirementUpdates.length,
+      ...(noEligibleMessage ? { message: noEligibleMessage } : {}),
+      actions_created: actionsCreated,
+      actions_reused: actionsReused,
+      actions_superseded: actionsSuperseded,
+      idempotent_replay: actionsCreated === 0 && actionsReused > 0 &&
+        actionsSuperseded === 0,
+      purchase_orders_created: Number(
+        reconciliation.purchase_orders_created ?? 0,
+      ),
+      purchase_order_lines_created: Number(
+        reconciliation.purchase_order_lines_created ?? 0,
+      ),
+      reservations_created: Number(
+        reconciliation.reservations_created ?? 0,
+      ),
+      reservations_released: Number(
+        reconciliation.reservations_released ?? 0,
+      ),
+      requirements_updated: Number(
+        reconciliation.requirements_updated ?? planned.length,
+      ),
       skipped_suggested_count: skippedSuggested,
+      skipped_post_procurement_count: skippedPostProcurement,
       is_machine_down: isMachineDown,
       plan_batch_id: planBatchId,
       traffic_ticket_id: trafficTicketId,
@@ -708,6 +395,7 @@ Deno.serve(async (req) => {
         job_id: body.job_id,
         requirements_in_db: requirementsRaw?.length ?? 0,
         requirements_eligible: requirements.length,
+        requirements_post_procurement: skippedPostProcurement,
       },
       metadata: {
         planner_mode: plannerHeuristicLegacy

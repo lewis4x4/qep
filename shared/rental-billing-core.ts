@@ -81,6 +81,51 @@ export interface ReturnChargesSnapshot {
   damage_disposition: string | null;
 }
 
+/**
+ * One persisted rental_returns assessment. The billing runner queries by both
+ * contract and workspace, and the pure aggregator repeats those checks as a
+ * defence against service-role/RLS bypass mistakes and fixture drift.
+ *
+ * `deleted_at` is optional because the legacy rental_returns table does not
+ * currently expose a soft-delete column. Keeping the guard here makes the
+ * money rule safe for production-shaped fixtures and for a future additive
+ * soft-delete migration without changing aggregation semantics.
+ */
+export interface RentalReturnAssessmentSnapshot extends ReturnChargesSnapshot {
+  id: string;
+  workspace_id: string;
+  rental_contract_id: string | null;
+  equipment_id: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string | null;
+}
+
+export interface ReturnChargeSourceEvidence {
+  return_id: string;
+  equipment_id: string | null;
+  legacy_null_equipment_fallback: boolean;
+  damage_disposition: string | null;
+  fuel_charge_cents: number;
+  cleaning_charge_cents: number;
+  /** Only customer-billable damage; pending/warranty/internal wear are zero. */
+  damage_charge_cents: number;
+  environmental_fee_cents: number;
+}
+
+export interface ReturnChargeAggregation {
+  charges: ReturnChargesSnapshot | null;
+  /** Canonical latest rows, including assessments that contribute $0. */
+  selected_return_ids: string[];
+  /** Canonical rows that contribute at least one billed ancillary cent. */
+  billed_return_ids: string[];
+  /** Older assessments ignored because a newer row exists for that unit. */
+  superseded_return_ids: string[];
+  /** Latest row in the single conservative NULL-equipment legacy bucket. */
+  legacy_null_equipment_return_id: string | null;
+  sources: ReturnChargeSourceEvidence[];
+}
+
 export interface InvoicePlan {
   kind: "interim" | "final";
   period_start: string; // ISO date
@@ -122,6 +167,121 @@ function lineOverageCents(lines: BillingLineSnapshot[]): number {
     total += Math.round(over * line.overage_hourly_rate_cents);
   }
   return total;
+}
+
+function billableCents(value: number | null | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.trunc(value)
+    : 0;
+}
+
+function assessmentTime(row: RentalReturnAssessmentSnapshot): number {
+  const updated = Date.parse(row.updated_at);
+  if (Number.isFinite(updated)) return updated;
+  const created = Date.parse(row.created_at);
+  return Number.isFinite(created) ? created : 0;
+}
+
+/**
+ * Deterministically aggregate final-invoice return charges.
+ *
+ * Canonical rows are selected with a last-assessment-wins rule per equipment:
+ * updated_at, then created_at, then id. Repeated/corrected rows therefore
+ * supersede instead of stack. Legacy rows with equipment_id IS NULL cannot be
+ * assigned to distinct units safely, so they intentionally share ONE legacy
+ * bucket; only its latest row is eligible. Identified equipment rows still
+ * aggregate alongside that bucket.
+ *
+ * Fuel, cleaning and environmental fees always flow from each selected row.
+ * Damage flows only from rows explicitly marked customer_billable.
+ */
+export function aggregateReturnCharges(
+  rows: RentalReturnAssessmentSnapshot[],
+  scope: { contract_id: string; workspace_id: string },
+): ReturnChargeAggregation {
+  const eligible = rows.filter((row) =>
+    row.rental_contract_id === scope.contract_id &&
+    row.workspace_id === scope.workspace_id &&
+    row.deleted_at == null
+  );
+
+  const byEquipment = new Map<string, RentalReturnAssessmentSnapshot[]>();
+  for (const row of eligible) {
+    const key = row.equipment_id == null
+      ? "legacy:null-equipment"
+      : `equipment:${row.equipment_id}`;
+    const bucket = byEquipment.get(key);
+    if (bucket) bucket.push(row);
+    else byEquipment.set(key, [row]);
+  }
+
+  const selected: RentalReturnAssessmentSnapshot[] = [];
+  const superseded: RentalReturnAssessmentSnapshot[] = [];
+  for (const bucket of byEquipment.values()) {
+    bucket.sort((a, b) => {
+      const timeDelta = assessmentTime(b) - assessmentTime(a);
+      if (timeDelta !== 0) return timeDelta;
+      const createdDelta = Date.parse(b.created_at) - Date.parse(a.created_at);
+      if (Number.isFinite(createdDelta) && createdDelta !== 0) return createdDelta;
+      return b.id.localeCompare(a.id);
+    });
+    selected.push(bucket[0]);
+    superseded.push(...bucket.slice(1));
+  }
+
+  // Stable evidence ordering is independent of query order.
+  selected.sort((a, b) => {
+    if (a.equipment_id == null && b.equipment_id != null) return 1;
+    if (a.equipment_id != null && b.equipment_id == null) return -1;
+    const equipmentDelta = (a.equipment_id ?? "").localeCompare(b.equipment_id ?? "");
+    return equipmentDelta || a.id.localeCompare(b.id);
+  });
+  superseded.sort((a, b) => a.id.localeCompare(b.id));
+
+  const sources = selected.map((row): ReturnChargeSourceEvidence => ({
+    return_id: row.id,
+    equipment_id: row.equipment_id,
+    legacy_null_equipment_fallback: row.equipment_id == null,
+    damage_disposition: row.damage_disposition,
+    fuel_charge_cents: billableCents(row.fuel_charge_cents),
+    cleaning_charge_cents: billableCents(row.cleaning_charge_cents),
+    damage_charge_cents: row.damage_disposition === "customer_billable"
+      ? billableCents(row.damage_charge_cents)
+      : 0,
+    environmental_fee_cents: billableCents(row.environmental_fee_cents),
+  }));
+
+  const billedSources = sources.filter((source) =>
+    source.fuel_charge_cents > 0 ||
+    source.cleaning_charge_cents > 0 ||
+    source.damage_charge_cents > 0 ||
+    source.environmental_fee_cents > 0
+  );
+  const sum = (field: keyof Pick<
+    ReturnChargeSourceEvidence,
+    "fuel_charge_cents" | "cleaning_charge_cents" | "damage_charge_cents" | "environmental_fee_cents"
+  >) => sources.reduce((total, source) => total + source[field], 0);
+  const damage = sum("damage_charge_cents");
+
+  return {
+    charges: selected.length === 0
+      ? null
+      : {
+          fuel_charge_cents: sum("fuel_charge_cents"),
+          cleaning_charge_cents: sum("cleaning_charge_cents"),
+          damage_charge_cents: damage,
+          environmental_fee_cents: sum("environmental_fee_cents"),
+          // planNextInvoice keeps its final safety pin. Aggregation has
+          // already excluded all non-customer-billable damage components.
+          damage_disposition: damage > 0 ? "customer_billable" : null,
+        },
+    selected_return_ids: sources.map((source) => source.return_id),
+    billed_return_ids: billedSources.map((source) => source.return_id),
+    superseded_return_ids: superseded.map((row) => row.id),
+    legacy_null_equipment_return_id:
+      sources.find((source) => source.legacy_null_equipment_fallback)?.return_id ?? null,
+    sources,
+  };
 }
 
 /**
