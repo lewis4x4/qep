@@ -291,7 +291,9 @@ export function RentalCommandCenterPage() {
   const [extensionCharges, setExtensionCharges] = useState<Record<string, string>>({});
   const [counterCompanySearch, setCounterCompanySearch] = useState("");
   const [counterCompanyId, setCounterCompanyId] = useState("");
-  const [counterContractType, setCounterContractType] = useState<"reservation" | "rental" | "demo" | "loaner">("rental");
+  const [counterContractType, setCounterContractType] = useState<
+    "reservation" | "rental" | "demo" | "loaner" | "rpo" | "rerent"
+  >("rental");
   const [counterEquipmentId, setCounterEquipmentId] = useState("");
   const [counterStartDate, setCounterStartDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [counterEndDate, setCounterEndDate] = useState(() => new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10));
@@ -299,6 +301,11 @@ export function RentalCommandCenterPage() {
   const [counterWeeklyRate, setCounterWeeklyRate] = useState("");
   const [counterMonthlyRate, setCounterMonthlyRate] = useState("");
   const [counterRateSource, setCounterRateSource] = useState<string | null>(null);
+  const [counterRpoPurchase, setCounterRpoPurchase] = useState("");
+  const [counterRpoCreditPct, setCounterRpoCreditPct] = useState("0.80");
+  const [counterRpoDeadline, setCounterRpoDeadline] = useState("");
+  const [counterSubVendorId, setCounterSubVendorId] = useState("");
+  const [counterSubCost, setCounterSubCost] = useState("");
   const [counterResult, setCounterResult] = useState<string | null>(null);
   const [quoteShareUrl, setQuoteShareUrl] = useState<string | null>(null);
   const [exchangeUnits, setExchangeUnits] = useState<Record<string, string>>({});
@@ -498,6 +505,21 @@ export function RentalCommandCenterPage() {
         daily_rate: Number(counterDailyRate) || null,
         weekly_rate: Number(counterWeeklyRate) || null,
         monthly_rate: Number(counterMonthlyRate) || null,
+        rpo_purchase_price: counterContractType === "rpo"
+          ? Number(counterRpoPurchase) || null
+          : null,
+        rpo_rental_credit_pct: counterContractType === "rpo"
+          ? Number(counterRpoCreditPct) || null
+          : null,
+        rpo_exercise_deadline: counterContractType === "rpo"
+          ? counterRpoDeadline || null
+          : null,
+        sub_rental_vendor_id: counterContractType === "rerent"
+          ? counterSubVendorId || null
+          : null,
+        sub_rental_cost: counterContractType === "rerent"
+          ? Number(counterSubCost) || null
+          : null,
       }),
     onSuccess: async ({ contract }) => {
       const number = typeof contract.contract_number === "string" ? contract.contract_number : "created";
@@ -625,6 +647,97 @@ export function RentalCommandCenterPage() {
       return data ?? [];
     },
     staleTime: 30_000,
+  });
+
+  const availabilityCalendarQuery = useQuery({
+    queryKey: ["qrm", "rental-availability-calendar", counterStartDate],
+    queryFn: async () => {
+      const { data: session } = await supabase.auth.getUser();
+      const userId = session.user?.id;
+      let workspaceId = "default";
+      if (userId) {
+        const { data: profileRow } = await supabase
+          .from("profiles")
+          .select("active_workspace_id")
+          .eq("id", userId)
+          .maybeSingle();
+        workspaceId = (profileRow?.active_workspace_id as string | null) ?? "default";
+      }
+      const from = counterStartDate;
+      const toDate = new Date(`${counterStartDate}T00:00:00Z`);
+      toDate.setUTCDate(toDate.getUTCDate() + 13);
+      const to = toDate.toISOString().slice(0, 10);
+      const { data, error } = await supabase.rpc("rental_availability_calendar", {
+        p_workspace_id: workspaceId,
+        p_from: from,
+        p_to: to,
+        p_equipment_id: counterEquipmentId || null,
+      });
+      if (error) throw new Error(error.message);
+      const cells = (Array.isArray(data) ? data : []) as Array<{
+        equipment_id: string;
+        date: string;
+        state: string;
+      }>;
+      const dates = Array.from(new Set(cells.map((c) => c.date))).sort();
+      const byUnit = new Map<string, Array<{ date: string; state: string }>>();
+      for (const cell of cells) {
+        const list = byUnit.get(cell.equipment_id) ?? [];
+        list.push({ date: cell.date, state: cell.state });
+        byUnit.set(cell.equipment_id, list);
+      }
+      return { dates, byUnit, from, to };
+    },
+    staleTime: 60_000,
+  });
+
+  const conversionBoardQuery = useQuery({
+    queryKey: ["qrm", "rental-conversion-board"],
+    queryFn: async () => {
+      const { data: session } = await supabase.auth.getUser();
+      const userId = session.user?.id;
+      let workspaceId = "default";
+      if (userId) {
+        const { data: profileRow } = await supabase
+          .from("profiles")
+          .select("active_workspace_id")
+          .eq("id", userId)
+          .maybeSingle();
+        workspaceId = (profileRow?.active_workspace_id as string | null) ?? "default";
+      }
+      const { data, error } = await supabase.rpc("rental_conversion_board", {
+        p_workspace_id: workspaceId,
+        p_limit: 12,
+      });
+      if (error) throw new Error(error.message);
+      return (Array.isArray(data) ? data : []) as Array<{
+        company_id: string;
+        company_name: string;
+        contract_count: number;
+        open_contract_count: number;
+        trailing_90d_billed_cents: number;
+        rpo_accrued_cents: number;
+        active_rpo_count: number;
+        rank_score: number;
+        confidence: string;
+      }>;
+    },
+    staleTime: 60_000,
+  });
+
+  const subVendorsQuery = useQuery({
+    queryKey: ["qrm", "sub-rental-vendors"],
+    enabled: counterContractType === "rerent",
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sub_rental_vendors")
+        .select("id, name")
+        .order("name")
+        .limit(100);
+      if (error) throw new Error(error.message);
+      return (data ?? []) as Array<{ id: string; name: string }>;
+    },
+    staleTime: 120_000,
   });
 
   const utilizationQuery = useQuery({
@@ -1015,9 +1128,53 @@ export function RentalCommandCenterPage() {
                 >
                   <option value="rental">Rental</option>
                   <option value="reservation">Reservation</option>
+                  <option value="rpo">Rent-to-own (RPO)</option>
+                  <option value="rerent">Re-rent (sub-rental)</option>
                   <option value="demo">Demo</option>
                   <option value="loaner">Loaner</option>
                 </select>
+                {counterContractType === "rpo" ? (
+                  <div className="grid grid-cols-3 gap-2">
+                    <Input
+                      value={counterRpoPurchase}
+                      onChange={(event) => setCounterRpoPurchase(event.target.value)}
+                      placeholder="Buyout $"
+                      inputMode="decimal"
+                    />
+                    <Input
+                      value={counterRpoCreditPct}
+                      onChange={(event) => setCounterRpoCreditPct(event.target.value)}
+                      placeholder="Credit frac (0.8)"
+                      inputMode="decimal"
+                    />
+                    <Input
+                      type="date"
+                      value={counterRpoDeadline}
+                      onChange={(event) => setCounterRpoDeadline(event.target.value)}
+                      title="Exercise deadline"
+                    />
+                  </div>
+                ) : null}
+                {counterContractType === "rerent" ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={counterSubVendorId}
+                      onChange={(event) => setCounterSubVendorId(event.target.value)}
+                      className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                    >
+                      <option value="">Sub-rental vendor…</option>
+                      {(subVendorsQuery.data ?? []).map((vendor) => (
+                        <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
+                      ))}
+                    </select>
+                    <Input
+                      value={counterSubCost}
+                      onChange={(event) => setCounterSubCost(event.target.value)}
+                      placeholder="Vendor cost $"
+                      inputMode="decimal"
+                    />
+                  </div>
+                ) : null}
               </div>
               <div className="grid gap-2">
                 <select
@@ -1088,6 +1245,111 @@ export function RentalCommandCenterPage() {
                 {createContractMutation.isPending ? "Opening…" : "Open draft contract"}
               </Button>
               {counterResult ? <p className="text-xs text-muted-foreground">{counterResult}</p> : null}
+            </div>
+          </DeckSurface>
+
+          <DeckSurface className="p-4">
+            <h2 className="text-sm font-semibold text-foreground">Fleet availability (14 days)</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Live holds and on-rent occupancy from rental_availability_calendar
+              {counterEquipmentId ? " for the selected unit" : " across the rental fleet"}.
+            </p>
+            {availabilityCalendarQuery.isLoading ? (
+              <p className="mt-3 text-xs text-muted-foreground">Loading calendar…</p>
+            ) : availabilityCalendarQuery.isError ? (
+              <p className="mt-3 text-xs text-red-300">
+                {availabilityCalendarQuery.error instanceof Error
+                  ? availabilityCalendarQuery.error.message
+                  : "Calendar unavailable"}
+              </p>
+            ) : (availabilityCalendarQuery.data?.dates.length ?? 0) === 0 ? (
+              <p className="mt-3 text-xs text-muted-foreground">No fleet rows in range.</p>
+            ) : (
+              <div className="mt-3 overflow-x-auto">
+                <table className="min-w-full border-collapse text-[10px]">
+                  <thead>
+                    <tr>
+                      <th className="sticky left-0 bg-card px-1 py-1 text-left font-medium text-muted-foreground">
+                        Unit
+                      </th>
+                      {(availabilityCalendarQuery.data?.dates ?? []).map((date) => (
+                        <th key={date} className="px-1 py-1 font-medium text-muted-foreground">
+                          {date.slice(5)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Array.from(availabilityCalendarQuery.data?.byUnit.entries() ?? [])
+                      .slice(0, counterEquipmentId ? 1 : 12)
+                      .map(([unitId, cells]) => {
+                        const byDate = new Map(cells.map((c) => [c.date, c.state]));
+                        const label =
+                          (contractQueueQuery.data?.equipment ?? []).find((e) => e.id === unitId)
+                            ?.name ?? unitId.slice(0, 8);
+                        return (
+                          <tr key={unitId}>
+                            <td className="sticky left-0 max-w-[8rem] truncate bg-card px-1 py-0.5 text-foreground">
+                              {label}
+                            </td>
+                            {(availabilityCalendarQuery.data?.dates ?? []).map((date) => {
+                              const state = byDate.get(date) ?? "available";
+                              const tone =
+                                state === "on_rent"
+                                  ? "bg-emerald-500/40"
+                                  : state === "reserved"
+                                    ? "bg-amber-500/40"
+                                    : state === "down_for_service"
+                                      ? "bg-red-500/40"
+                                      : "bg-white/10";
+                              return (
+                                <td key={date} className="px-0.5 py-0.5" title={`${date}: ${state}`}>
+                                  <div className={`h-4 w-4 rounded-sm ${tone}`} />
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+                <p className="mt-2 text-[10px] text-muted-foreground">
+                  Green = on rent · Amber = reserved · Red = in service · Grey = available
+                </p>
+              </div>
+            )}
+          </DeckSurface>
+
+          <DeckSurface className="p-4">
+            <h2 className="text-sm font-semibold text-foreground">Conversion board (rental truth)</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Companies ranked by RPO accrual, open contracts, and trailing 90-day rental billed.
+            </p>
+            <div className="mt-3 space-y-2">
+              {(conversionBoardQuery.data ?? []).length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {conversionBoardQuery.isLoading ? "Loading…" : "No rental conversion candidates yet."}
+                </p>
+              ) : (
+                (conversionBoardQuery.data ?? []).map((row) => (
+                  <Link
+                    key={row.company_id}
+                    to={`/qrm/accounts/${row.company_id}/rental-conversion`}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded border border-white/10 px-3 py-2 text-xs hover:bg-white/[0.03]"
+                  >
+                    <div>
+                      <span className="font-medium text-foreground">{row.company_name}</span>
+                      <span className="ml-2 text-muted-foreground">
+                        {row.contract_count} contracts · {row.active_rpo_count} RPO
+                      </span>
+                    </div>
+                    <div className="text-muted-foreground">
+                      {formatCurrency(Number(row.trailing_90d_billed_cents ?? 0) / 100)} / 90d ·{" "}
+                      <span className="uppercase">{row.confidence}</span>
+                    </div>
+                  </Link>
+                ))
+              )}
             </div>
           </DeckSurface>
 

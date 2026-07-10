@@ -81,7 +81,7 @@ export const rentalOpsApi = {
   createContract: (data: {
     qrm_company_id: string;
     qrm_contact_id?: string | null;
-    contract_type?: "reservation" | "rental" | "demo" | "loaner";
+    contract_type?: "reservation" | "rental" | "demo" | "loaner" | "rpo" | "rerent";
     equipment_id?: string | null;
     branch_id?: string | null;
     start_date: string;
@@ -91,6 +91,11 @@ export const rentalOpsApi = {
     monthly_rate?: number | null;
     delivery_mode?: "pickup" | "delivery";
     dealer_notes?: string | null;
+    rpo_purchase_price?: number | null;
+    rpo_rental_credit_pct?: number | null;
+    rpo_exercise_deadline?: string | null;
+    sub_rental_vendor_id?: string | null;
+    sub_rental_cost?: number | null;
   }) =>
     rentalOpsFetch({
       action: "create_contract",

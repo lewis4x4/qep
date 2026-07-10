@@ -56,6 +56,14 @@ type CounterContractPayload = {
   monthly_rate?: number | string | null;
   delivery_mode?: string | null;
   dealer_notes?: string | null;
+  /** RPO terms — required when contract_type = rpo. purchase price in dollars. */
+  rpo_purchase_price?: number | string | null;
+  /** Fraction 0–1 (e.g. 0.8) of rental charge accrued toward buyout. */
+  rpo_rental_credit_pct?: number | string | null;
+  rpo_exercise_deadline?: string | null;
+  /** Re-rent: vendor + cost for the sub-rental line. */
+  sub_rental_vendor_id?: string | null;
+  sub_rental_cost?: number | string | null;
 };
 
 type ExchangeLinePayload = {
@@ -457,9 +465,54 @@ Deno.serve(async (req) => {
       const contractType = typeof body.contract_type === "string" && body.contract_type.trim()
         ? body.contract_type.trim()
         : "rental";
-      if (!["reservation", "rental", "demo", "loaner"].includes(contractType)) {
-        // rpo and rerent need their term/line blocks — they open via dedicated flows later in Stream L.
-        return safeJsonError("contract_type must be reservation, rental, demo, or loaner", 400, origin);
+      if (!["reservation", "rental", "demo", "loaner", "rpo", "rerent"].includes(contractType)) {
+        return safeJsonError(
+          "contract_type must be reservation, rental, demo, loaner, rpo, or rerent",
+          400,
+          origin,
+        );
+      }
+
+      const rpoPurchaseDollars = toCurrencyAmount(body.rpo_purchase_price);
+      const rpoCreditPct = typeof body.rpo_rental_credit_pct === "number"
+        ? body.rpo_rental_credit_pct
+        : typeof body.rpo_rental_credit_pct === "string" && body.rpo_rental_credit_pct.trim()
+        ? Number(body.rpo_rental_credit_pct)
+        : null;
+      const rpoDeadline =
+        typeof body.rpo_exercise_deadline === "string" && body.rpo_exercise_deadline.trim()
+          ? body.rpo_exercise_deadline.trim()
+          : null;
+      if (contractType === "rpo") {
+        if (rpoPurchaseDollars <= 0) {
+          return safeJsonError("rpo_purchase_price required for RPO contracts", 400, origin);
+        }
+        if (rpoCreditPct == null || !Number.isFinite(rpoCreditPct) || rpoCreditPct <= 0 || rpoCreditPct > 1) {
+          return safeJsonError("rpo_rental_credit_pct must be a fraction in (0, 1]", 400, origin);
+        }
+      }
+
+      const subVendorId =
+        typeof body.sub_rental_vendor_id === "string" && body.sub_rental_vendor_id.trim()
+          ? body.sub_rental_vendor_id.trim()
+          : null;
+      const subCostDollars = toCurrencyAmount(body.sub_rental_cost);
+      if (contractType === "rerent") {
+        if (!subVendorId) {
+          return safeJsonError("sub_rental_vendor_id required for re-rent contracts", 400, origin);
+        }
+        if (subCostDollars <= 0) {
+          return safeJsonError("sub_rental_cost required for re-rent contracts", 400, origin);
+        }
+        const { data: vendor, error: vendorError } = await admin
+          .from("sub_rental_vendors")
+          .select("id, workspace_id")
+          .eq("id", subVendorId)
+          .eq("workspace_id", workspaceId)
+          .maybeSingle();
+        if (vendorError || !vendor) {
+          return safeJsonError("Sub-rental vendor not found in this workspace", 404, origin);
+        }
       }
 
       const { data: company, error: companyError } = await admin
@@ -563,7 +616,12 @@ Deno.serve(async (req) => {
           tax_exempt: false,
           coi_required: false,
           po_required: false,
-          rpo_eligible: false,
+          rpo_eligible: contractType === "rpo",
+          rpo_purchase_price_cents: contractType === "rpo"
+            ? Math.round(rpoPurchaseDollars * 100)
+            : null,
+          rpo_rental_credit_pct: contractType === "rpo" ? rpoCreditPct : null,
+          rpo_exercise_deadline: contractType === "rpo" ? rpoDeadline : null,
           delivery_required: deliveryMode === "delivery",
           pickup_required: false,
           delivery_address: {},
@@ -580,7 +638,7 @@ Deno.serve(async (req) => {
         await recordOverbookOverride(admin, workspaceId, contract.id as string, auth.userId, overbookedDetail);
       }
 
-      if (equipmentId) {
+      if (equipmentId || contractType === "rerent") {
         const { error: lineError } = await admin
           .from("rental_contract_lines")
           .insert({
@@ -595,6 +653,16 @@ Deno.serve(async (req) => {
             weekly_rate_cents: weeklyRate > 0 ? Math.round(weeklyRate * 100) : null,
             monthly_rate_cents: monthlyRate > 0 ? Math.round(monthlyRate * 100) : null,
             status: "quoted",
+            is_sub_rental: contractType === "rerent",
+            sub_rental_vendor_id: contractType === "rerent" ? subVendorId : null,
+            sub_rental_cost_cents: contractType === "rerent"
+              ? Math.round(subCostDollars * 100)
+              : null,
+            rpo_eligible: contractType === "rpo" ? true : null,
+            rpo_purchase_price_cents: contractType === "rpo"
+              ? Math.round(rpoPurchaseDollars * 100)
+              : null,
+            rpo_rental_credit_pct: contractType === "rpo" ? rpoCreditPct : null,
           });
         if (lineError) {
           return safeJsonError(lineError.message ?? "Contract created but line insert failed", 500, origin);

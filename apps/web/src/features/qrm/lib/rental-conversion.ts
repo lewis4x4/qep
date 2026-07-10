@@ -34,6 +34,9 @@ export interface RentalConversionCandidate {
   estimatedPurchaseValue: number | null;
   reasons: string[];
   equipmentIds: string[];
+  /** Present when ranked from rental_conversion_board. */
+  companyId?: string;
+  rankScore?: number;
 }
 
 export interface RentalConversionBoard {
@@ -101,12 +104,106 @@ function confidenceForCandidate(input: {
   return "low";
 }
 
+export interface RentalTruthCandidate {
+  companyId: string;
+  companyName: string;
+  contractCount: number;
+  openContractCount: number;
+  trailing90dBilledCents: number;
+  rpoAccruedCents: number;
+  activeRpoCount: number;
+  maxRpoPurchasePriceCents: number | null;
+  rankScore: number;
+  confidence: "high" | "medium" | "low";
+}
+
+/** Rank companies from live rental/RPO truth (Wave 2 primary board). */
+export function buildRentalTruthConversionBoard(
+  rows: RentalTruthCandidate[],
+): RentalConversionBoard {
+  const candidates: RentalConversionCandidate[] = rows.map((row) => {
+    const reasons: string[] = [];
+    if (row.activeRpoCount > 0) {
+      reasons.push(
+        `${row.activeRpoCount} active RPO with ${formatRough(row.rpoAccruedCents)} accrued credit.`,
+      );
+    }
+    if (row.contractCount > 0) {
+      reasons.push(
+        `${row.contractCount} rental contract${row.contractCount === 1 ? "" : "s"} (${row.openContractCount} open).`,
+      );
+    }
+    if (row.trailing90dBilledCents > 0) {
+      reasons.push(
+        `${formatRough(row.trailing90dBilledCents)} billed in the trailing 90 days.`,
+      );
+    }
+    return {
+      id: row.companyId,
+      title: row.companyName,
+      rentalDealCount: row.contractCount,
+      rentalFirstSignals: row.openContractCount,
+      rentToOwnSignals: row.activeRpoCount,
+      purchaseReadySignals:
+        row.activeRpoCount > 0 &&
+          row.maxRpoPurchasePriceCents != null &&
+          row.rpoAccruedCents >= row.maxRpoPurchasePriceCents / 2
+          ? 1
+          : 0,
+      openQuoteCount: 0,
+      confidence: row.confidence,
+      estimatedPurchaseValue:
+        row.maxRpoPurchasePriceCents != null
+          ? row.maxRpoPurchasePriceCents / 100
+          : null,
+      reasons,
+      equipmentIds: [],
+      companyId: row.companyId,
+      rankScore: row.rankScore,
+    };
+  }).sort((a, b) => {
+    if ((b.rankScore ?? 0) !== (a.rankScore ?? 0)) {
+      return (b.rankScore ?? 0) - (a.rankScore ?? 0);
+    }
+    return b.rentalDealCount - a.rentalDealCount;
+  });
+
+  return {
+    summary: {
+      candidates: candidates.length,
+      repeatRentalCandidates: candidates.filter((c) => c.rentalDealCount >= 2).length,
+      rentalIntentSignals: candidates.reduce(
+        (sum, c) => sum + c.rentalFirstSignals + c.rentToOwnSignals,
+        0,
+      ),
+      purchaseReadySignals: candidates.reduce(
+        (sum, c) => sum + c.purchaseReadySignals,
+        0,
+      ),
+      openQuotes: 0,
+    },
+    candidates,
+  };
+}
+
+function formatRough(cents: number): string {
+  const dollars = cents / 100;
+  if (dollars >= 1000) return `$${(dollars / 1000).toFixed(1)}k`;
+  return `$${dollars.toFixed(0)}`;
+}
+
 export function buildRentalConversionBoard(input: {
   deals: RentalConversionDeal[];
   rentalLinks: RentalConversionRentalLink[];
   voiceSignals: RentalConversionVoiceSignal[];
   openQuoteCount: number;
+  /** When present, rental-truth candidates are ranked first (Wave 2). */
+  rentalTruthPrimary?: RentalTruthCandidate[];
 }): RentalConversionBoard {
+  if (input.rentalTruthPrimary && input.rentalTruthPrimary.length > 0) {
+    return buildRentalTruthConversionBoard(input.rentalTruthPrimary);
+  }
+
   const byGroup = new Map<string, RentalConversionCandidate>();
 
   for (const link of input.rentalLinks) {

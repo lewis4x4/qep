@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { buildRentalConversionBoard } from "./rental-conversion";
+import {
+  buildRentalConversionBoard,
+  buildRentalTruthConversionBoard,
+} from "./rental-conversion";
 import type { ExtractedDealData } from "@/lib/voice-capture-extraction.types";
 
 function signal(overrides?: Partial<ExtractedDealData>): ExtractedDealData {
@@ -74,6 +77,40 @@ function signal(overrides?: Partial<ExtractedDealData>): ExtractedDealData {
     },
   };
 }
+
+describe("buildRentalTruthConversionBoard", () => {
+  it("ranks companies from RPO accrual and trailing rental billed", () => {
+    const board = buildRentalTruthConversionBoard([
+      {
+        companyId: "a",
+        companyName: "Acme",
+        contractCount: 4,
+        openContractCount: 1,
+        trailing90dBilledCents: 250_000,
+        rpoAccruedCents: 80_000,
+        activeRpoCount: 1,
+        maxRpoPurchasePriceCents: 100_000,
+        rankScore: 200,
+        confidence: "high",
+      },
+      {
+        companyId: "b",
+        companyName: "Beta",
+        contractCount: 1,
+        openContractCount: 0,
+        trailing90dBilledCents: 10_000,
+        rpoAccruedCents: 0,
+        activeRpoCount: 0,
+        maxRpoPurchasePriceCents: null,
+        rankScore: 10,
+        confidence: "low",
+      },
+    ]);
+    expect(board.candidates[0]?.title).toBe("Acme");
+    expect(board.candidates[0]?.confidence).toBe("high");
+    expect(board.summary.candidates).toBe(2);
+  });
+});
 
 describe("buildRentalConversionBoard", () => {
   it("promotes repeat rental motion with rental-first and purchase-ready signals", () => {

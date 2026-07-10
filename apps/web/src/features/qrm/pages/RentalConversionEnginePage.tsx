@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Navigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -12,20 +12,23 @@ import { Button } from "@/components/ui/button";
 import { DeckSurface } from "../components/command-deck";
 import { formatCurrency } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
-import { normalizeExtractedDealData } from "@/lib/voice-capture-extraction";
 import { fetchAccount360 } from "../lib/account-360-api";
 import {
   buildAccountCommandHref,
   buildAccountRentalConversionHref,
-  buildAccountStrategistHref,
 } from "../lib/account-command";
-import { buildRentalConversionBoard } from "../lib/rental-conversion";
+import {
+  buildRentalConversionBoard,
+  buildRentalTruthConversionBoard,
+} from "../lib/rental-conversion";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
 import { QrmAccountDetailMenu } from "../components/QrmAccountDetailMenu";
+import { rentalOpsApi } from "../lib/rental-ops-api";
 
 export function RentalConversionEnginePage() {
   const { accountId } = useParams<{ accountId: string }>();
+  const queryClient = useQueryClient();
   if (!accountId) return <Navigate to="/qrm/companies" replace />;
 
   const accountQuery = useQuery({
@@ -35,89 +38,7 @@ export function RentalConversionEnginePage() {
     staleTime: 30_000,
   });
 
-  const boardQuery = useQuery({
-    queryKey: ["rental-conversion", accountId, "signals"],
-    enabled: Boolean(accountId),
-    queryFn: async () => {
-      const { data: deals, error: dealsError } = await supabase
-        .from("crm_deals")
-        .select("id, name, created_at")
-        .eq("company_id", accountId!)
-        .is("deleted_at", null)
-        .limit(200);
-      if (dealsError) throw new Error(dealsError.message);
-
-      const { data: links, error: linksError } = await supabase
-        .from("crm_deal_equipment")
-        .select("deal_id, equipment_id, role")
-        .in("role", ["rental"])
-        .in("deal_id", (deals ?? []).map((d) => d.id))
-        .limit(200);
-      if (linksError) throw new Error(linksError.message);
-
-      const { data: voice, error: voiceError } = await supabase
-        .from("voice_captures")
-        .select("created_at, extracted_data")
-        .eq("linked_company_id", accountId!)
-        .limit(200);
-      if (voiceError) throw new Error(voiceError.message);
-
-      const { data: invoices, error: invoicesError } = await supabase
-        .from("customer_invoices")
-        .select("id, invoice_number, service_job_id, status")
-        .eq("company_id", accountId!)
-        .is("branch_id", null)
-        .not("service_job_id", "is", null)
-        .limit(200);
-      if (invoicesError) throw new Error(invoicesError.message);
-
-      const openQuotes = (invoices ?? []).length;
-
-      const equipmentIds = (links ?? []).map((link) => link.equipment_id);
-
-      const { data: equipment, error: equipmentError } = await supabase
-        .from("crm_equipment")
-        .select("id, name, make, model, year, ownership, daily_rental_rate, current_market_value")
-        .in("id", equipmentIds.length > 0 ? equipmentIds : [""])
-        .in("ownership", ["rental_fleet"])
-        .limit(200);
-      if (equipmentError) throw new Error(equipmentError.message);
-
-      const rentalFleet = (equipment ?? []).filter((e) => e.ownership === "rental_fleet");
-
-      return buildRentalConversionBoard({
-        deals: (deals ?? []).map((row) => ({
-          id: row.id,
-          name: row.name,
-          createdAt: row.created_at,
-        })),
-        rentalLinks: (links ?? []).flatMap((row) => {
-          const equipmentJoin = rentalFleet.find((equipmentRow) => equipmentRow.id === row.equipment_id);
-          if (!equipmentJoin) return [];
-          return [{
-            dealId: row.deal_id,
-            equipmentId: row.equipment_id,
-            make: equipmentJoin.make,
-            model: equipmentJoin.model,
-            year: equipmentJoin.year,
-            name: equipmentJoin.name,
-            dailyRentalRate: equipmentJoin.daily_rental_rate,
-            currentMarketValue: equipmentJoin.current_market_value,
-          }];
-        }),
-        voiceSignals: (voice ?? []).map((row) => ({
-          createdAt: row.created_at,
-          extractedData: row.extracted_data == null ? null : normalizeExtractedDealData(row.extracted_data),
-        })),
-        openQuoteCount: openQuotes,
-      });
-    },
-    staleTime: 60_000,
-  });
-
-  // L9.3: rental truth — contracts/invoices/RPO accrual by qrm_company_id
-  // (rental_conversion_signals, m807) instead of CRM deal tags + voice
-  // captures only.
+  // Wave 2 primary: rental contracts + RPO accrual, not CRM tags + voice.
   const rentalTruthQuery = useQuery({
     queryKey: ["rental-conversion", accountId, "rental-truth"],
     enabled: Boolean(accountId),
@@ -151,9 +72,55 @@ export function RentalConversionEnginePage() {
   });
   const rentalTruth = rentalTruthQuery.data;
 
-  const board = boardQuery.data;
-  const isLoading = accountQuery.isLoading || boardQuery.isLoading;
-  const isError = accountQuery.isError || boardQuery.isError;
+  const companyName = accountQuery.data?.company.name ?? "Account";
+
+  const board = rentalTruth
+    ? buildRentalTruthConversionBoard([
+        {
+          companyId: accountId,
+          companyName,
+          contractCount: rentalTruth.contractCount,
+          openContractCount: rentalTruth.openContractCount,
+          trailing90dBilledCents: rentalTruth.trailing90dBilledCents,
+          rpoAccruedCents: rentalTruth.activeRpo.reduce(
+            (sum, r) => sum + Number(r.accrued_cents ?? 0),
+            0,
+          ),
+          activeRpoCount: rentalTruth.activeRpo.length,
+          maxRpoPurchasePriceCents: rentalTruth.activeRpo.reduce(
+            (max, r) =>
+              Math.max(max, Number(r.purchase_price_cents ?? 0)),
+            0,
+          ) || null,
+          rankScore:
+            rentalTruth.activeRpo.length * 100 +
+            Math.min(rentalTruth.contractCount, 20) * 5 +
+            Math.min(rentalTruth.trailing90dBilledCents / 10000, 50),
+          confidence: (rentalTruth.activeRpo.length > 0
+            ? "high"
+            : rentalTruth.contractCount >= 3
+              ? "medium"
+              : "low") as "high" | "medium" | "low",
+        },
+      ].filter((row) => row.contractCount > 0 || row.activeRpoCount > 0))
+    : buildRentalConversionBoard({
+        deals: [],
+        rentalLinks: [],
+        voiceSignals: [],
+        openQuoteCount: 0,
+      });
+
+  const convertMutation = useMutation({
+    mutationFn: (contractId: string) =>
+      rentalOpsApi.convertRpoToDeal({ contract_id: contractId }),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["rental-conversion", accountId] });
+      window.location.assign(`/qrm/deals/${result.deal_id}`);
+    },
+  });
+
+  const isLoading = accountQuery.isLoading || rentalTruthQuery.isLoading;
+  const isError = accountQuery.isError || rentalTruthQuery.isError;
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-28 pt-2 sm:px-6 lg:px-8">
@@ -178,13 +145,13 @@ export function RentalConversionEnginePage() {
           <DeckSurface className="h-32 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
           <DeckSurface className="h-80 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
         </>
-      ) : isError || !board ? (
+      ) : isError ? (
         <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
           <p className="text-sm text-muted-foreground">
             {accountQuery.error instanceof Error
               ? accountQuery.error.message
-              : boardQuery.error instanceof Error
-                ? boardQuery.error.message
+              : rentalTruthQuery.error instanceof Error
+                ? rentalTruthQuery.error.message
                 : "Rental conversion is unavailable right now."}
           </p>
         </DeckSurface>
@@ -228,20 +195,30 @@ export function RentalConversionEnginePage() {
                               ? ` of ${formatCurrency(rpo.purchase_price_cents / 100)} buyout`
                               : ""}
                           </p>
-                          <p className="text-muted-foreground">
-                            {rpo.exercise_deadline ? `exercise by ${rpo.exercise_deadline}` : "no deadline"}
+                          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-muted-foreground">
+                            <span>
+                              {rpo.exercise_deadline
+                                ? `exercise by ${rpo.exercise_deadline}`
+                                : "no deadline"}
+                            </span>
                             {rpo.conversion_deal_id ? (
-                              <>
-                                {" · "}
-                                <Link
-                                  to={`/qrm/deals/${rpo.conversion_deal_id}`}
-                                  className="text-qep-orange hover:underline"
-                                >
-                                  conversion deal
-                                </Link>
-                              </>
-                            ) : null}
-                          </p>
+                              <Link
+                                to={`/qrm/deals/${rpo.conversion_deal_id}`}
+                                className="text-qep-orange hover:underline"
+                              >
+                                conversion deal
+                              </Link>
+                            ) : (
+                              <button
+                                type="button"
+                                className="rounded border border-purple-400/40 px-1.5 py-0.5 text-[10px] font-semibold text-purple-200 hover:bg-purple-500/15 disabled:opacity-50"
+                                disabled={convertMutation.isPending}
+                                onClick={() => convertMutation.mutate(rpo.contract_id)}
+                              >
+                                Convert to purchase
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -329,17 +306,44 @@ export function RentalConversionEnginePage() {
           <DeckSurface className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-sm font-semibold text-foreground">Next 7B surface</h2>
+                <h2 className="text-sm font-semibold text-foreground">Ranked from rental truth</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Open AI Customer Strategist to turn whitespace, relationship, and conversion signals into a 30/60/90 account plan.
+                  Confidence and purchase motion derive from live contracts, trailing rental
+                  spend, and RPO accrual — not CRM tags alone.
                 </p>
               </div>
               <Button asChild size="sm" variant="outline">
-                <Link to={buildAccountStrategistHref(accountId)}>
-                  AI Strategist <ArrowUpRight className="ml-1 h-3 w-3" />
+                <Link to={buildAccountRentalConversionHref(accountId)}>
+                  Refresh <ArrowUpRight className="ml-1 h-3 w-3" />
                 </Link>
               </Button>
             </div>
+            {board.candidates.length === 0 ? (
+              <p className="mt-3 text-xs text-muted-foreground">
+                No rental contracts yet for this account — conversion queue is empty.
+              </p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {board.candidates.map((candidate) => (
+                  <li
+                    key={candidate.id}
+                    className="rounded border border-white/10 px-3 py-2 text-xs"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-medium text-foreground">{candidate.title}</span>
+                      <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                        {candidate.confidence}
+                      </span>
+                    </div>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4 text-muted-foreground">
+                      {candidate.reasons.map((reason) => (
+                        <li key={reason}>{reason}</li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            )}
           </DeckSurface>
         </>
       )}
