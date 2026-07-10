@@ -267,11 +267,17 @@ async function signInWithServiceMagicLink(createClient, supabaseUrl, anonKey) {
 async function resolveAuditEmail(adminClient) {
   const explicit = process.env.FLOOR_AUDIT_EMAIL ?? process.env.QEP_AUDIT_EMAIL;
   if (explicit) return explicit;
+  // Test fixtures use RFC 2606 reserved domains (example.invalid etc.) and
+  // are deliberately banned in GoTrue — a freshly-touched fixture profile
+  // must never win the "most recent admin" race and wedge this gate.
   const { data, error } = await adminClient
     .from("profiles")
     .select("email")
     .in("role", ["admin", "manager", "owner"])
     .not("email", "is", null)
+    .not("email", "ilike", "%.invalid")
+    .not("email", "ilike", "%.test")
+    .not("email", "ilike", "%@example.%")
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
