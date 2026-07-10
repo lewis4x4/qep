@@ -1,0 +1,162 @@
+{
+  "now": "2026-07-09T12:00:00.000Z",
+  "actor": {
+    "userId": "rep-1",
+    "workspaceId": "workspace-a",
+    "role": "rep"
+  },
+  "quote": {
+    "id": "quote-1",
+    "workspaceId": "workspace-a",
+    "assignedRepId": "rep-1",
+    "status": "approved",
+    "updatedAt": "2026-07-09T10:00:00.000Z",
+    "versionId": "quote-version-7",
+    "versionNumber": 7,
+    "lines": [
+      {
+        "id": "line-factory",
+        "lineType": "equipment",
+        "quantity": 1,
+        "unitPriceCents": 1000000,
+        "quotedDealerCostCents": 800000,
+        "costVisibility": "customer",
+        "sourceLocation": "factory_order",
+        "isYardStock": false
+      },
+      {
+        "id": "line-yard",
+        "lineType": "equipment",
+        "quantity": 1,
+        "unitPriceCents": 2000000,
+        "quotedDealerCostCents": 1500000,
+        "costVisibility": "customer",
+        "sourceLocation": "yard_stock",
+        "isYardStock": true
+      },
+      {
+        "id": "line-attachment",
+        "lineType": "attachment",
+        "quantity": 1,
+        "unitPriceCents": 100000,
+        "quotedDealerCostCents": 60000,
+        "costVisibility": "customer",
+        "sourceLocation": null,
+        "isYardStock": false
+      },
+      {
+        "id": "line-discount",
+        "lineType": "discount",
+        "quantity": 1,
+        "unitPriceCents": 50000,
+        "quotedDealerCostCents": null,
+        "costVisibility": "customer",
+        "sourceLocation": null,
+        "isYardStock": false
+      },
+      {
+        "id": "line-internal-pdi",
+        "lineType": "pdi",
+        "quantity": 1,
+        "unitPriceCents": 25000,
+        "quotedDealerCostCents": null,
+        "costVisibility": "internal",
+        "sourceLocation": null,
+        "isYardStock": false
+      }
+    ],
+    "pricing": {
+      "commercialDiscount": {
+        "type": "percent",
+        "basisPoints": 500
+      },
+      "tradeCreditCents": 100000,
+      "taxTotalCents": 200000,
+      "cashDownCents": 500000
+    },
+    "persistedTotals": {
+      "equipmentTotalCents": 3000000,
+      "attachmentTotalCents": 100000,
+      "subtotalCents": 3100000,
+      "discountTotalCents": 205000,
+      "tradeCreditCents": 100000,
+      "netTotalCents": 2795000,
+      "taxTotalCents": 200000,
+      "customerTotalCents": 2995000,
+      "cashDownCents": 500000,
+      "amountFinancedCents": 2495000,
+      "marginAmountCents": 410000,
+      "marginPct": 14.67
+    }
+  },
+  "draft": {
+    "id": "draft-1",
+    "workspaceId": "workspace-a",
+    "quotePackageId": "quote-1",
+    "impactId": "impact-1",
+    "eventId": "event-1",
+    "priceSheetId": "sheet-2",
+    "priorPriceSheetId": "sheet-1",
+    "createdBy": "rep-1",
+    "status": "approved",
+    "updatedAt": "2026-07-09T11:00:00.000Z",
+    "approvalCaseId": "approval-1",
+    "quoteVersionId": "quote-version-7",
+    "quoteVersionNumber": 7,
+    "quoteUpdatedAtSnapshot": "2026-07-09T10:00:00.000Z",
+    "impactUpdatedAtSnapshot": "2026-07-09T10:05:00.000Z"
+  },
+  "impact": {
+    "id": "impact-1",
+    "workspaceId": "workspace-a",
+    "quotePackageId": "quote-1",
+    "eventId": "event-1",
+    "state": "approved",
+    "updatedAt": "2026-07-09T10:05:00.000Z"
+  },
+  "approval": {
+    "id": "approval-1",
+    "workspaceId": "workspace-a",
+    "quotePackageId": "quote-1",
+    "quoteVersionId": "quote-version-7",
+    "quoteVersionNumber": 7,
+    "draftUpdatedAtSnapshot": "2026-07-09T11:00:00.000Z",
+    "status": "approved",
+    "decidedBy": "manager-1",
+    "decidedByRole": "manager",
+    "decidedAt": "2026-07-09T11:00:00.000Z",
+    "marginOverride": null
+  },
+  "customerPriceLock": {
+    "active": false,
+    "expiresAt": null,
+    "reason": null
+  },
+  "serverImpactLines": [
+    {
+      "impactLineId": "impact-line-factory",
+      "quoteLineId": "line-factory",
+      "oldUnitPriceCents": 1000000,
+      "newUnitPriceCents": 1100000,
+      "quantity": 1,
+      "sourceLocationSnapshot": "factory_order",
+      "isYardStockSnapshot": false,
+      "suppressedByStockLock": false
+    },
+    {
+      "impactLineId": "impact-line-yard",
+      "quoteLineId": "line-yard",
+      "oldUnitPriceCents": 2000000,
+      "newUnitPriceCents": 2200000,
+      "quantity": 1,
+      "sourceLocationSnapshot": "yard_stock",
+      "isYardStockSnapshot": true,
+      "suppressedByStockLock": true
+    }
+  ],
+  "marginFloorPct": 12,
+  "resultQuoteVersion": {
+    "id": "quote-version-8",
+    "versionNumber": 8
+  }
+}

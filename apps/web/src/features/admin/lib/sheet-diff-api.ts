@@ -21,15 +21,9 @@
  *   diff. "Approving this sheet would move $8,400 across 4 open
  *   quotes" is the moonshot insight.
  *
- * Pure vs. I/O:
- *   - computeModelDiff / aggregateDiffSummary / impactForOpenQuote
- *     are pure and exported for tests.
- *   - loadDiffPayload / getInFlightImpact are the Supabase wrappers.
- *
- * Caveat: model matching uses normalizeCode() for tolerance — rep
- * free-text in quote_packages.equipment[].model is lowercased +
- * whitespace-stripped before comparison. New models are matched by
- * exact model_code (case-insensitive).
+ * Canonical diffing lives in the oem-price-feeds server function. The legacy
+ * pure helpers remain exported for compatibility/tests, but no production I/O
+ * path uses them as an independent source of truth.
  */
 
 import { supabase } from "@/lib/supabase";
@@ -183,54 +177,14 @@ export interface SheetDiffPreview {
  * `null` if the sheet doesn't exist.
  */
 export async function generateSheetDiff(priceSheetId: string): Promise<SheetDiff | null> {
-  const { data: sheet } = await supabase
-    .from("qb_price_sheets")
-    .select("id, brand_id, status")
-    .eq("id", priceSheetId)
-    .maybeSingle();
-  const sheetRow = normalizeSheetHeaderRows(sheet ? [sheet] : [])[0];
-  if (!sheetRow) return null;
-  const brandId = sheetRow.brand_id;
-
-  // Items on the new sheet (pending_review / extracted)
-  const { data: newItems } = await supabase
-    .from("qb_price_sheet_items")
-    .select("*")
-    .eq("price_sheet_id", priceSheetId)
-    .eq("item_type", "model");
-
-  // Prior published sheet for the same brand, if any
-  const priorQ = brandId
-    ? await supabase
-        .from("qb_price_sheets")
-        .select("id")
-        .eq("brand_id", brandId)
-        .eq("status", "published")
-        .order("published_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-    : { data: null };
-  const priorPriceSheetId = normalizePriorSheetRefRows(priorQ.data ? [priorQ.data] : [])[0]?.id ?? null;
-
-  const { data: priorItems } = priorPriceSheetId
-    ? await supabase
-        .from("qb_price_sheet_items")
-        .select("*")
-        .eq("price_sheet_id", priorPriceSheetId)
-        .eq("item_type", "model")
-    : { data: [] };
-
-  const modelChanges = computeModelDiff(
-    normalizeSheetModelItemRows(priorItems),
-    normalizeSheetModelItemRows(newItems),
-  );
-
+  const preview = await getSheetDiffPreview(priceSheetId);
+  if (!preview) return null;
   return {
-    priceSheetId,
-    priorPriceSheetId,
-    brandId,
-    modelChanges,
-    summary: aggregateDiffSummary(modelChanges),
+    priceSheetId: preview.diff.priceSheetId,
+    priorPriceSheetId: preview.diff.priorPriceSheetId,
+    brandId: preview.diff.brandId,
+    modelChanges: preview.diff.modelChanges,
+    summary: preview.diff.summary,
   };
 }
 
@@ -239,43 +193,12 @@ export async function generateSheetDiff(priceSheetId: string): Promise<SheetDiff
  * for the sheet's brand.
  */
 export async function getInFlightImpact(diff: SheetDiff): Promise<InFlightImpact> {
-  if (!diff.brandId || diff.modelChanges.length === 0) {
-    return {
-      priceSheetId:       diff.priceSheetId,
-      affectedQuoteCount: 0,
-      totalDeltaCents:    0,
-      quotes:             [],
-    };
-  }
-
-  const { data: quotes } = await supabase
-    .from("quote_packages")
-    .select("id, quote_number, customer_name, status, equipment")
-    .in("status", ["draft", "ready", "sent", "viewed"])
-    .order("updated_at", { ascending: false });
-
-  const rows: QuoteImpactRow[] = [];
-  for (const q of normalizeQuoteImpactRows(quotes)) {
-    const equipment = parseQuoteEquipmentLines(q.equipment);
-    const impact = impactForOpenQuote(equipment, diff.modelChanges);
-    if (impact.deltaCents === 0) continue;
-    rows.push({
-      quotePackageId: q.id,
-      quoteNumber:    q.quote_number,
-      customerName:   q.customer_name,
-      status:         q.status,
-      deltaCents:     impact.deltaCents,
-      affectedLines:  impact.lines,
-    });
-  }
-
-  rows.sort((a, b) => Math.abs(b.deltaCents) - Math.abs(a.deltaCents));
-
-  return {
-    priceSheetId:       diff.priceSheetId,
-    affectedQuoteCount: rows.length,
-    totalDeltaCents:    rows.reduce((sum, r) => sum + r.deltaCents, 0),
-    quotes:             rows,
+  const preview = await getSheetDiffPreview(diff.priceSheetId);
+  return preview?.impact ?? {
+    priceSheetId: diff.priceSheetId,
+    affectedQuoteCount: 0,
+    totalDeltaCents: 0,
+    quotes: [],
   };
 }
 
@@ -285,6 +208,7 @@ type ServerPreviewResponse = {
   diff?: {
     priceSheetId?: string;
     priorPriceSheetId?: string | null;
+    brandId?: string | null;
     changedItemCount?: number;
     items?: ServerSheetDiffItem[];
     approvalPolicy?: Record<string, unknown>;
@@ -349,7 +273,7 @@ function normalizeServerPreview(payload: ServerPreviewResponse, fallbackPriceShe
     diff: {
       priceSheetId,
       priorPriceSheetId: payload.diff.priorPriceSheetId ?? null,
-      brandId: null,
+      brandId: payload.diff.brandId ?? null,
       modelChanges,
       summary: aggregateDiffSummary(modelChanges),
       changedItemCount: Number(payload.diff.changedItemCount ?? modelChanges.length),
@@ -547,7 +471,10 @@ function readItem(row: SheetModelItemRow): { code: string; codeNorm: string; nam
 
 /**
  * Compare two sets of extracted model rows (prior published vs new
- * pending). Pure.
+ * pending). Pure legacy helper retained for consumers/tests. Production diff
+ * requests use getSheetDiffPreview() and the server canonical engine above.
+ *
+ * @deprecated Use getSheetDiffPreview for production decisions.
  */
 export function computeModelDiff(
   prior: SheetModelItemRow[],

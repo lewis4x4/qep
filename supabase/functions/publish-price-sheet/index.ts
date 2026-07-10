@@ -1,702 +1,101 @@
+// deno-lint-ignore-file no-import-prefix no-explicit-any
 /**
- * publish-price-sheet — Catalog Apply Edge Function (Slice 04 + CP6 auto-publish)
+ * Atomic price-sheet catalog publisher.
  *
- * POST /publish-price-sheet
- * Body: { priceSheetId: string, auto_approve?: boolean }
- *
- * When `auto_approve: true` (Slice 07 CP6 — owner Q1=B, no review gate):
- *   Before the catalog apply, bulk-flip any items/programs with
- *   `review_status = 'pending'` on this sheet to `'approved'`. Preserves
- *   the audit trail (approved, not silently bypassed). Items already in
- *   `'rejected'` state are still excluded.
- *
- * Flow:
- *   1. Load qb_price_sheets row — must be in 'extracted' status.
- *   2. Optimistic guard: set status → 'extracting' (re-used as publish-in-progress
- *      mutex; prevents double-publish without a schema migration).
- *   3. (optional) If auto_approve: bulk-approve all pending items/programs.
- *   4. Load all approved qb_price_sheet_items and qb_price_sheet_programs.
- *   5. Apply each approved item to the catalog:
- *        model create   → INSERT qb_equipment_models
- *        model update   → UPDATE qb_equipment_models SET ... WHERE id = proposed_model_id
- *        attachment create/update → qb_attachments
- *        freight create → INSERT qb_freight_zones
- *        freight update → look up by brand+state_codes, then UPDATE
- *        program create → INSERT qb_programs
- *        program update → UPDATE qb_programs WHERE id = proposed_program_id
- *        no_change/skip → mark applied, no catalog mutation
- *   5. Mark each applied item: applied_at = now().
- *   6. Supersede prior published sheets for same brand+sheet_type.
- *   7. Set sheet status = 'published', published_at = now(), reviewed_by = userId.
- *
- * Auth: requireServiceUser() — valid user JWT, roles: admin/manager/owner.
- *
- * Important: all relative imports use .ts extension (Deno requirement).
- * No @/ path aliases — they don't resolve in Deno.
+ * All catalog rows, applied_at stamps, predecessor supersession, and the sheet
+ * status transition are owned by one PostgreSQL RPC. Any invalid or failed row
+ * aborts the transaction; an approved-but-unapplied row can never become an
+ * authoritative OEM diff.
  */
-
-import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 import { requireServiceUser } from "../_shared/service-auth.ts";
-import { optionsResponse, safeJsonOk, safeJsonError } from "../_shared/safe-cors.ts";
 import { emitAdminFlare } from "../_shared/admin-flare.ts";
+import {
+  optionsResponse,
+  safeJsonError,
+  safeJsonOk,
+} from "../_shared/safe-cors.ts";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+type JsonObject = Record<string, unknown>;
 
-interface PriceSheetRow {
-  id: string;
-  brand_id: string;
-  sheet_type: string | null;
-  status: string;
-  effective_from: string | null;
-  effective_to: string | null;
-  workspace_id: string;
-}
-
-interface PriceSheetItem {
-  id: string;
-  item_type: "model" | "attachment" | "freight" | "note";
-  extracted: unknown;
-  proposed_model_id: string | null;
-  proposed_attachment_id: string | null;
-  action: "create" | "update" | "no_change" | "skip";
-  review_status: string;
-}
-
-interface PriceSheetProgram {
-  id: string;
-  program_code: string;
-  program_type: string;
-  extracted: unknown;
-  proposed_program_id: string | null;
-  action: "create" | "update" | "no_change" | "skip";
-  review_status: string;
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-type ExtractedPayload = Record<string, unknown>;
-type ApplyResult = { ok: boolean; catalogId?: string; error?: string };
-type ServiceClient = SupabaseClient<any, "public", any>;
-
-function isExtractedPayload(value: unknown): value is ExtractedPayload {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function getExtractedPayload(
-  value: unknown,
-  label: string,
-): { ok: true; payload: ExtractedPayload } | { ok: false; error: string } {
-  if (isExtractedPayload(value)) return { ok: true, payload: value };
-  return { ok: false, error: `${label} extracted payload must be an object` };
-}
-
-function getStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === "string")
-    : [];
-}
-
-function formatStateCodes(value: unknown): string {
-  const stateCodes = getStringArray(value);
-  return stateCodes.length > 0 ? stateCodes.join("/") : "Unknown";
-}
-
-function getContainsValue(value: unknown): string | Record<string, unknown> | readonly unknown[] {
-  if (typeof value === "string" || Array.isArray(value) || isExtractedPayload(value)) return value;
-  return [];
-}
-
-const SPEC_FREE_TEXT_KEYS = new Set(["ai_summary", "bullets", "comments", "description", "free_text", "notes", "raw_text", "summary"]);
-const SPEC_DESCRIPTOR_KEYS = new Set(["key", "label", "name", "title", "unit", "units", "uom", "category", "group"]);
-
-function hasMeaningfulCatalogSpecs(value: unknown, depth = 0): boolean {
-  if (value == null || depth > 3) return false;
-  if (Array.isArray(value)) {
-    return value.some((item) => isExtractedPayload(item) && hasMeaningfulCatalogSpecs(item, depth + 1));
-  }
-  if (isExtractedPayload(value)) {
-    return Object.entries(value).some(([key, child]) => {
-      const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-      return !SPEC_FREE_TEXT_KEYS.has(normalizedKey)
-        && !SPEC_DESCRIPTOR_KEYS.has(normalizedKey)
-        && hasMeaningfulCatalogSpecs(child, depth + 1);
-    });
-  }
-  if (typeof value === "number") return Number.isFinite(value);
-  if (typeof value === "boolean") return true;
-  if (typeof value === "string") {
-    const text = value.trim();
-    return text.length > 0 && text.length <= 120;
-  }
-  return false;
+function asObject(value: unknown): JsonObject {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as JsonObject
+    : {};
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** Resolve model codes to their UUID catalog IDs for compatible_model_ids. */
-async function resolveModelIds(
-  modelCodes: string[],
-  brandId: string,
-  serviceClient: ServiceClient,
-): Promise<string[]> {
-  if (!modelCodes?.length) return [];
-  const { data } = await serviceClient
-    .from("qb_equipment_models")
-    .select("id, model_code")
-    .eq("brand_id", brandId)
-    .in("model_code", modelCodes);
-  return (data ?? []).map((r: { id: string }) => r.id);
-}
-
-/** Apply a single model item to the catalog. Returns the catalog row id. */
-async function applyModel(
-  item: PriceSheetItem,
-  sheet: PriceSheetRow,
-  serviceClient: ServiceClient,
-): Promise<ApplyResult> {
-  const extracted = getExtractedPayload(item.extracted, `Item ${item.id}`);
-  if (!extracted.ok) return extracted;
-  const ext = extracted.payload;
-  const meaningfulSpecs = hasMeaningfulCatalogSpecs(ext.specs);
-
-  if (item.action === "create") {
-    const { data, error } = await serviceClient
-      .from("qb_equipment_models")
-      .insert({
-        workspace_id: sheet.workspace_id,
-        brand_id: sheet.brand_id,
-        model_code: ext.model_code,
-        family: ext.family ?? null,
-        name_display: ext.name_display ?? ext.model_code,
-        standard_config: ext.standard_config ?? null,
-        list_price_cents: ext.list_price_cents,
-        specs: meaningfulSpecs ? ext.specs : null,
-        active: true,
-      })
-      .select("id")
-      .single();
-    if (error) return { ok: false, error: error.message };
-    return { ok: true, catalogId: data.id };
-  }
-
-  if (item.action === "update" && item.proposed_model_id) {
-    const updates: Record<string, unknown> = {};
-    if (ext.list_price_cents !== undefined) updates.list_price_cents = ext.list_price_cents;
-    if (ext.family !== undefined) updates.family = ext.family;
-    if (ext.name_display !== undefined) updates.name_display = ext.name_display;
-    if (ext.standard_config !== undefined) updates.standard_config = ext.standard_config;
-    if (meaningfulSpecs) updates.specs = ext.specs;
-
-    const { error } = await serviceClient
-      .from("qb_equipment_models")
-      .update(updates)
-      .eq("id", item.proposed_model_id);
-    if (error) return { ok: false, error: error.message };
-    return { ok: true, catalogId: item.proposed_model_id };
-  }
-
-  // no_change / skip — no mutation
-  return { ok: true, catalogId: item.proposed_model_id ?? undefined };
-}
-
-/** Apply a single attachment item to the catalog. */
-async function applyAttachment(
-  item: PriceSheetItem,
-  sheet: PriceSheetRow,
-  serviceClient: ServiceClient,
-): Promise<ApplyResult> {
-  const extracted = getExtractedPayload(item.extracted, `Item ${item.id}`);
-  if (!extracted.ok) return extracted;
-  const ext = extracted.payload;
-
-  if (item.action === "create") {
-    const compatibleIds = await resolveModelIds(
-      getStringArray(ext.compatible_model_codes),
-      sheet.brand_id,
-      serviceClient,
-    );
-    const { data, error } = await serviceClient
-      .from("qb_attachments")
-      .insert({
-        workspace_id: sheet.workspace_id,
-        brand_id: sheet.brand_id,
-        part_number: ext.part_number,
-        name: ext.name,
-        category: ext.category ?? null,
-        list_price_cents: ext.list_price_cents,
-        attachment_type: ext.attachment_type ?? null,
-        compatible_model_ids: compatibleIds.length > 0 ? compatibleIds : null,
-        active: true,
-      })
-      .select("id")
-      .single();
-    if (error) return { ok: false, error: error.message };
-    return { ok: true, catalogId: data.id };
-  }
-
-  if (item.action === "update" && item.proposed_attachment_id) {
-    const updates: Record<string, unknown> = {};
-    if (ext.list_price_cents !== undefined) updates.list_price_cents = ext.list_price_cents;
-    if (ext.name !== undefined) updates.name = ext.name;
-    if (ext.category !== undefined) updates.category = ext.category;
-    if (ext.attachment_type !== undefined) updates.attachment_type = ext.attachment_type;
-
-    const compatibleModelCodes = getStringArray(ext.compatible_model_codes);
-    if (compatibleModelCodes.length) {
-      const compatibleIds = await resolveModelIds(
-        compatibleModelCodes,
-        sheet.brand_id,
-        serviceClient,
-      );
-      if (compatibleIds.length > 0) updates.compatible_model_ids = compatibleIds;
-    }
-
-    const { error } = await serviceClient
-      .from("qb_attachments")
-      .update(updates)
-      .eq("id", item.proposed_attachment_id);
-    if (error) return { ok: false, error: error.message };
-    return { ok: true, catalogId: item.proposed_attachment_id };
-  }
-
-  return { ok: true, catalogId: item.proposed_attachment_id ?? undefined };
-}
-
-/** Apply a single freight zone item to the catalog. */
-async function applyFreight(
-  item: PriceSheetItem,
-  sheet: PriceSheetRow,
-  serviceClient: ServiceClient,
-): Promise<ApplyResult> {
-  const extracted = getExtractedPayload(item.extracted, `Item ${item.id}`);
-  if (!extracted.ok) return extracted;
-  const ext = extracted.payload;
-
-  if (item.action === "create") {
-    const { data, error } = await serviceClient
-      .from("qb_freight_zones")
-      .insert({
-        workspace_id: sheet.workspace_id,
-        brand_id: sheet.brand_id,
-        zone_name: ext.zone_name ?? formatStateCodes(ext.state_codes),
-        state_codes: ext.state_codes,
-        freight_large_cents: ext.freight_large_cents,
-        freight_small_cents: ext.freight_small_cents,
-        effective_from: sheet.effective_from ?? null,
-        effective_to: sheet.effective_to ?? null,
-      })
-      .select("id")
-      .single();
-    if (error) return { ok: false, error: error.message };
-    return { ok: true, catalogId: data.id };
-  }
-
-  if (item.action === "update") {
-    // Re-lookup existing zone by brand + overlapping state_codes
-    const { data: existing, error: lookupErr } = await serviceClient
-      .from("qb_freight_zones")
-      .select("id, zone_name")
-      .eq("brand_id", sheet.brand_id)
-      .contains("state_codes", getContainsValue(ext.state_codes))
-      .maybeSingle();
-
-    if (lookupErr || !existing) {
-      // Fallback: insert as new zone
-      const { data, error } = await serviceClient
-        .from("qb_freight_zones")
-        .insert({
-          workspace_id: sheet.workspace_id,
-          brand_id: sheet.brand_id,
-          zone_name: ext.zone_name ?? formatStateCodes(ext.state_codes),
-          state_codes: ext.state_codes,
-          freight_large_cents: ext.freight_large_cents,
-          freight_small_cents: ext.freight_small_cents,
-          effective_from: sheet.effective_from ?? null,
-          effective_to: sheet.effective_to ?? null,
-        })
-        .select("id")
-        .single();
-      if (error) return { ok: false, error: error.message };
-      return { ok: true, catalogId: data.id };
-    }
-
-    const { error } = await serviceClient
-      .from("qb_freight_zones")
-      .update({
-        freight_large_cents: ext.freight_large_cents,
-        freight_small_cents: ext.freight_small_cents,
-        zone_name: ext.zone_name ?? existing.zone_name,
-        effective_from: sheet.effective_from ?? null,
-        effective_to: sheet.effective_to ?? null,
-      })
-      .eq("id", existing.id);
-    if (error) return { ok: false, error: error.message };
-    return { ok: true, catalogId: existing.id };
-  }
-
-  return { ok: true };
-}
-
-/** Apply a single program to the catalog. */
-/**
- * F5 fix: normalize `low_rate_financing` program details from the nested-array
- * shape that Claude extracts (details.terms[], details.lenders[]) to the flat
- * scalar shape that the pricing engine reads (term_months, rate_pct,
- * dealer_participation_pct, lender_name). The original arrays are preserved
- * under details.all_terms and details.all_lenders so nothing is lost.
- *
- * Selection rule: pick the term with the lowest rate_pct; break ties by
- * preferring term months closest to 60. This gives the "headline" term for
- * calculator display while all terms remain available for the UI.
- */
-function normalizeFinancingDetails(raw: Record<string, unknown>): Record<string, unknown> {
-  if (!Array.isArray(raw.terms) || raw.terms.length === 0) return raw;
-
-  const terms = raw.terms as Array<{
-    months?: number;
-    rate_pct?: number;
-    dealer_participation_pct?: number;
-  }>;
-
-  // Sort: lowest rate first; tie-break by closest to 60 months
-  const sorted = [...terms].sort((a, b) => {
-    const rateDiff = (a.rate_pct ?? 0) - (b.rate_pct ?? 0);
-    if (rateDiff !== 0) return rateDiff;
-    return Math.abs((a.months ?? 60) - 60) - Math.abs((b.months ?? 60) - 60);
-  });
-  const primary = sorted[0];
-
-  const lenders = Array.isArray(raw.lenders) ? raw.lenders : [];
-  const primaryLender = (lenders[0] as Record<string, unknown> | undefined) ?? {};
-
-  return {
-    ...raw,
-    // Flat scalars the calculator reads:
-    term_months: primary.months ?? 60,
-    rate_pct: primary.rate_pct ?? 0,
-    dealer_participation_pct: primary.dealer_participation_pct ?? 0,
-    lender_name: (primaryLender.name as string | undefined) ?? "Manufacturer Financing",
-    // Preserve originals so nothing is lost:
-    all_terms: terms,
-    all_lenders: lenders,
-  };
-}
-
-async function applyProgram(
-  prog: PriceSheetProgram,
-  sheet: PriceSheetRow,
-  serviceClient: ServiceClient,
-): Promise<ApplyResult> {
-  const extracted = getExtractedPayload(prog.extracted, `Program ${prog.id}`);
-  if (!extracted.ok) return extracted;
-  const ext = extracted.payload;
-  // Dates: prefer sheet-level dates, fall back to today / +90 days
-  const effectiveFrom = sheet.effective_from ?? new Date().toISOString().slice(0, 10);
-  const effectiveTo =
-    sheet.effective_to ??
-    new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-
-  // Normalize details: flatten financing term arrays → scalar fields the calculator needs
-  let details: unknown = ext.details ?? {};
-  if (prog.program_type === "low_rate_financing" && isExtractedPayload(details)) {
-    details = normalizeFinancingDetails(details);
-  }
-
-  if (prog.action === "create") {
-    const { data, error } = await serviceClient
-      .from("qb_programs")
-      .insert({
-        workspace_id: sheet.workspace_id,
-        brand_id: sheet.brand_id,
-        program_code: prog.program_code,
-        program_type: prog.program_type,
-        name: ext.name ?? prog.program_code,
-        effective_from: effectiveFrom,
-        effective_to: effectiveTo,
-        details,
-        active: true,
-      })
-      .select("id")
-      .single();
-    if (error) return { ok: false, error: error.message };
-    return { ok: true, catalogId: data.id };
-  }
-
-  if (prog.action === "update" && prog.proposed_program_id) {
-    const updates: Record<string, unknown> = {
-      effective_from: effectiveFrom,
-      effective_to: effectiveTo,
-      active: true,
-    };
-    if (ext.name) updates.name = ext.name;
-    if (ext.details) updates.details = details; // use normalized details
-
-    const { error } = await serviceClient
-      .from("qb_programs")
-      .update(updates)
-      .eq("id", prog.proposed_program_id);
-    if (error) return { ok: false, error: error.message };
-    return { ok: true, catalogId: prog.proposed_program_id };
-  }
-
-  // no_change / skip
-  return { ok: true, catalogId: prog.proposed_program_id ?? undefined };
-}
-
-// ── Main handler ──────────────────────────────────────────────────────────────
-
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") return optionsResponse(origin);
+  if (req.method !== "POST") {
+    return safeJsonError("Method not allowed", 405, origin);
+  }
 
-  // ── Auth ──────────────────────────────────────────────────────────────────
-  const auth = await requireServiceUser(req.headers.get("authorization"), origin);
+  const auth = await requireServiceUser(
+    req.headers.get("authorization"),
+    origin,
+  );
   if (!auth.ok) return auth.response;
-  const { supabase, userId } = auth;
-
   if (!["admin", "manager", "owner"].includes(auth.role)) {
-    return safeJsonError("Price sheet publish requires admin, manager, or owner role", 403, origin);
-  }
-
-  // ── Parse body ────────────────────────────────────────────────────────────
-  let priceSheetId: string;
-  let autoApprove = false;
-  try {
-    const body = await req.json();
-    priceSheetId = body?.priceSheetId;
-    autoApprove  = body?.auto_approve === true;
-    if (!priceSheetId) throw new Error("priceSheetId required");
-  } catch (e: unknown) {
-    return safeJsonError(`Invalid request body: ${errorMessage(e)}`, 400, origin);
-  }
-
-  // ── Load sheet ────────────────────────────────────────────────────────────
-  const { data: sheet, error: sheetErr } = await supabase
-    .from("qb_price_sheets")
-    .select("id, brand_id, sheet_type, status, effective_from, effective_to, workspace_id")
-    .eq("id", priceSheetId)
-    .single();
-
-  if (sheetErr || !sheet) {
-    return safeJsonError(`Price sheet not found: ${priceSheetId}`, 404, origin);
-  }
-
-  // F3 fix: replace two-step status-check + flip (TOCTOU race) with a single
-  // conditional UPDATE. Only one concurrent caller can win the CAS; the other
-  // will see 0 rows updated and receive 409 without ever touching the catalog.
-  const { data: claim, error: claimErr } = await supabase
-    .from("qb_price_sheets")
-    .update({ status: "extracting" })
-    .eq("id", priceSheetId)
-    .eq("status", "extracted")
-    .select("id")
-    .maybeSingle();
-
-  // Service client for catalog writes + flare emissions (bypasses RLS).
-  // Created before the claim check so we can emit observability flares
-  // on every failure path, including pre-apply ones.
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const serviceClient = createClient(supabaseUrl, serviceRoleKey);
-
-  if (claimErr) {
-    await emitAdminFlare(serviceClient, {
-      source: "publish-price-sheet",
-      priceSheetId,
-      brandId: sheet.brand_id,
-      phase: "publish",
-      message: `Failed to claim publish slot: ${claimErr.message}`,
-    });
-    return safeJsonError(`Failed to claim publish slot: ${claimErr.message}`, 500, origin);
-  }
-  if (!claim) {
-    // Either already publishing or not in 'extracted' state — safe 409.
-    // Not flared: this is a contention case, not a bug.
     return safeJsonError(
-      `Sheet is not in 'extracted' state or a publish is already in flight for sheet ${priceSheetId}`,
-      409,
+      "Price sheet publish requires admin, manager, or owner role",
+      403,
       origin,
     );
   }
 
-  // ── Auto-approve (CP6 — owner Q1=B, no human review gate) ────────────────
-  let autoApprovedItems = 0;
-  let autoApprovedPrograms = 0;
-  if (autoApprove) {
-    const { data: itemsApproved } = await serviceClient
-      .from("qb_price_sheet_items")
-      .update({ review_status: "approved" })
-      .eq("price_sheet_id", priceSheetId)
-      .eq("review_status", "pending")
-      .select("id");
-    autoApprovedItems = (itemsApproved ?? []).length;
+  const body = asObject(await req.json().catch(() => ({})));
+  const priceSheetId = typeof body.priceSheetId === "string"
+    ? body.priceSheetId
+    : null;
+  if (!priceSheetId) return safeJsonError("priceSheetId required", 400, origin);
 
-    const { data: progsApproved } = await serviceClient
-      .from("qb_price_sheet_programs")
-      .update({ review_status: "approved" })
-      .eq("price_sheet_id", priceSheetId)
-      .eq("review_status", "pending")
-      .select("id");
-    autoApprovedPrograms = (progsApproved ?? []).length;
-
-    console.log(
-      `[publish-price-sheet] auto_approve: flipped ${autoApprovedItems} items and ${autoApprovedPrograms} programs from pending to approved on sheet ${priceSheetId}`,
+  const admin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+  const { data, error } = await admin.rpc("publish_qb_price_sheet_atomic", {
+    p_workspace_id: auth.workspaceId,
+    p_price_sheet_id: priceSheetId,
+    p_actor_id: auth.userId,
+    p_auto_approve: body.auto_approve === true,
+  });
+  if (error) {
+    await emitAdminFlare(admin, {
+      source: "publish-price-sheet",
+      priceSheetId,
+      phase: "publish",
+      message: error.message,
+    });
+    const status = error.code === "42501"
+      ? 403
+      : ["22023", "22P02"].includes(error.code ?? "")
+      ? 400
+      : ["40001", "55000", "23505", "21000"].includes(error.code ?? "")
+      ? 409
+      : 500;
+    return safeJsonError(
+      `Atomic price-sheet publish failed: ${error.message}`,
+      status,
+      origin,
     );
   }
 
-  // ── Load approved items ───────────────────────────────────────────────────
-  const { data: items, error: itemsErr } = await serviceClient
-    .from("qb_price_sheet_items")
-    .select("id, item_type, extracted, proposed_model_id, proposed_attachment_id, action, review_status")
-    .eq("price_sheet_id", priceSheetId)
-    .eq("review_status", "approved");
-
-  if (itemsErr) {
-    await serviceClient
-      .from("qb_price_sheets")
-      .update({ status: "extracted" }) // roll back guard
-      .eq("id", priceSheetId);
-    await emitAdminFlare(serviceClient, {
-      source: "publish-price-sheet",
-      priceSheetId,
-      brandId: sheet.brand_id,
-      phase: "publish",
-      message: `Failed to load sheet items: ${itemsErr.message}`,
-    });
-    return safeJsonError(`Failed to load sheet items: ${itemsErr.message}`, 500, origin);
+  const payload = asObject(data);
+  if (
+    Number(payload.itemsSkipped ?? 0) !== 0 ||
+    Number(payload.programsSkipped ?? 0) !== 0
+  ) {
+    // Defensive contract guard. The SQL publisher never returns partial counts.
+    return safeJsonError(
+      "Atomic publisher returned a partial result",
+      500,
+      origin,
+    );
   }
-
-  const { data: programs, error: progsErr } = await serviceClient
-    .from("qb_price_sheet_programs")
-    .select("id, program_code, program_type, extracted, proposed_program_id, action, review_status")
-    .eq("price_sheet_id", priceSheetId)
-    .eq("review_status", "approved");
-
-  if (progsErr) {
-    await serviceClient
-      .from("qb_price_sheets")
-      .update({ status: "extracted" })
-      .eq("id", priceSheetId);
-    await emitAdminFlare(serviceClient, {
-      source: "publish-price-sheet",
-      priceSheetId,
-      brandId: sheet.brand_id,
-      phase: "publish",
-      message: `Failed to load sheet programs: ${progsErr.message}`,
-    });
-    return safeJsonError(`Failed to load sheet programs: ${progsErr.message}`, 500, origin);
-  }
-
-  // ── Apply items to catalog ────────────────────────────────────────────────
-  const appliedItemIds: string[] = [];
-  const skippedItems: Array<{ id: string; reason: string }> = [];
-  const sheetRow = sheet as PriceSheetRow;
-
-  for (const rawItem of (items ?? []) as PriceSheetItem[]) {
-    let result: { ok: boolean; catalogId?: string; error?: string };
-
-    if (rawItem.item_type === "model") {
-      result = await applyModel(rawItem, sheetRow, serviceClient);
-    } else if (rawItem.item_type === "attachment") {
-      result = await applyAttachment(rawItem, sheetRow, serviceClient);
-    } else if (rawItem.item_type === "freight") {
-      result = await applyFreight(rawItem, sheetRow, serviceClient);
-    } else {
-      // note — no catalog mutation
-      result = { ok: true };
-    }
-
-    if (result.ok) {
-      appliedItemIds.push(rawItem.id);
-    } else {
-      skippedItems.push({ id: rawItem.id, reason: result.error ?? "unknown" });
-      console.warn(`[publish-price-sheet] Item ${rawItem.id} (${rawItem.item_type}) failed: ${result.error}`);
-    }
-  }
-
-  // Mark applied items
-  if (appliedItemIds.length > 0) {
-    await serviceClient
-      .from("qb_price_sheet_items")
-      .update({ applied_at: new Date().toISOString() })
-      .in("id", appliedItemIds);
-  }
-
-  // ── Apply programs to catalog ─────────────────────────────────────────────
-  const appliedProgramIds: string[] = [];
-  const skippedPrograms: Array<{ id: string; reason: string }> = [];
-
-  for (const rawProg of (programs ?? []) as PriceSheetProgram[]) {
-    const result = await applyProgram(rawProg, sheetRow, serviceClient);
-    if (result.ok) {
-      appliedProgramIds.push(rawProg.id);
-    } else {
-      skippedPrograms.push({ id: rawProg.id, reason: result.error ?? "unknown" });
-      console.warn(
-        `[publish-price-sheet] Program ${rawProg.id} (${rawProg.program_code}) failed: ${result.error}`,
-      );
-    }
-  }
-
-  if (appliedProgramIds.length > 0) {
-    await serviceClient
-      .from("qb_price_sheet_programs")
-      .update({ applied_at: new Date().toISOString() })
-      .in("id", appliedProgramIds);
-  }
-
-  // ── Supersede prior published sheets for this brand+sheet_type ───────────
-  const sheetType = sheet.sheet_type ?? "price_book";
-  // For 'both' sheet_type, supersede both price_book and retail_programs prior sheets
-  const supersedableTypes =
-    sheetType === "both"
-      ? ["price_book", "retail_programs", "both"]
-      : [sheetType, "both"];
-
-  await serviceClient
-    .from("qb_price_sheets")
-    .update({ status: "superseded" })
-    .eq("brand_id", sheet.brand_id)
-    .in("sheet_type", supersedableTypes)
-    .eq("status", "published")
-    .neq("id", priceSheetId);
-
-  // ── Publish ───────────────────────────────────────────────────────────────
-  await serviceClient
-    .from("qb_price_sheets")
-    .update({
-      status: "published",
-      published_at: new Date().toISOString(),
-      reviewed_by: userId,
-      reviewed_at: new Date().toISOString(),
-    })
-    .eq("id", priceSheetId);
-
-  const summary = {
-    itemsApplied: appliedItemIds.length,
-    itemsSkipped: skippedItems.length,
-    programsApplied: appliedProgramIds.length,
-    programsSkipped: skippedPrograms.length,
-    autoApproved: autoApprove
-      ? { items: autoApprovedItems, programs: autoApprovedPrograms }
-      : undefined,
-    skippedDetails: skippedItems.length + skippedPrograms.length > 0
-      ? { items: skippedItems, programs: skippedPrograms }
-      : undefined,
-  };
-
-  console.log(
-    `[publish-price-sheet] Sheet ${priceSheetId} published: ${appliedItemIds.length} items, ${appliedProgramIds.length} programs applied.`,
-  );
-
-  return safeJsonOk(
-    {
-      priceSheetId,
-      status: "published",
-      ...summary,
-    },
-    origin,
-  );
+  return safeJsonOk(payload, origin);
 });

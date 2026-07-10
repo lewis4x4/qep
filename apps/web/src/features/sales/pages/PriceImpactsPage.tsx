@@ -1,21 +1,26 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ChevronRight,
   DollarSign,
   FileText,
+  History,
   Loader2,
+  RotateCcw,
   ShieldAlert,
   XCircle,
 } from "lucide-react";
 import {
+  applyRepriceDraft,
   createRepriceDraft,
   dismissRepriceImpact,
   fetchRepPriceImpacts,
+  reverseRepriceApply,
   type RepPriceImpact,
   type RepPriceImpactLine,
+  type RepRepriceAudit,
 } from "@/features/price-intelligence/lib/price-intelligence-api";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,7 +51,10 @@ function formatPercent(value: number | null): string {
 }
 
 function quoteLabel(impact: RepPriceImpact): string {
-  const compact = impact.quotePackageId.replace(/-/g, "").slice(0, 8).toUpperCase();
+  const compact = impact.quotePackageId
+    .replace(/-/g, "")
+    .slice(0, 8)
+    .toUpperCase();
   return compact ? `Quote ${compact}` : "Quote";
 }
 
@@ -75,12 +83,16 @@ function statusLabel(impact: RepPriceImpact): string {
       return "Approval pending";
     case "approved":
       return "Approved";
+    case "applied":
+      return "Applied · reversible audit";
     default:
       return impact.requiresManagerReview ? "Needs approval" : "Needs review";
   }
 }
 
-function groupByEvent(impacts: RepPriceImpact[]): Array<[string, RepPriceImpact[]]> {
+function groupByEvent(
+  impacts: RepPriceImpact[],
+): Array<[string, RepPriceImpact[]]> {
   const groups = new Map<string, RepPriceImpact[]>();
   for (const impact of impacts) {
     const key = impact.eventId || "current-event";
@@ -88,15 +100,24 @@ function groupByEvent(impacts: RepPriceImpact[]): Array<[string, RepPriceImpact[
   }
   return [...groups.entries()].map(([eventId, rows]) => [
     eventId,
-    rows.sort((a, b) => Math.abs(b.totalDeltaCents) - Math.abs(a.totalDeltaCents)),
+    rows.sort(
+      (a, b) => Math.abs(b.totalDeltaCents) - Math.abs(a.totalDeltaCents),
+    ),
   ]);
 }
 
 export function PriceImpactsPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
-  const [dismissTarget, setDismissTarget] = useState<RepPriceImpact | null>(null);
+  const [dismissTarget, setDismissTarget] = useState<RepPriceImpact | null>(
+    null,
+  );
   const [dismissReason, setDismissReason] = useState("");
+  const [reverseTarget, setReverseTarget] = useState<{
+    impact: RepPriceImpact;
+    audit: RepRepriceAudit;
+  } | null>(null);
 
   const impactsQuery = useQuery({
     queryKey: PRICE_IMPACTS_QUERY_KEY,
@@ -105,16 +126,25 @@ export function PriceImpactsPage() {
     refetchInterval: 2 * 60 * 1000,
   });
 
-  const grouped = useMemo(
-    () => groupByEvent(impactsQuery.data?.impacts ?? []),
-    [impactsQuery.data?.impacts],
-  );
+  const focusedQuotePackageId =
+    searchParams.get("quote_package_id")?.trim() || null;
+  const visibleImpacts = useMemo(() => {
+    const impacts = impactsQuery.data?.impacts ?? [];
+    return focusedQuotePackageId
+      ? impacts.filter(
+          (impact) => impact.quotePackageId === focusedQuotePackageId,
+        )
+      : impacts;
+  }, [focusedQuotePackageId, impactsQuery.data?.impacts]);
+  const grouped = useMemo(() => groupByEvent(visibleImpacts), [visibleImpacts]);
 
   const createDraftMutation = useMutation({
     mutationFn: (impact: RepPriceImpact) => createRepriceDraft(impact.id),
     onSuccess: (result) => {
       toast({
-        title: result.approvalRequired ? "Submitted for approval" : "Reprice draft created",
+        title: result.approvalRequired
+          ? "Submitted for approval"
+          : "Reprice draft created",
         description: result.approvalRequired
           ? "A manager must review this OEM-driven reprice before it can be applied."
           : "The draft is ready for rep review. No customer email was sent.",
@@ -124,7 +154,42 @@ export function PriceImpactsPage() {
     onError: (error) => {
       toast({
         title: "Couldn't create reprice draft",
-        description: error instanceof Error ? error.message : "Try refreshing the price impacts.",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Try refreshing the price impacts.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const applyDraftMutation = useMutation({
+    mutationFn: (impact: RepPriceImpact) => {
+      const draftId = impact.currentDraft?.id;
+      if (!draftId || impact.currentDraft?.status !== "approved") {
+        throw new Error(
+          "The approved OEM re-price draft is not current. Refresh the queue.",
+        );
+      }
+      return applyRepriceDraft(draftId);
+    },
+    onSuccess: (result) => {
+      toast({
+        title: result.idempotent
+          ? "Re-price already applied"
+          : "Approved re-price applied",
+        description:
+          "Quote lines, totals, version, and audit history were updated together. No customer communication was sent.",
+      });
+      void queryClient.invalidateQueries({ queryKey: PRICE_IMPACTS_QUERY_KEY });
+    },
+    onError: (error) => {
+      toast({
+        title: "Couldn't apply the approved re-price",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Refresh the quote and confirm the approval is still current.",
         variant: "destructive",
       });
     },
@@ -136,7 +201,8 @@ export function PriceImpactsPage() {
     onSuccess: () => {
       toast({
         title: "Price impact dismissed",
-        description: "This quote will no longer appear in your OEM impact queue.",
+        description:
+          "This quote will no longer appear in your OEM impact queue.",
       });
       setDismissTarget(null);
       setDismissReason("");
@@ -145,7 +211,32 @@ export function PriceImpactsPage() {
     onError: (error) => {
       toast({
         title: "Couldn't dismiss impact",
-        description: error instanceof Error ? error.message : "Try again with a reason.",
+        description:
+          error instanceof Error ? error.message : "Try again with a reason.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const reverseMutation = useMutation({
+    mutationFn: (audit: RepRepriceAudit) => reverseRepriceApply(audit.id),
+    onSuccess: (result) => {
+      toast({
+        title: result.idempotent
+          ? "Re-price already reversed"
+          : "OEM re-price reversed",
+        description:
+          "The audited quote prices and totals were restored together. No customer communication was sent.",
+      });
+      setReverseTarget(null);
+      void queryClient.invalidateQueries({ queryKey: PRICE_IMPACTS_QUERY_KEY });
+    },
+    onError: (error) => {
+      toast({
+        title: "Couldn't reverse the OEM re-price",
+        description: error instanceof Error
+          ? error.message
+          : "Later quote work may make this apply ineligible for reversal.",
         variant: "destructive",
       });
     },
@@ -192,8 +283,16 @@ export function PriceImpactsPage() {
           )}
         </div>
         <p className="mt-2 text-[12.5px] leading-snug text-muted-foreground">
-          Rep-visible queue for material assigned quote impacts only. Create drafts or submit approval; customers are never auto-sent OEM price updates from this page.
+          Rep-visible queue for material assigned quote impacts only. Create
+          drafts or submit approval; customers are never auto-sent OEM price
+          updates from this page.
         </p>
+        {focusedQuotePackageId ? (
+          <p className="mt-2 text-[11px] font-semibold text-qep-orange-accessible">
+            Focused on quote{" "}
+            {focusedQuotePackageId.replace(/-/g, "").slice(0, 8).toUpperCase()}
+          </p>
+        ) : null}
       </div>
 
       <div className="px-4 py-4">
@@ -201,27 +300,32 @@ export function PriceImpactsPage() {
           <PriceImpactSkeleton />
         ) : impactsQuery.isError ? (
           <ErrorState onRetry={() => void impactsQuery.refetch()} />
-        ) : !summary || summary.visibleImpactCount === 0 ? (
+        ) : !summary ||
+          visibleImpacts.length === 0 ? (
           <EmptyState />
         ) : (
           <>
-            <SummaryStrip
-              affectedQuotes={summary.affectedQuoteCount}
-              impactCount={summary.visibleImpactCount}
-              exposureCents={summary.totalDeltaCents}
-              approvals={summary.needsApprovalCount}
-            />
+            {summary.visibleImpactCount > 0 && (
+              <SummaryStrip
+                affectedQuotes={summary.affectedQuoteCount}
+                impactCount={summary.visibleImpactCount}
+                exposureCents={summary.totalDeltaCents}
+                approvals={summary.needsApprovalCount}
+              />
+            )}
 
             <div className="mt-4 space-y-5">
               {grouped.map(([eventId, impacts]) => (
                 <section key={eventId}>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-muted-foreground">
-                      Event {eventId.replace(/-/g, "").slice(0, 8).toUpperCase()}
+                      Event{" "}
+                      {eventId.replace(/-/g, "").slice(0, 8).toUpperCase()}
                     </span>
                     <div className="flex-1 h-px bg-white/[0.06]" />
                     <span className="text-[10px] text-muted-foreground">
-                      {impacts.length} {impacts.length === 1 ? "quote" : "quotes"}
+                      {impacts.length}{" "}
+                      {impacts.length === 1 ? "quote" : "quotes"}
                     </span>
                   </div>
                   <div className="space-y-3">
@@ -229,12 +333,27 @@ export function PriceImpactsPage() {
                       <ImpactCard
                         key={impact.id}
                         impact={impact}
-                        onOpenQuote={() => navigate(`/sales/quotes/${impact.quotePackageId}`)}
+                        onOpenQuote={() =>
+                          navigate(`/sales/quotes/${impact.quotePackageId}`)
+                        }
                         onDraft={() => createDraftMutation.mutate(impact)}
+                        onApply={() => applyDraftMutation.mutate(impact)}
                         onDismiss={() => setDismissTarget(impact)}
+                        onReverse={(audit) =>
+                          setReverseTarget({ impact, audit })}
                         draftPending={
                           createDraftMutation.isPending &&
                           createDraftMutation.variables?.id === impact.id
+                        }
+                        applyPending={
+                          applyDraftMutation.isPending &&
+                          applyDraftMutation.variables?.id === impact.id
+                        }
+                        reversePending={
+                          reverseMutation.isPending &&
+                          (impact.history ?? []).some((audit) =>
+                            audit.id === reverseMutation.variables?.id
+                          )
                         }
                       />
                     ))}
@@ -259,14 +378,17 @@ export function PriceImpactsPage() {
           <DialogHeader>
             <DialogTitle>Dismiss OEM price impact?</DialogTitle>
             <DialogDescription>
-              Add a reason so managers can audit why this material impact was not repriced.
+              Add a reason so managers can audit why this material impact was
+              not repriced.
             </DialogDescription>
           </DialogHeader>
           <label className="block space-y-1 text-sm">
             <span className="text-muted-foreground">Reason</span>
             <textarea
               value={dismissReason}
-              onChange={(event) => setDismissReason(event.target.value.slice(0, 500))}
+              onChange={(event) =>
+                setDismissReason(event.target.value.slice(0, 500))
+              }
               rows={3}
               className="w-full rounded border border-input bg-card px-3 py-2 text-base sm:text-sm"
               placeholder="Example: customer already accepted current price."
@@ -293,9 +415,75 @@ export function PriceImpactsPage() {
                   reason: dismissReason.trim(),
                 });
               }}
-              disabled={dismissMutation.isPending || dismissReason.trim().length === 0}
+              disabled={
+                dismissMutation.isPending || dismissReason.trim().length === 0
+              }
             >
               {dismissMutation.isPending ? "Dismissing…" : "Dismiss impact"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={reverseTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !reverseMutation.isPending) setReverseTarget(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reverse this OEM re-price?</DialogTitle>
+            <DialogDescription>
+              This restores only the selected apply audit. The server refuses
+              reversal if the quote, source event, or repriced lines contain
+              newer work.
+            </DialogDescription>
+          </DialogHeader>
+          {reverseTarget && (
+            <div className="rounded-2xl border border-amber-400/25 bg-amber-400/[0.07] p-3 text-sm">
+              <p className="font-bold text-foreground">
+                {quoteLabel(reverseTarget.impact)}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Applied version {reverseTarget.audit.afterVersionNumber ?? "—"}
+                {reverseTarget.audit.reversalDeadline
+                  ? ` · eligible through ${new Date(reverseTarget.audit.reversalDeadline).toLocaleString()}`
+                  : ""}
+              </p>
+              <p className="mt-2 text-xs font-medium text-emerald-300">
+                No customer email, PDF, or send action is created.
+              </p>
+            </div>
+          )}
+          <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setReverseTarget(null)}
+              disabled={reverseMutation.isPending}
+            >
+              Keep current prices
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                if (reverseTarget) reverseMutation.mutate(reverseTarget.audit);
+              }}
+              disabled={
+                reverseMutation.isPending || !reverseTarget?.audit.canReverse
+              }
+            >
+              {reverseMutation.isPending ? (
+                <Loader2
+                  className="mr-2 h-4 w-4 animate-spin"
+                  aria-hidden="true"
+                />
+              ) : (
+                <RotateCcw className="mr-2 h-4 w-4" aria-hidden="true" />
+              )}
+              Confirm audited reversal
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -317,7 +505,10 @@ function SummaryStrip({
 }) {
   return (
     <div className="grid grid-cols-3 gap-2">
-      <SummaryMetric label="Quotes" value={String(affectedQuotes || impactCount)} />
+      <SummaryMetric
+        label="Quotes"
+        value={String(affectedQuotes || impactCount)}
+      />
       <SummaryMetric label="Exposure" value={formatCents(exposureCents)} />
       <SummaryMetric label="Approval" value={String(approvals)} />
     </div>
@@ -341,16 +532,40 @@ function ImpactCard({
   impact,
   onOpenQuote,
   onDraft,
+  onApply,
   onDismiss,
+  onReverse,
   draftPending,
+  applyPending,
+  reversePending,
 }: {
   impact: RepPriceImpact;
   onOpenQuote: () => void;
   onDraft: () => void;
+  onApply: () => void;
   onDismiss: () => void;
+  onReverse: (audit: RepRepriceAudit) => void;
   draftPending: boolean;
+  applyPending: boolean;
+  reversePending: boolean;
 }) {
   const canCreateDraft = impact.state === "visible";
+  const canApply =
+    impact.state === "approved" && impact.currentDraft?.status === "approved";
+  const actionPending = draftPending || applyPending || reversePending;
+  const history = impact.history ?? [];
+  const reversibleAudit = history.find((audit) => audit.canReverse) ?? null;
+  const primaryLabel = canApply
+    ? "Apply approved re-price"
+    : impact.state === "approval_pending"
+      ? "Awaiting manager approval"
+      : impact.state === "approved"
+        ? "Approved draft unavailable"
+        : impact.state === "applied"
+          ? "Re-price applied"
+        : impact.requiresManagerReview
+          ? "Submit approval"
+          : "Create draft";
   return (
     <article className="rounded-3xl border border-white/[0.08] bg-[hsl(var(--card))] p-4 shadow-lg shadow-black/10">
       <div className="flex items-start justify-between gap-3">
@@ -359,7 +574,8 @@ function ImpactCard({
             {quoteLabel(impact)}
           </p>
           <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-            {impact.quoteStatus ?? "open quote"} · {impact.lines.length} impacted {impact.lines.length === 1 ? "line" : "lines"}
+            {impact.quoteStatus ?? "open quote"} · {impact.lines.length}{" "}
+            impacted {impact.lines.length === 1 ? "line" : "lines"}
           </p>
         </div>
         <span className="shrink-0 rounded-full border border-qep-orange/30 bg-qep-orange/10 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-qep-orange-accessible">
@@ -367,22 +583,35 @@ function ImpactCard({
         </span>
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        <MiniMetric label="Delta" value={formatCents(impact.totalDeltaCents)} tone="orange" />
-        <MiniMetric label="Margin" value={`${formatPercent(impact.oldMarginPct)} → ${formatPercent(impact.projectedMarginPct)}`} />
-        <MiniMetric label="Commission" value={formatCents(impact.commissionDeltaCents)} />
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <MiniMetric
+          label="Delta"
+          value={formatCents(impact.totalDeltaCents)}
+          tone="orange"
+        />
+        <MiniMetric
+          label="Margin"
+          value={`${formatPercent(impact.oldMarginPct)} → ${formatPercent(impact.projectedMarginPct)}`}
+        />
       </div>
+
+      <CommissionProjection impact={impact} />
 
       {impact.requiresManagerReview && (
         <div className="mt-3 rounded-2xl border border-amber-400/25 bg-amber-400/[0.07] px-3 py-2">
           <div className="flex items-start gap-2">
-            <ShieldAlert className="w-4 h-4 mt-0.5 text-amber-300 shrink-0" aria-hidden="true" />
+            <ShieldAlert
+              className="w-4 h-4 mt-0.5 text-amber-300 shrink-0"
+              aria-hidden="true"
+            />
             <div>
               <p className="text-[12px] font-bold text-amber-200">
                 Manager review required
               </p>
               <p className="text-[11px] text-amber-100/75 leading-snug">
-                {impact.approvalRequiredReasons.map(humanizeReason).join(" · ") || "Approval policy"}
+                {impact.approvalRequiredReasons
+                  .map(humanizeReason)
+                  .join(" · ") || "Approval policy"}
               </p>
             </div>
           </div>
@@ -400,15 +629,67 @@ function ImpactCard({
         )}
       </div>
 
+      {history.length > 0 && (
+        <section
+          aria-label="OEM re-price audit history"
+          className="mt-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-3"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wide text-muted-foreground">
+              <History className="h-3.5 w-3.5" aria-hidden="true" />
+              Audit history
+            </p>
+            <span className="text-[10px] text-emerald-300">
+              No customer send
+            </span>
+          </div>
+          <div className="mt-2 space-y-1.5">
+            {history.slice(0, 4).map((audit) => (
+              <div
+                key={audit.id}
+                className="flex items-center justify-between gap-3 text-xs"
+              >
+                <span className="font-medium text-foreground">
+                  {audit.action === "apply"
+                    ? "Applied OEM re-price"
+                    : "Reversed OEM re-price"}
+                </span>
+                <span className="text-right tabular-nums text-muted-foreground">
+                  v{audit.beforeVersionNumber ?? "—"} → v
+                  {audit.afterVersionNumber ?? "—"}
+                </span>
+              </div>
+            ))}
+          </div>
+          {reversibleAudit && (
+            <button
+              type="button"
+              onClick={() => onReverse(reversibleAudit)}
+              disabled={actionPending}
+              className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-rose-400/30 bg-rose-400/[0.07] px-4 text-sm font-bold text-rose-200 disabled:opacity-50"
+            >
+              {reversePending ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <RotateCcw className="h-4 w-4" aria-hidden="true" />
+              )}
+              Reverse audited apply
+            </button>
+          )}
+        </section>
+      )}
+
       <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
         <button
           type="button"
-          onClick={onDraft}
-          disabled={!canCreateDraft || draftPending}
+          onClick={canApply ? onApply : onDraft}
+          disabled={(!canCreateDraft && !canApply) || actionPending}
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-qep-orange-accessible px-4 py-2.5 text-sm font-black text-white transition-transform active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-55"
         >
-          {draftPending && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
-          {impact.requiresManagerReview ? "Submit approval" : "Create draft"}
+          {actionPending && (
+            <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+          )}
+          {primaryLabel}
         </button>
         <button
           type="button"
@@ -432,6 +713,39 @@ function ImpactCard({
   );
 }
 
+function CommissionProjection({ impact }: { impact: RepPriceImpact }) {
+  return (
+    <section
+      aria-label="Projected OEM-DP10 commission change"
+      className="mt-2 rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3 py-2.5"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-1.5">
+        <p className="text-[10px] font-extrabold uppercase tracking-wide text-muted-foreground">
+          Projected OEM-DP10 commission
+        </p>
+        <p className="text-[10px] text-muted-foreground">
+          Projection only · not final commission-ledger truth
+        </p>
+      </div>
+      <div className="mt-2 grid grid-cols-3 gap-2">
+        <MiniMetric
+          label="Old"
+          value={formatCents(impact.oldCommissionCents)}
+        />
+        <MiniMetric
+          label="New"
+          value={formatCents(impact.projectedCommissionCents)}
+        />
+        <MiniMetric
+          label="Delta"
+          value={formatCents(impact.commissionDeltaCents)}
+          tone="orange"
+        />
+      </div>
+    </section>
+  );
+}
+
 function MiniMetric({
   label,
   value,
@@ -446,7 +760,9 @@ function MiniMetric({
       <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
-      <p className={`mt-0.5 text-[12px] font-black tabular-nums ${tone === "orange" ? "text-qep-orange-accessible" : "text-foreground"}`}>
+      <p
+        className={`mt-0.5 text-[12px] font-black tabular-nums ${tone === "orange" ? "text-qep-orange-accessible" : "text-foreground"}`}
+      >
         {value}
       </p>
     </div>
@@ -456,14 +772,19 @@ function MiniMetric({
 function ImpactLineRow({ line }: { line: RepPriceImpactLine }) {
   return (
     <div className="px-3 py-2.5 flex items-center gap-3">
-      <DollarSign className="w-3.5 h-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <DollarSign
+        className="w-3.5 h-3.5 shrink-0 text-muted-foreground"
+        aria-hidden="true"
+      />
       <div className="flex-1 min-w-0">
         <p className="text-[12.5px] font-bold text-foreground truncate">
-          {line.make ? `${line.make} ` : ""}{line.modelCode}
+          {line.make ? `${line.make} ` : ""}
+          {line.modelCode}
           {line.quantity > 1 ? ` × ${line.quantity}` : ""}
         </p>
         <p className="text-[10.5px] text-muted-foreground">
-          {formatCents(line.oldListPriceCents)} → {formatCents(line.newListPriceCents)}
+          {formatCents(line.oldListPriceCents)} →{" "}
+          {formatCents(line.newListPriceCents)}
           {line.suppressedByStockLock ? " · stock locked" : ""}
         </p>
       </div>
@@ -481,9 +802,16 @@ function ImpactLineRow({ line }: { line: RepPriceImpactLine }) {
 
 function PriceImpactSkeleton() {
   return (
-    <div className="space-y-3 animate-pulse" role="status" aria-label="Loading price impacts">
+    <div
+      className="space-y-3 animate-pulse"
+      role="status"
+      aria-label="Loading price impacts"
+    >
       {[0, 1, 2].map((index) => (
-        <div key={index} className="rounded-3xl border border-white/[0.06] bg-white/[0.03] p-4">
+        <div
+          key={index}
+          className="rounded-3xl border border-white/[0.06] bg-white/[0.03] p-4"
+        >
           <div className="h-4 w-1/2 rounded bg-white/[0.08]" />
           <div className="mt-3 grid grid-cols-3 gap-2">
             <div className="h-12 rounded-2xl bg-white/[0.05]" />
@@ -500,8 +828,12 @@ function PriceImpactSkeleton() {
 function ErrorState({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="rounded-3xl border border-red-500/20 bg-red-500/[0.06] px-5 py-6 text-center">
-      <p className="text-sm font-bold text-red-200">OEM impacts could not load.</p>
-      <p className="mt-1 text-xs text-muted-foreground">Refresh the queue and try again.</p>
+      <p className="text-sm font-bold text-red-200">
+        OEM impacts could not load.
+      </p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Refresh the queue and try again.
+      </p>
       <button
         type="button"
         onClick={onRetry}
@@ -519,9 +851,12 @@ function EmptyState() {
       <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-300">
         <ChevronRight className="h-5 w-5" aria-hidden="true" />
       </div>
-      <p className="text-base font-black text-foreground">No material OEM impacts</p>
+      <p className="text-base font-black text-foreground">
+        No material OEM impacts
+      </p>
       <p className="mt-1 text-sm text-muted-foreground">
-        Assigned reps only see material quote impacts after an OEM price feed is published.
+        Assigned reps only see material quote impacts after an OEM price feed is
+        published.
       </p>
     </div>
   );

@@ -92,13 +92,14 @@ afterEach(() => {
 });
 
 describe("useTodayFeed", () => {
-  test("keeps the LLM briefing query out of the first-paint loading gate", async () => {
+  test("keeps briefing and OEM impacts out of the first-paint loading gate", async () => {
     const { result } = renderHook(() => useTodayFeed(), { wrapper });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(fetchRepPipeline).toHaveBeenCalledTimes(1);
-    expect(fetchRepPriceImpacts).toHaveBeenCalledTimes(1);
+    expect(fetchRepPriceImpacts).not.toHaveBeenCalled();
     expect(fetchTodayBriefing).not.toHaveBeenCalled();
+    expect(result.current.priceImpactsLoading).toBe(false);
 
     act(() => {
       queuedRaf?.();
@@ -106,6 +107,7 @@ describe("useTodayFeed", () => {
     });
 
     await waitFor(() => expect(fetchTodayBriefing).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchRepPriceImpacts).toHaveBeenCalledTimes(1));
     expect(result.current.isLoading).toBe(false);
   });
 });

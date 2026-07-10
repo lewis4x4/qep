@@ -1,0 +1,116 @@
+{
+  "sheets": [
+    {
+      "sheet": {
+        "id": "sheet-asv-2026-01",
+        "workspace_id": "fixture-workspace",
+        "brand_id": "brand-asv",
+        "status": "published",
+        "sheet_type": "both",
+        "published_at": "2026-01-10T08:00:00.000Z",
+        "supersedes_price_sheet_id": null
+      },
+      "items": [
+        {
+          "id": "asv-prior-rt40",
+          "item_type": "model",
+          "extracted": { "model_code": "RT-40", "name_display": "RT-40", "list_price_cents": 10000000 },
+          "action": "update",
+          "review_status": "approved",
+          "applied_at": "2026-01-10T08:05:00.000Z"
+        },
+        {
+          "id": "asv-prior-rt50",
+          "item_type": "model",
+          "extracted": { "model_code": "RT-50", "name_display": "RT-50", "list_price_cents": 20000000 },
+          "action": "update",
+          "review_status": "approved",
+          "applied_at": "2026-01-10T08:05:00.000Z"
+        },
+        {
+          "id": "asv-prior-rt60",
+          "item_type": "model",
+          "extracted": { "model_code": "RT-60", "name_display": "RT-60", "list_price_cents": 30000000 },
+          "action": "no_change",
+          "review_status": "approved",
+          "applied_at": "2026-01-10T08:05:00.000Z"
+        },
+        {
+          "id": "asv-prior-old90",
+          "item_type": "model",
+          "extracted": { "model_code": "OLD-90", "name_display": "Discontinued OLD-90", "list_price_cents": 9000000 },
+          "action": "update",
+          "review_status": "approved",
+          "applied_at": "2026-01-10T08:05:00.000Z"
+        },
+        {
+          "id": "asv-prior-freight-se",
+          "item_type": "freight",
+          "extracted": {
+            "state_codes": ["GA", "FL"],
+            "zone_name": "Southeast",
+            "freight_large_cents": 200000,
+            "freight_small_cents": 100000
+          },
+          "action": "update",
+          "review_status": "approved",
+          "applied_at": "2026-01-10T08:05:00.000Z"
+        }
+      ],
+      "programs": [
+        {
+          "id": "asv-prior-rebate",
+          "program_code": "ASV-CASH-26",
+          "program_type": "cash_in_lieu",
+          "extracted": {
+            "program_code": "ASV-CASH-26",
+            "program_type": "cash_in_lieu",
+            "name": "ASV cash allowance",
+            "details": { "rebates": [{ "model_code": "RT-40", "amount_cents": 500000 }] },
+            "program_rules_notes": "Retail purchase only"
+          },
+          "action": "update",
+          "review_status": "approved",
+          "applied_at": "2026-01-10T08:05:00.000Z"
+        },
+        {
+          "id": "asv-prior-finance",
+          "program_code": "ASV-FIN-26",
+          "program_type": "low_rate_financing",
+          "extracted": {
+            "program_code": "ASV-FIN-26",
+            "program_type": "low_rate_financing",
+            "name": "ASV promotional financing",
+            "details": { "terms": [{ "months": 60, "rate_pct": 0.0199 }] },
+            "program_rules_notes": "Commercial buyers"
+          },
+          "action": "update",
+          "review_status": "approved",
+          "applied_at": "2026-01-10T08:05:00.000Z"
+        }
+      ]
+    },
+    {
+      "sheet": {
+        "id": "sheet-bobcat-2026-01",
+        "workspace_id": "fixture-workspace",
+        "brand_id": "brand-bobcat",
+        "status": "published",
+        "sheet_type": "price_book",
+        "published_at": "2026-01-11T08:00:00.000Z",
+        "supersedes_price_sheet_id": null
+      },
+      "items": [
+        {
+          "id": "bobcat-prior-rt40",
+          "item_type": "model",
+          "extracted": { "model_code": "RT-40", "name_display": "Bobcat RT-40", "list_price_cents": 7000000 },
+          "action": "no_change",
+          "review_status": "approved",
+          "applied_at": "2026-01-11T08:05:00.000Z"
+        }
+      ],
+      "programs": []
+    }
+  ]
+}
