@@ -28,6 +28,7 @@ const reverseRepriceApply = mock(async () => ({
   customerCommunication: "none",
 }));
 const dismissRepriceImpact = mock(async () => ({}));
+let searchParams = new URLSearchParams();
 
 function impactResponse() {
   return {
@@ -84,7 +85,7 @@ function impactResponse() {
 
 mock.module("react-router-dom", () => ({
   useNavigate: () => navigate,
-  useSearchParams: () => [new URLSearchParams(), () => undefined],
+  useSearchParams: () => [searchParams, () => undefined],
 }));
 mock.module("@/features/price-intelligence/lib/price-intelligence-api", () => ({
   fetchRepPriceImpacts,
@@ -108,6 +109,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 beforeEach(() => {
+  searchParams = new URLSearchParams();
   navigate.mockClear();
   fetchRepPriceImpacts.mockClear();
   applyRepriceDraft.mockClear();
@@ -128,10 +130,42 @@ describe("PriceImpactsPage", () => {
     expect(commission.textContent).toContain(
       "not final commission-ledger truth",
     );
-    expect(commission.textContent).toContain("Old+$1,200");
-    expect(commission.textContent).toContain("New+$1,050");
+    expect(commission.textContent).toContain("Old$1,200");
+    expect(commission.textContent).toContain("New$1,050");
     expect(commission.textContent).toContain("Delta-$150");
     expect(screen.getByText(/customers are never auto-sent/i)).toBeTruthy();
+  });
+
+  test("recomputes header and summary metrics from the focused quote only", async () => {
+    searchParams = new URLSearchParams(
+      "quote_package_id=11111111-2222-3333-4444-555555555555",
+    );
+    const response = impactResponse();
+    fetchRepPriceImpacts.mockImplementation(async () => ({
+      summary: {
+        visibleImpactCount: 2,
+        affectedQuoteCount: 2,
+        totalDeltaCents: 102_500,
+        needsApprovalCount: 2,
+      },
+      impacts: [
+        ...response.impacts,
+        {
+          ...response.impacts[0],
+          id: "impact-unrelated",
+          eventId: "event-unrelated",
+          quotePackageId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+          totalDeltaCents: 50_000,
+        },
+      ],
+    }));
+
+    render(<PriceImpactsPage />, { wrapper });
+
+    await screen.findByText(/Focused on quote 11111111/i);
+    expect(screen.queryByText("+$1,025")).toBeNull();
+    expect(screen.getAllByText("+$525").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText("Quote AAAAAAAA")).toBeNull();
   });
 
   test("renders a direct accessible error state without stale impact cards", async () => {

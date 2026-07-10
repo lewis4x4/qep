@@ -30,6 +30,7 @@ import {
   diffCanonicalPriceSheetRows,
   laneForPriceSheetItemType,
   lanesForPriceSheetType,
+  overlayPreservedPriorRows,
   type PriceSheetHeader,
   type PriceSheetItemSourceRow,
   type PriceSheetLane,
@@ -83,7 +84,6 @@ interface AuthContext {
   userId: string;
   role: string;
   workspaceId: string;
-  callerClient: ServiceClient;
   admin: ServiceClient;
   origin: string | null;
 }
@@ -360,6 +360,7 @@ async function buildItemDiffs(
   admin: ServiceClient,
   sheet: PriceSheetRow,
   priorSheets: Partial<Record<PriceSheetLane, PriceSheetRow | null>>,
+  options: { candidateReviewMode?: "all" | "approved" } = {},
 ): Promise<ItemDiff[]> {
   const uniquePriors = [...new Map(
     Object.values(priorSheets).filter((value): value is PriceSheetRow =>
@@ -372,10 +373,18 @@ async function buildItemDiffs(
     ...uniquePriors.map((prior) => loadPriceSheetSourceRows(admin, prior.id)),
   ]);
   const supportedLanes = new Set(lanesForPriceSheetType(sheet.sheet_type));
-  const incomingRows = canonicalizePriceSheetRows(
+  const approvedOnly = sheet.status !== "published" &&
+    options.candidateReviewMode === "approved";
+  const incomingItems = approvedOnly
+    ? incomingSource.items.filter((row) => row.review_status === "approved")
+    : incomingSource.items;
+  const incomingPrograms = approvedOnly
+    ? incomingSource.programs.filter((row) => row.review_status === "approved")
+    : incomingSource.programs;
+  let incomingRows = canonicalizePriceSheetRows(
     sheet,
-    incomingSource.items,
-    incomingSource.programs,
+    incomingItems,
+    incomingPrograms,
     { mode: sheet.status === "published" ? "published" : "candidate" },
   ).filter((row) =>
     supportedLanes.has(laneForPriceSheetItemType(row.itemType))
@@ -395,6 +404,40 @@ async function buildItemDiffs(
       { mode: "published" },
     ).filter((row) => laneForPriceSheetItemType(row.itemType) === lane);
   });
+
+  const publisherWillNotApply = (
+    row: PriceSheetItemSourceRow | PriceSheetProgramSourceRow,
+  ): boolean => {
+    if (row.action === "skip") return true;
+    if (sheet.status === "published") return !row.applied_at;
+    if (approvedOnly) return row.review_status !== "approved";
+    return row.review_status === "rejected";
+  };
+  // Canonicalize excluded rows only to recover their catalog identities. The
+  // values come from the predecessor below, because SQL leaves these rows
+  // unchanged. Invalid excluded identities fail closed instead of inventing a
+  // removal event that did not occur.
+  const preservedIdentityRows = canonicalizePriceSheetRows(
+    sheet,
+    incomingSource.items.filter(publisherWillNotApply).map((row) => ({
+      ...row,
+      action: null,
+      review_status: "approved",
+    })),
+    incomingSource.programs.filter(publisherWillNotApply).map((row) => ({
+      ...row,
+      action: null,
+      review_status: "approved",
+    })),
+    { mode: "candidate" },
+  ).filter((row) =>
+    supportedLanes.has(laneForPriceSheetItemType(row.itemType))
+  );
+  incomingRows = overlayPreservedPriorRows(
+    priorRows,
+    incomingRows,
+    preservedIdentityRows,
+  );
   return diffCanonicalPriceSheetRows(priorRows, incomingRows);
 }
 
@@ -983,6 +1026,7 @@ async function buildPreview(
   admin: ServiceClient,
   priceSheetId: string,
   workspaceId: string,
+  options: { candidateReviewMode?: "all" | "approved" } = {},
 ): Promise<PreviewBuild> {
   const sheet = await loadSheet(admin, priceSheetId);
   if (sheet.workspace_id !== workspaceId) {
@@ -999,7 +1043,7 @@ async function buildPreview(
   // Retained for backward-compatible preview consumers. A composed `both`
   // lineage intentionally reports null here and exposes the per-lane map.
   const priorPriceSheetId = priorIds.length === 1 ? priorIds[0] : null;
-  const itemDiffs = await buildItemDiffs(admin, sheet, prior.sheets);
+  const itemDiffs = await buildItemDiffs(admin, sheet, prior.sheets, options);
   const impactScan = await buildQuoteImpacts(admin, sheet, itemDiffs);
   const streams = buildStreamPreviews(
     sheet,
@@ -1145,30 +1189,6 @@ async function maybeReturnExistingEvent(
   }, origin);
 }
 
-async function invokePublish(
-  ctx: AuthContext,
-  priceSheetId: string,
-  autoApprove: boolean,
-): Promise<{ itemsApplied: number; programsApplied: number }> {
-  const { data, error } = await ctx.callerClient.functions.invoke(
-    "publish-price-sheet",
-    { body: { priceSheetId, auto_approve: autoApprove } },
-  );
-  if (error) throw new Error(`publish-price-sheet failed: ${error.message}`);
-  const payload = asObject(data);
-  const itemsSkipped = Number(payload.itemsSkipped ?? 0);
-  const programsSkipped = Number(payload.programsSkipped ?? 0);
-  if (itemsSkipped !== 0 || programsSkipped !== 0) {
-    throw new Error(
-      `Atomic price-sheet publish reported partial work (${itemsSkipped} items, ${programsSkipped} programs skipped)`,
-    );
-  }
-  return {
-    itemsApplied: Number(payload.itemsApplied ?? 0),
-    programsApplied: Number(payload.programsApplied ?? 0),
-  };
-}
-
 async function pinResolvedLineage(
   admin: ServiceClient,
   preview: PreviewBuild,
@@ -1194,15 +1214,30 @@ class OemScanConflictError extends Error {
   }
 }
 
+function isPinnedLineageConflict(error: OemScanConflictError): boolean {
+  return /lineage|predecessor|active oem stream changed/i.test(error.message);
+}
+
+function pinnedLineageConflictResponse(origin: string | null): Response {
+  return safeJsonError(
+    "Another same-brand sheet published after this sheet's lineage was pinned. Nothing from this sheet was committed; upload and extract a new sheet against the current OEM catalog.",
+    409,
+    origin,
+  );
+}
+
 interface PersistedEventGroup {
   eventId: string;
   eventIds: Record<string, string>;
   publishGroupId: string;
+  itemsApplied: number;
+  programsApplied: number;
 }
 
-async function persistEvent(
+async function publishAndPersistEvent(
   ctx: AuthContext,
   preview: PreviewBuild,
+  autoApprove: boolean,
 ): Promise<PersistedEventGroup> {
   const sourceMetadata = {
     sheet_status_at_scan: preview.sheet.status,
@@ -1219,7 +1254,7 @@ async function persistEvent(
   };
   const publishGroupId = crypto.randomUUID();
   const { data, error } = await ctx.admin.rpc(
-    "persist_qb_oem_price_change_event",
+    "publish_and_persist_qb_oem_price_change_event",
     {
       p_workspace_id: preview.sheet.workspace_id,
       p_brand_id: preview.sheet.brand_id,
@@ -1235,6 +1270,7 @@ async function persistEvent(
       },
       p_approval_policy: APPROVAL_POLICY,
       p_streams: preview.streams,
+      p_auto_approve: autoApprove,
     },
   );
   if (error) {
@@ -1250,6 +1286,7 @@ async function persistEvent(
     throw new Error(`Atomic OEM event persistence failed: ${message}`);
   }
   const payload = asObject(data);
+  const publishPayload = asObject(payload.publish);
   const eventIdsPayload = asObject(payload.event_ids ?? payload.eventIds);
   const eventIds = Object.fromEntries(
     Object.entries(eventIdsPayload).flatMap(([stream, value]) => {
@@ -1272,6 +1309,8 @@ async function persistEvent(
       payload.publishGroupId,
       publishGroupId,
     )!,
+    itemsApplied: Number(publishPayload.itemsApplied ?? 0),
+    programsApplied: Number(publishPayload.programsApplied ?? 0),
   };
 }
 
@@ -1319,6 +1358,7 @@ async function handlePublish(
   if (!priceSheetId) {
     return safeJsonError("priceSheetId required", 400, ctx.origin);
   }
+  const autoApprove = body.autoApprovePending !== false;
   const existing = await maybeReturnExistingEvent(
     ctx.admin,
     ctx.workspaceId,
@@ -1326,7 +1366,9 @@ async function handlePublish(
     ctx.origin,
   );
   if (existing) return existing;
-  let preview = await buildPreview(ctx.admin, priceSheetId, ctx.workspaceId);
+  let preview = await buildPreview(ctx.admin, priceSheetId, ctx.workspaceId, {
+    candidateReviewMode: autoApprove ? "all" : "approved",
+  });
   if (!["extracted", "published"].includes(preview.sheet.status)) {
     return safeJsonError(
       `Sheet must be extracted or already published before OEM publish; got ${preview.sheet.status}`,
@@ -1337,28 +1379,26 @@ async function handlePublish(
   // Persist fallback resolution before any catalog mutation. Replays and event
   // rebuilds then compare against the exact same predecessor.
   await pinResolvedLineage(ctx.admin, preview);
-  const didPublish = preview.sheet.status !== "published";
-  const publishCounts = didPublish
-    ? await invokePublish(ctx, priceSheetId, body.autoApprovePending !== false)
-    : { itemsApplied: 0, programsApplied: 0 };
-  if (didPublish) {
-    // Rebuild from the now-published, approved/applied row set. This matters
-    // when autoApprovePending=false: the event must never include a candidate
-    // row that publish-price-sheet did not actually apply.
-    preview = await buildPreview(ctx.admin, priceSheetId, ctx.workspaceId);
-  }
   let persisted: PersistedEventGroup;
   try {
-    persisted = await persistEvent(ctx, preview);
+    persisted = await publishAndPersistEvent(ctx, preview, autoApprove);
   } catch (error) {
     if (!(error instanceof OemScanConflictError)) throw error;
+    if (isPinnedLineageConflict(error)) {
+      return pinnedLineageConflictResponse(ctx.origin);
+    }
     // One bounded retry closes the normal race where a rep saved a quote after
     // the read-only scan but before the transaction acquired quote locks.
-    preview = await buildPreview(ctx.admin, priceSheetId, ctx.workspaceId);
+    preview = await buildPreview(ctx.admin, priceSheetId, ctx.workspaceId, {
+      candidateReviewMode: autoApprove ? "all" : "approved",
+    });
     try {
-      persisted = await persistEvent(ctx, preview);
+      persisted = await publishAndPersistEvent(ctx, preview, autoApprove);
     } catch (retryError) {
       if (!(retryError instanceof OemScanConflictError)) throw retryError;
+      if (isPinnedLineageConflict(retryError)) {
+        return pinnedLineageConflictResponse(ctx.origin);
+      }
       return safeJsonError(
         "A quote changed while OEM impacts were being scanned. No impact rows or requote flags were committed; retry publish.",
         409,
@@ -1369,20 +1409,14 @@ async function handlePublish(
   const material = preview.impacts.filter((impact) =>
     impact.state === "visible"
   );
-  const changedItemCount =
-    preview.itemDiffs.filter((item) => item.changeKind !== "unchanged").length;
   return safeJsonOk({
     ok: true,
     eventId: persisted.eventId,
     eventIds: persisted.eventIds,
     publishGroupId: persisted.publishGroupId,
     priceSheetId,
-    // When we actually invoked publish, report its true applied count (even 0)
-    // rather than masking a real zero with the changed-item count. When the
-    // sheet was already published we skip publish, so report the changed-item
-    // count as informational scope.
-    itemsApplied: didPublish ? publishCounts.itemsApplied : changedItemCount,
-    programsApplied: publishCounts.programsApplied,
+    itemsApplied: persisted.itemsApplied,
+    programsApplied: persisted.programsApplied,
     materialQuotesAffected: material.length,
     totalDeltaCents: material.reduce(
       (sum, impact) => sum + impact.totalDeltaCents,
@@ -1517,7 +1551,9 @@ async function attachAuthorizedRepriceHistory(
     const impactAudits = auditsByImpact.get(impact.id) ?? [];
     const reversalByApply = new Map<string, string>();
     for (const audit of impactAudits) {
-      if (audit.action === "reverse" && typeof audit.apply_audit_id === "string") {
+      if (
+        audit.action === "reverse" && typeof audit.apply_audit_id === "string"
+      ) {
         reversalByApply.set(audit.apply_audit_id, audit.id);
       }
     }
@@ -1623,7 +1659,9 @@ async function handleRepImpacts(ctx: AuthContext): Promise<Response> {
       ctx.origin,
     );
   }
-  const actionableImpacts = impacts.filter((impact) => impact.state !== "applied");
+  const actionableImpacts = impacts.filter((impact) =>
+    impact.state !== "applied"
+  );
   return safeJsonOk({
     summary: {
       visibleImpactCount: actionableImpacts.length,
@@ -1634,11 +1672,10 @@ async function handleRepImpacts(ctx: AuthContext): Promise<Response> {
         (sum, impact) => sum + Number(impact.total_delta_cents ?? 0),
         0,
       ),
-      needsApprovalCount:
-        actionableImpacts.filter((impact) =>
-          impact.requires_manager_review === true
-        )
-          .length,
+      needsApprovalCount: actionableImpacts.filter((impact) =>
+        impact.requires_manager_review === true
+      )
+        .length,
     },
     impacts,
   }, ctx.origin);
@@ -1930,7 +1967,6 @@ Deno.serve(async (req: Request) => {
       userId: auth.userId,
       role: auth.role,
       workspaceId: auth.workspaceId,
-      callerClient: auth.supabase as ServiceClient,
       admin: createAdminClient(),
       origin,
     };

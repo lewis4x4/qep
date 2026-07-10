@@ -6,6 +6,7 @@ import {
   type CanonicalPriceSheetDiff,
   type CanonicalPriceSheetRow,
   diffCanonicalPriceSheetRows,
+  overlayPreservedPriorRows,
   type PriceSheetHeader,
   type PriceSheetItemSourceRow,
   type PriceSheetProgramSourceRow,
@@ -354,4 +355,33 @@ Deno.test("invalid explicit predecessor and ambiguous same-brand rows fail close
     Error,
     "Ambiguous incoming price-sheet rows",
   );
+});
+
+Deno.test("unapplied review rows preserve prior state instead of inventing removal", () => {
+  const prior: CanonicalPriceSheetRow = {
+    sourceSheetId: "prior-sheet",
+    sourceItemId: "prior-row",
+    workspaceId: "ws-1",
+    brandId: "brand-1",
+    itemType: "list_price",
+    identity: "model:RT40",
+    modelCode: "RT-40",
+    normalizedCode: "RT40",
+    nameDisplay: "RT-40",
+    amountCents: 100_000,
+    catalogValue: { list_price_cents: 100_000 },
+    metadata: {},
+  };
+  const pendingIdentity = {
+    ...prior,
+    sourceSheetId: "incoming-sheet",
+    sourceItemId: "pending-row",
+    amountCents: 120_000,
+    catalogValue: { list_price_cents: 120_000 },
+  };
+  const overlaid = overlayPreservedPriorRows([prior], [], [pendingIdentity]);
+  const diff = diffCanonicalPriceSheetRows([prior], overlaid);
+  assertEquals(diff.length, 1);
+  assertEquals(diff[0].changeKind, "unchanged");
+  assertEquals(diff[0].newPriceCents, 100_000);
 });

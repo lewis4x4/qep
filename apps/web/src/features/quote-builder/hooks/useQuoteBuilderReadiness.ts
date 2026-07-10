@@ -8,6 +8,7 @@ import { useMemo } from "react";
 import type {
   QuoteApprovalCaseSummary,
   QuoteFinanceScenario,
+  QuotePacketReadiness,
   QuoteWorkspaceDraft,
 } from "../../../../../../shared/qep-moonshot-contracts";
 import type { getTradeValuationProposalSnapshot } from "../lib/point-shoot-trade-api";
@@ -37,6 +38,8 @@ export interface UseQuoteBuilderReadinessInput {
   allFinanceScenarios: QuoteFinanceScenario[];
   leaseQuotingEnabled: boolean;
   activeQuotePackageId: string | null;
+  basePacketReadiness: QuotePacketReadiness;
+  requiresRequote: boolean;
   activeQuoteNumber: string | null;
   activeApprovalCaseLoading: boolean;
   bypassApprovedWithoutCase: boolean;
@@ -51,6 +54,28 @@ export interface UseQuoteBuilderReadinessInput {
   selectedFinanceScenarioLabel: string | null | undefined;
   lastSavedAt: string | null;
   activeQuoteUpdatedAt: string | null;
+}
+
+export const OEM_REQUOTE_READINESS_BLOCKER =
+  "Resolve or dismiss the pending OEM price impact before customer-facing document/send.";
+
+export function applyOemRequoteReadiness(
+  base: QuotePacketReadiness,
+  requiresRequote: boolean,
+): QuotePacketReadiness {
+  if (!requiresRequote) return base;
+  const sendMissing = base.send.missing.includes(OEM_REQUOTE_READINESS_BLOCKER)
+    ? base.send.missing
+    : [...base.send.missing, OEM_REQUOTE_READINESS_BLOCKER];
+  const missing = base.missing.includes(OEM_REQUOTE_READINESS_BLOCKER)
+    ? base.missing
+    : [...base.missing, OEM_REQUOTE_READINESS_BLOCKER];
+  return {
+    ...base,
+    send: { ready: false, missing: sendMissing },
+    canSend: false,
+    missing,
+  };
 }
 
 export function useQuoteBuilderReadiness({
@@ -69,6 +94,8 @@ export function useQuoteBuilderReadiness({
   allFinanceScenarios,
   leaseQuotingEnabled,
   activeQuotePackageId,
+  basePacketReadiness,
+  requiresRequote,
   activeQuoteNumber,
   activeApprovalCaseLoading,
   bypassApprovedWithoutCase,
@@ -110,7 +137,15 @@ export function useQuoteBuilderReadiness({
     activeApprovalCase,
   });
 
-  const customerFacingDocumentBlocker = approvalBlocker ?? taxResolutionBlocker ?? whyThisMachineBlocker;
+  const oemRequoteBlocker = requiresRequote ? OEM_REQUOTE_READINESS_BLOCKER : null;
+  const customerFacingDocumentBlocker = oemRequoteBlocker
+    ?? approvalBlocker
+    ?? taxResolutionBlocker
+    ?? whyThisMachineBlocker;
+  const packetReadiness = useMemo(
+    () => applyOemRequoteReadiness(basePacketReadiness, requiresRequote),
+    [basePacketReadiness, requiresRequote],
+  );
 
   const displayedSavedAt = lastSavedAt ?? activeQuoteUpdatedAt;
   const displayedSavedLabel = shortDateTime(displayedSavedAt);
@@ -178,7 +213,9 @@ export function useQuoteBuilderReadiness({
     whyThisMachineRequired,
     whyThisMachineBlocker,
     approvalBlocker,
+    oemRequoteBlocker,
     customerFacingDocumentBlocker,
+    packetReadiness,
     displayedSavedLabel,
     financeMethodLabel,
     quoteTitle,

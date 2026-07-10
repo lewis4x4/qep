@@ -109,6 +109,7 @@ export async function refreshCustomerProfileSnapshot(
     .select(
       "outcome, sold_price, discount_pct, financing_used, attachments_sold, service_contract_sold, days_to_close, deal_date",
     )
+    .eq("workspace_id", params.workspaceId)
     .eq("customer_profile_id", profileId)
     .order("deal_date", { ascending: false })
     .limit(250);
@@ -125,6 +126,7 @@ export async function refreshCustomerProfileSnapshot(
     let dealsQuery = adminClient
       .from("crm_deals")
       .select("amount, created_at, crm_deal_stages!inner(is_closed_won)")
+      .eq("workspace_id", params.workspaceId)
       .is("deleted_at", null)
       .limit(250);
     dealsQuery = companyId
@@ -158,11 +160,13 @@ export async function refreshCustomerProfileSnapshot(
       adminClient
         .from("parts_orders")
         .select("total, created_at")
+        .eq("workspace_id", params.workspaceId)
         .eq("crm_company_id", companyId)
         .limit(1000),
       adminClient
         .from("portal_customers")
         .select("id")
+        .eq("workspace_id", params.workspaceId)
         .eq("crm_company_id", companyId),
     ]);
     assertSourceRead(directParts.error, "Customer direct parts read failed");
@@ -172,6 +176,7 @@ export async function refreshCustomerProfileSnapshot(
       ? await adminClient
         .from("parts_orders")
         .select("total, created_at")
+        .eq("workspace_id", params.workspaceId)
         .in("portal_customer_id", portalIdList)
         .limit(1000)
       : {
@@ -184,6 +189,7 @@ export async function refreshCustomerProfileSnapshot(
       adminClient
         .from("customer_invoices")
         .select("total, invoice_date, invoice_type, service_job_id, status")
+        .eq("workspace_id", params.workspaceId)
         .eq("crm_company_id", companyId)
         .neq("status", "void")
         .limit(1000),
@@ -192,6 +198,7 @@ export async function refreshCustomerProfileSnapshot(
       adminClient
         .from("rental_contracts")
         .select("id")
+        .eq("workspace_id", params.workspaceId)
         .eq("qrm_company_id", companyId),
     ]);
     assertSourceRead(
@@ -207,6 +214,7 @@ export async function refreshCustomerProfileSnapshot(
       ? await adminClient
         .from("rental_invoices")
         .select("total_cents, period_start, status")
+        .eq("workspace_id", params.workspaceId)
         .in("rental_contract_id", contractIds)
         .neq("status", "void")
         .is("deleted_at", null)

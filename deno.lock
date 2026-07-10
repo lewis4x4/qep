@@ -45,7 +45,7 @@
     "npm:@types/papaparse@^5.5.2": "5.5.2",
     "npm:@types/react-dom@^18.3.1": "18.3.7_@types+react@18.3.28",
     "npm:@types/react@^18.3.12": "18.3.28",
-    "npm:@vitejs/plugin-react@^4.7.0": "4.7.0_vite@6.4.2__@types+node@25.5.0__picomatch@4.0.4_@babel+core@7.29.0_@types+node@25.5.0",
+    "npm:@vitejs/plugin-react@^4.7.0": "4.7.0_vite@6.4.3__@types+node@25.5.0_@types+node@25.5.0",
     "npm:autoprefixer@^10.4.20": "10.4.27_postcss@8.5.14",
     "npm:class-variance-authority@~0.7.1": "0.7.1",
     "npm:clsx@^2.1.1": "2.1.1",
@@ -71,7 +71,7 @@
     "npm:tailwind-merge@^3.5.0": "3.5.0",
     "npm:tailwindcss@^3.4.16": "3.4.19_postcss@8.5.14_jiti@1.21.7",
     "npm:typescript@^5.7.2": "5.9.3",
-    "npm:vite@^6.4.2": "6.4.2_@types+node@25.5.0_picomatch@4.0.4",
+    "npm:vite@^6.4.3": "6.4.3_@types+node@25.5.0",
     "npm:web-vitals@^5.2.0": "5.2.0",
     "npm:xlsx@0.18.5": "0.18.5"
   },
@@ -2026,7 +2026,7 @@
       "integrity": "sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==",
       "deprecated": true
     },
-    "@vitejs/plugin-react@4.7.0_vite@6.4.2__@types+node@25.5.0__picomatch@4.0.4_@babel+core@7.29.0_@types+node@25.5.0": {
+    "@vitejs/plugin-react@4.7.0_vite@6.4.3__@types+node@25.5.0_@types+node@25.5.0": {
       "integrity": "sha512-gUu9hwfWvvEDBBmgtAowQCojwZmJ5mcLn3aufeCsitijs3+f2NsrPtlAWIR6OPiqljl96GVCUbLe0HyqIpVaoA==",
       "dependencies": [
         "@babel/core",
@@ -5644,8 +5644,8 @@
         "util-deprecate"
       ]
     },
-    "vite@6.4.2_@types+node@25.5.0_picomatch@4.0.4": {
-      "integrity": "sha512-2N/55r4JDJ4gdrCvGgINMy+HH3iRpNIz8K6SFwVsA+JbQScLiC+clmAxBgwiSPgcG9U15QmvqCGWzMbqda5zGQ==",
+    "vite@6.4.3_@types+node@25.5.0": {
+      "integrity": "sha512-NTKlcQjlAK7MlQoyb6LgaqHc8sso/pVyUJYWMws3jg21uTJw/LddqIFPcPqP6PzpgbIcZyKI85sFE4HBrQDA8A==",
       "dependencies": [
         "@types/node@25.5.0",
         "esbuild",
@@ -5943,7 +5943,8 @@
       ],
       "overrides": {
         "postcss": "^8.5.14",
-        "ws": "^8.20.1",
+        "tmp": "^0.2.7",
+        "ws": "^8.21.0",
         "brace-expansion": "^5.0.6"
       }
     },
@@ -6004,7 +6005,7 @@
             "npm:tailwind-merge@^3.5.0",
             "npm:tailwindcss@^3.4.16",
             "npm:typescript@^5.7.2",
-            "npm:vite@^6.4.2",
+            "npm:vite@^6.4.3",
             "npm:web-vitals@^5.2.0"
           ]
         }

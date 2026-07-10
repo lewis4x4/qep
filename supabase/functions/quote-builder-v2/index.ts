@@ -1992,6 +1992,17 @@ async function assertApprovedWithConditionsSendReady(input: {
   return { ok: true };
 }
 
+function assertQuoteRequoteResolved(
+  quote: Record<string, unknown>,
+): { ok: true } | { ok: false; message: string } {
+  return quote.requires_requote === true
+    ? {
+      ok: false,
+      message: "Resolve or dismiss the pending OEM price impact before sharing or sending this quote.",
+    }
+    : { ok: true };
+}
+
 async function assertQuoteCustomerShareable(input: {
   admin: ReturnType<typeof createAdminClient>;
   workspaceId: string;
@@ -2000,6 +2011,8 @@ async function assertQuoteCustomerShareable(input: {
   marginPct: number | null;
   quote: Record<string, unknown>;
 }): Promise<{ ok: true } | { ok: false; message: string; blockers?: Array<Record<string, unknown>> }> {
+  const requoteGate = assertQuoteRequoteResolved(input.quote);
+  if (!requoteGate.ok) return requoteGate;
   if (CUSTOMER_BLOCKED_QUOTE_STATUSES.has(input.status)) {
     return { ok: false, message: `This quote cannot be shared while status is ${input.status}.` };
   }
@@ -8548,7 +8561,7 @@ Deno.serve(async (req) => {
 
       const { data: existing, error: loadErr } = await supabase
         .from("quote_packages")
-        .select("id, workspace_id, status, margin_pct, share_token, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
+        .select("id, workspace_id, status, margin_pct, requires_requote, share_token, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
         .eq("id", body.quote_package_id)
         .maybeSingle();
       if (loadErr) return safeJsonError(loadErr.message, 500, origin);
@@ -8571,18 +8584,17 @@ Deno.serve(async (req) => {
         ? existing.share_token
         : null;
       if (!token) {
-        token = generateShareToken();
-        const { error: updateErr } = await admin
-          .from("quote_packages")
-          .update({
-            share_token: token,
-            share_token_created_at: new Date().toISOString(),
-          })
-          .eq("id", body.quote_package_id);
-        if (updateErr) {
+        const { data: issuedToken, error: updateErr } = await admin.rpc("issue_quote_share_token_if_requote_resolved", {
+          p_workspace_id: typeof existing.workspace_id === "string" ? existing.workspace_id : userWorkspaceId,
+          p_quote_package_id: body.quote_package_id,
+          p_candidate_token: generateShareToken(),
+          p_replace: false,
+        });
+        if (updateErr || typeof issuedToken !== "string") {
           console.error("ensure-share-token update error:", updateErr);
-          return safeJsonError(updateErr.message || "Failed to issue share token", 500, origin);
+          return safeJsonError(updateErr?.message || "Failed to issue share token", updateErr?.code === "55000" ? 409 : 500, origin);
         }
+        token = issuedToken;
       }
 
       return safeJsonOk({
@@ -8604,7 +8616,7 @@ Deno.serve(async (req) => {
       // is the authorization check for issuing a share token.
       const { data: existing, error: loadErr } = await supabase
         .from("quote_packages")
-        .select("id, workspace_id, status, margin_pct, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
+        .select("id, workspace_id, status, margin_pct, requires_requote, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
         .eq("id", body.quote_package_id)
         .maybeSingle();
       if (loadErr) return safeJsonError(loadErr.message, 500, origin);
@@ -8623,17 +8635,15 @@ Deno.serve(async (req) => {
         return safeJsonErrorWithFields(shareGate.message, 409, origin, { blockers: shareGate.blockers ?? [] });
       }
 
-      const token = generateShareToken();
-      const { error: updateErr } = await admin
-        .from("quote_packages")
-        .update({
-          share_token: token,
-          share_token_created_at: new Date().toISOString(),
-        })
-        .eq("id", body.quote_package_id);
-      if (updateErr) {
+      const { data: token, error: updateErr } = await admin.rpc("issue_quote_share_token_if_requote_resolved", {
+        p_workspace_id: typeof existing.workspace_id === "string" ? existing.workspace_id : userWorkspaceId,
+        p_quote_package_id: body.quote_package_id,
+        p_candidate_token: generateShareToken(),
+        p_replace: true,
+      });
+      if (updateErr || typeof token !== "string") {
         console.error("share token update error:", updateErr);
-        return safeJsonError(updateErr.message || "Failed to issue share token", 500, origin);
+        return safeJsonError(updateErr?.message || "Failed to issue share token", updateErr?.code === "55000" ? 409 : 500, origin);
       }
 
       return safeJsonOk({ token }, origin, 201);
@@ -8651,7 +8661,7 @@ Deno.serve(async (req) => {
         // customer_total was never a quote_packages column (never in any
         // migration) — selecting it 42703s and every staff send 404ed
         // "Quote package not found". net_total is the real total.
-        .select("id, workspace_id, deal_id, contact_id, quote_number, share_token, branch_slug, amount_financed, selected_finance_scenario, equipment, equipment_total, net_total, trade_allowance, sent_at, status, margin_pct, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason, special_terms, expires_at, delivery_eta, delivery_state, delivery_county, crm_contacts(first_name, last_name, email)")
+        .select("id, workspace_id, deal_id, contact_id, quote_number, share_token, branch_slug, amount_financed, selected_finance_scenario, equipment, equipment_total, net_total, trade_allowance, sent_at, status, margin_pct, requires_requote, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason, special_terms, expires_at, delivery_eta, delivery_state, delivery_county, crm_contacts(first_name, last_name, email)")
         .eq("id", body.quote_package_id)
         .single();
 
@@ -8667,6 +8677,10 @@ Deno.serve(async (req) => {
       }
 
       const quoteStatus = String(pkg.status ?? "draft");
+      const requoteGate = assertQuoteRequoteResolved(pkg as Record<string, unknown>);
+      if (!requoteGate.ok) {
+        return safeJsonError(requoteGate.message, 409, origin);
+      }
       if (CUSTOMER_BLOCKED_QUOTE_STATUSES.has(quoteStatus)) {
         return safeJsonError(`This quote cannot be sent while status is ${quoteStatus}.`, 409, origin);
       }
@@ -8805,18 +8819,17 @@ Deno.serve(async (req) => {
 
       let shareToken = typeof pkg.share_token === "string" && pkg.share_token.length >= 16 ? pkg.share_token : null;
       if (!shareToken) {
-        shareToken = generateShareToken();
-        const { error: shareUpdateErr } = await admin
-          .from("quote_packages")
-          .update({
-            share_token: shareToken,
-            share_token_created_at: new Date().toISOString(),
-          })
-          .eq("id", body.quote_package_id);
-        if (shareUpdateErr) {
+        const { data: issuedToken, error: shareUpdateErr } = await admin.rpc("issue_quote_share_token_if_requote_resolved", {
+          p_workspace_id: workspaceIdForSend,
+          p_quote_package_id: body.quote_package_id,
+          p_candidate_token: generateShareToken(),
+          p_replace: false,
+        });
+        if (shareUpdateErr || typeof issuedToken !== "string") {
           console.error("send-package share token update error:", shareUpdateErr);
-          return safeJsonError(shareUpdateErr.message || "Failed to prepare proposal link", 500, origin);
+          return safeJsonError(shareUpdateErr?.message || "Failed to prepare proposal link", shareUpdateErr?.code === "55000" ? 409 : 500, origin);
         }
+        shareToken = issuedToken;
       }
 
       const branchSlug = typeof pkg.branch_slug === "string" ? pkg.branch_slug : null;
@@ -8867,17 +8880,51 @@ Deno.serve(async (req) => {
         branch: branch as { name?: string | null; phone?: string | null; email?: string | null; website?: string | null } | null,
       });
 
-      // Send via Resend
-      const result = await sendResendEmail({
-        to: toEmail,
-        subject: `Equipment Proposal from Quality Equipment & Parts`,
-        text: emailBody,
+      // Serialize external delivery against OEM requote transitions. The active
+      // authorization is rechecked by quote_send_package_commit and prevents a
+      // false -> true requires_requote transition until delivery completes.
+      const { data: sendAuthorizationId, error: sendAuthorizationError } = await admin.rpc("begin_quote_send_authorization", {
+        p_workspace_id: workspaceIdForSend,
+        p_quote_package_id: body.quote_package_id,
+        p_quote_package_version_id: activeQuoteVersion.id,
+        p_document_artifact_id: documentArtifactId,
+        p_actor_id: user.id,
+        p_ttl_seconds: 300,
       });
+      if (sendAuthorizationError || typeof sendAuthorizationId !== "string") {
+        return safeJsonError(
+          sendAuthorizationError?.message || "Quote send authorization could not be established. Refresh and try again.",
+          ["40001", "55000"].includes(sendAuthorizationError?.code ?? "") ? 409 : 500,
+          origin,
+        );
+      }
+      const failSendAuthorization = async (detail: string): Promise<void> => {
+        const { error } = await admin.rpc("fail_quote_send_authorization", {
+          p_authorization_id: sendAuthorizationId,
+          p_error_detail: detail,
+        });
+        if (error) console.error("quote send authorization cleanup failed:", error);
+      };
+
+      let result: Awaited<ReturnType<typeof sendResendEmail>>;
+      try {
+        result = await sendResendEmail({
+          to: toEmail,
+          subject: `Equipment Proposal from Quality Equipment & Parts`,
+          text: emailBody,
+          timeoutMs: 120_000,
+        });
+      } catch (sendError) {
+        await failSendAuthorization(sendError instanceof Error ? sendError.message : String(sendError));
+        throw sendError;
+      }
 
       if (result.skipped) {
+        await failSendAuthorization("Email service is not configured");
         return safeJsonError("Email service not configured. Set RESEND_API_KEY.", 503, origin);
       }
       if (!result.ok) {
+        await failSendAuthorization("Email delivery failed");
         return safeJsonError("Email delivery failed", 502, origin);
       }
 
@@ -8907,6 +8954,7 @@ Deno.serve(async (req) => {
         p_follow_up_at: followUpAt,
         p_created_by: user.id,
         p_metadata: deliveryMetadata,
+        p_send_authorization_id: sendAuthorizationId,
       });
       if (commitErr) {
         console.error("quote_send_package_commit rpc error:", commitErr);

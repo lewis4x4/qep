@@ -28,7 +28,7 @@
  * named symbol so refactors stay greppable.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Loader2, ShieldCheck } from "lucide-react";
 
@@ -80,7 +80,9 @@ export interface QuoteApprovalDecisionDialogProps {
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
-const QUOTE_CONDITION_OPTIONS: Array<{ value: QuoteApprovalConditionDraft["conditionType"]; label: string }> = [
+const QUOTE_CONDITION_OPTIONS: Array<
+  { value: QuoteApprovalConditionDraft["conditionType"]; label: string }
+> = [
   { value: "min_margin_pct", label: "Minimum margin %" },
   { value: "max_trade_allowance", label: "Max trade allowance" },
   { value: "required_cash_down", label: "Required cash down" },
@@ -89,28 +91,55 @@ const QUOTE_CONDITION_OPTIONS: Array<{ value: QuoteApprovalConditionDraft["condi
   { value: "expiry_hours", label: "Approval expiry window" },
 ];
 
-const DECISION_OPTIONS: Array<{ value: QuoteApprovalDecision; label: string }> = [
-  { value: "approved", label: "Approve" },
-  { value: "approved_with_conditions", label: "Approve with Conditions" },
-  { value: "changes_requested", label: "Return for Revision" },
-  { value: "rejected", label: "Reject" },
-  { value: "escalated", label: "Escalate" },
-];
+const DECISION_OPTIONS: Array<{ value: QuoteApprovalDecision; label: string }> =
+  [
+    { value: "approved", label: "Approve" },
+    { value: "approved_with_conditions", label: "Approve with Conditions" },
+    { value: "changes_requested", label: "Return for Revision" },
+    { value: "rejected", label: "Reject" },
+    { value: "escalated", label: "Escalate" },
+  ];
 
-function makeConditionDraft(type: QuoteApprovalConditionDraft["conditionType"]): QuoteApprovalConditionDraft {
+function makeConditionDraft(
+  type: QuoteApprovalConditionDraft["conditionType"],
+): QuoteApprovalConditionDraft {
   switch (type) {
     case "min_margin_pct":
-      return { conditionType: type, conditionPayload: { min_margin_pct: 8 }, sortOrder: 0 };
+      return {
+        conditionType: type,
+        conditionPayload: { min_margin_pct: 8 },
+        sortOrder: 0,
+      };
     case "max_trade_allowance":
-      return { conditionType: type, conditionPayload: { max_trade_allowance: 0 }, sortOrder: 0 };
+      return {
+        conditionType: type,
+        conditionPayload: { max_trade_allowance: 0 },
+        sortOrder: 0,
+      };
     case "required_cash_down":
-      return { conditionType: type, conditionPayload: { required_cash_down: 0 }, sortOrder: 0 };
+      return {
+        conditionType: type,
+        conditionPayload: { required_cash_down: 0 },
+        sortOrder: 0,
+      };
     case "required_finance_scenario":
-      return { conditionType: type, conditionPayload: { required_finance_scenario: "" }, sortOrder: 0 };
+      return {
+        conditionType: type,
+        conditionPayload: { required_finance_scenario: "" },
+        sortOrder: 0,
+      };
     case "remove_attachment":
-      return { conditionType: type, conditionPayload: { attachment_title: "" }, sortOrder: 0 };
+      return {
+        conditionType: type,
+        conditionPayload: { attachment_title: "" },
+        sortOrder: 0,
+      };
     case "expiry_hours":
-      return { conditionType: type, conditionPayload: { expiry_hours: 72 }, sortOrder: 0 };
+      return {
+        conditionType: type,
+        conditionPayload: { expiry_hours: 72 },
+        sortOrder: 0,
+      };
   }
 }
 
@@ -123,27 +152,37 @@ interface ResolvedTarget {
   detail: string;
 }
 
-function isApprovalItem(value: NormalizedApproval | QuoteApprovalCaseSummary): value is NormalizedApproval {
+function isApprovalItem(
+  value: NormalizedApproval | QuoteApprovalCaseSummary,
+): value is NormalizedApproval {
   // ApprovalItem carries a discriminating `type` field set to a known
   // ApprovalType ("quote" when this dialog is relevant) plus the
   // `meta` bag; the canonical contract uses `quotePackageId`/etc.
-  return typeof (value as ApprovalItem).type === "string"
-    && Object.prototype.hasOwnProperty.call(value, "meta")
-    && !Object.prototype.hasOwnProperty.call(value, "quotePackageId");
+  return typeof (value as ApprovalItem).type === "string" &&
+    Object.prototype.hasOwnProperty.call(value, "meta") &&
+    !Object.prototype.hasOwnProperty.call(value, "quotePackageId");
 }
 
-function resolveTarget(input: NormalizedApproval | QuoteApprovalCaseSummary): ResolvedTarget {
+function resolveTarget(
+  input: NormalizedApproval | QuoteApprovalCaseSummary,
+): ResolvedTarget {
   if (isApprovalItem(input)) {
     const meta = input.meta ?? {};
     return {
-      approvalCaseId: typeof meta.approvalCaseId === "string" ? meta.approvalCaseId : input.id,
-      quotePackageId: typeof meta.quotePackageId === "string" ? meta.quotePackageId : null,
+      approvalCaseId: typeof meta.approvalCaseId === "string"
+        ? meta.approvalCaseId
+        : input.id,
+      quotePackageId: typeof meta.quotePackageId === "string"
+        ? meta.quotePackageId
+        : null,
       headline: input.dealName,
       detail: input.detail,
     };
   }
   // Canonical QuoteApprovalCaseSummary path.
-  const versionLine = input.versionNumber != null ? `v${input.versionNumber}` : "Version snapshot attached";
+  const versionLine = input.versionNumber != null
+    ? `v${input.versionNumber}`
+    : "Version snapshot attached";
   const branchSuffix = input.branchName ? ` · ${input.branchName}` : "";
   return {
     approvalCaseId: input.id,
@@ -177,12 +216,16 @@ export function QuoteApprovalDecisionDialog({
   approvalCase,
   onDecided,
 }: QuoteApprovalDecisionDialogProps) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const scrollRegionRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const decideQuote = useDecideQuoteApproval();
 
   const [decision, setDecision] = useState<QuoteApprovalDecision>("approved");
   const [note, setNote] = useState("");
-  const [conditions, setConditions] = useState<QuoteApprovalConditionDraft[]>([]);
+  const [conditions, setConditions] = useState<QuoteApprovalConditionDraft[]>(
+    [],
+  );
 
   const target = resolveTarget(approvalCase);
 
@@ -210,11 +253,13 @@ export function QuoteApprovalDecisionDialog({
   // The package endpoint returns its current case, which is not necessarily
   // the exact queue row a manager clicked. Never substitute another case's
   // evidence or activity into this decision.
-  const liveCase: QuoteApprovalCaseSummary | null = caseQuery.data?.id === target.approvalCaseId
-    ? caseQuery.data
-    : (!isApprovalItem(approvalCase) && approvalCase.id === target.approvalCaseId
-      ? approvalCase
-      : null);
+  const liveCase: QuoteApprovalCaseSummary | null =
+    caseQuery.data?.id === target.approvalCaseId
+      ? caseQuery.data
+      : (!isApprovalItem(approvalCase) &&
+          approvalCase.id === target.approvalCaseId
+        ? approvalCase
+        : null);
 
   const itemPolicy = isApprovalItem(approvalCase)
     ? approvalCase.meta.policySnapshot
@@ -231,14 +276,18 @@ export function QuoteApprovalDecisionDialog({
   );
   const isOemReprice = oemRepriceEvidence !== null;
 
-  const noteRequired = decision === "rejected"
-    || decision === "escalated"
-    || isOemRepriceDecisionNoteRequired(oemRepriceEvidence, decision);
-  const conditionsRequired = !isOemReprice && decision === "approved_with_conditions";
-  const conditionsBuilderVisible = !isOemReprice
-    && (decision === "approved_with_conditions" || decision === "changes_requested");
+  const noteRequired = decision === "rejected" ||
+    decision === "escalated" ||
+    isOemRepriceDecisionNoteRequired(oemRepriceEvidence, decision);
+  const conditionsRequired = !isOemReprice &&
+    decision === "approved_with_conditions";
+  const conditionsBuilderVisible = !isOemReprice &&
+    (decision === "approved_with_conditions" ||
+      decision === "changes_requested");
   const decisionOptions = isOemReprice
-    ? DECISION_OPTIONS.filter((option) => option.value !== "approved_with_conditions")
+    ? DECISION_OPTIONS.filter((option) =>
+      option.value !== "approved_with_conditions"
+    )
     : DECISION_OPTIONS;
 
   useEffect(() => {
@@ -248,16 +297,18 @@ export function QuoteApprovalDecisionDialog({
     }
   }, [decision, isOemReprice]);
 
-  const submitDisabled = decideQuote.isPending
-    || (conditionsRequired && conditions.length === 0)
-    || (noteRequired && note.trim().length === 0);
+  const submitDisabled = decideQuote.isPending ||
+    (conditionsRequired && conditions.length === 0) ||
+    (noteRequired && note.trim().length === 0);
 
   function invalidateAllApprovalKeys(): void {
     // Phase 3A spec keys plus the legacy ApprovalCenter key.
     queryClient.invalidateQueries({ queryKey: ["approvals"] });
     queryClient.invalidateQueries({ queryKey: ["approval-counts"] });
     queryClient.invalidateQueries({ queryKey: ["pending-quotes"] });
-    queryClient.invalidateQueries({ queryKey: ["quote-builder", "approval-case"] });
+    queryClient.invalidateQueries({
+      queryKey: ["quote-builder", "approval-case"],
+    });
     queryClient.invalidateQueries({ queryKey: ["sales", "my-approvals"] });
     queryClient.invalidateQueries({ queryKey: ["qrm", "approvals"] });
     queryClient.invalidateQueries({ queryKey: ["crm", "deal"] });
@@ -270,14 +321,19 @@ export function QuoteApprovalDecisionDialog({
         decision,
         reason: note.trim() || null,
         conditions: conditionsBuilderVisible
-          ? conditions.map((condition, index) => ({ ...condition, sortOrder: index }))
+          ? conditions.map((condition, index) => ({
+            ...condition,
+            sortOrder: index,
+          }))
           : [],
       },
       {
         onError: (error: unknown) => {
           toast({
             title: "Decision failed",
-            description: error instanceof Error ? error.message : "We could not record the decision.",
+            description: error instanceof Error
+              ? error.message
+              : "We could not record the decision.",
             variant: "destructive",
           });
         },
@@ -286,24 +342,30 @@ export function QuoteApprovalDecisionDialog({
           if (autoSend?.attempted && !autoSend.sent) {
             toast({
               title: "Quote approved, auto-send did not complete",
-              description: autoSend.error ?? "Post-approval auto-send was attempted but did not complete.",
+              description: autoSend.error ??
+                "Post-approval auto-send was attempted but did not complete.",
               variant: "destructive",
             });
           } else if (autoSend?.attempted && autoSend.sent) {
             toast({
               title: "Quote approved and auto-sent",
-              description: "Post-approval routing auto-delivered the quote to the customer.",
+              description:
+                "Post-approval routing auto-delivered the quote to the customer.",
             });
           } else if (isOemReprice) {
             toast({
               title: "OEM reprice decision recorded",
-              description: "No quote was sent and no customer communication was created.",
+              description:
+                "No quote was sent and no customer communication was created.",
             });
           } else {
             toast({ title: "Decision recorded" });
           }
           invalidateAllApprovalKeys();
-          onDecided?.({ decision, autoSent: Boolean(autoSend?.attempted && autoSend.sent) });
+          onDecided?.({
+            decision,
+            autoSent: Boolean(autoSend?.attempted && autoSend.sent),
+          });
           onClose();
         },
       },
@@ -317,9 +379,21 @@ export function QuoteApprovalDecisionDialog({
         if (!next) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>
+      <DialogContent
+        className="max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-2xl"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          if (scrollRegionRef.current) scrollRegionRef.current.scrollTop = 0;
+          headingRef.current?.focus();
+        }}
+      >
+        <DialogHeader className="shrink-0 px-4 pb-4 pt-5 pr-12 sm:px-6 sm:pt-6">
+          <DialogTitle
+            ref={headingRef}
+            tabIndex={-1}
+            className="focus:outline-none"
+            data-testid="approval-decision-heading"
+          >
             {isOemReprice ? "Authorize OEM Reprice" : "Quote Approval Decision"}
           </DialogTitle>
           <DialogDescription>
@@ -331,10 +405,19 @@ export function QuoteApprovalDecisionDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div
+          ref={scrollRegionRef}
+          tabIndex={-1}
+          className="min-h-0 space-y-4 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:px-6"
+          data-testid="approval-decision-scroll-region"
+        >
           <Card className="border-border/60 bg-card/60 p-4">
-            <p className="text-sm font-medium text-foreground">{target.headline}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{target.detail}</p>
+            <p className="text-sm font-medium text-foreground">
+              {target.headline}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {target.detail}
+            </p>
           </Card>
 
           {oemRepriceEvidence && (
@@ -343,10 +426,13 @@ export function QuoteApprovalDecisionDialog({
                 <div>
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="h-4 w-4 text-qep-orange" />
-                    <p className="text-sm font-semibold text-foreground">OEM reprice evidence</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      OEM reprice evidence
+                    </p>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Review the persisted projection before authorizing any quote mutation.
+                    Review the persisted projection before authorizing any quote
+                    mutation.
                   </p>
                 </div>
                 <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-300">
@@ -356,19 +442,25 @@ export function QuoteApprovalDecisionDialog({
 
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-lg border border-border/60 bg-background/50 p-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Current net</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                    Current net
+                  </p>
                   <p className="mt-1 text-sm font-semibold tabular-nums text-foreground">
                     {formatCents(oemRepriceEvidence.currentNetTotalCents)}
                   </p>
                 </div>
                 <div className="rounded-lg border border-border/60 bg-background/50 p-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Projected net</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                    Projected net
+                  </p>
                   <p className="mt-1 text-sm font-semibold tabular-nums text-foreground">
                     {formatCents(oemRepriceEvidence.projectedNetTotalCents)}
                   </p>
                 </div>
                 <div className="rounded-lg border border-border/60 bg-background/50 p-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Net change</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                    Net change
+                  </p>
                   <p className="mt-1 text-sm font-semibold tabular-nums text-qep-orange">
                     {formatSignedCents(oemRepriceEvidence.totalDeltaCents)}
                   </p>
@@ -379,18 +471,28 @@ export function QuoteApprovalDecisionDialog({
                 <div className="rounded-lg border border-border/60 bg-background/50 p-3">
                   <p className="font-medium text-foreground">Margin</p>
                   <p className="mt-1 tabular-nums text-muted-foreground">
-                    {formatPct(oemRepriceEvidence.oldMarginPct)} → {formatPct(oemRepriceEvidence.projectedMarginPct)}
+                    {formatPct(oemRepriceEvidence.oldMarginPct)} →{" "}
+                    {formatPct(oemRepriceEvidence.projectedMarginPct)}
                     {oemRepriceEvidence.marginFloorPct != null
-                      ? ` · floor ${formatPct(oemRepriceEvidence.marginFloorPct)}`
+                      ? ` · floor ${
+                        formatPct(oemRepriceEvidence.marginFloorPct)
+                      }`
                       : ""}
                   </p>
                 </div>
                 <div className="rounded-lg border border-border/60 bg-background/50 p-3">
-                  <p className="font-medium text-foreground">Rep commission projection</p>
+                  <p className="font-medium text-foreground">
+                    Rep commission projection
+                  </p>
                   <p className="mt-1 tabular-nums text-muted-foreground">
-                    {formatCents(oemRepriceEvidence.oldCommissionCents)} → {formatCents(oemRepriceEvidence.projectedCommissionCents)}
+                    {formatCents(oemRepriceEvidence.oldCommissionCents)} →{" "}
+                    {formatCents(oemRepriceEvidence.projectedCommissionCents)}
                     {oemRepriceEvidence.commissionDeltaCents != null
-                      ? ` · ${formatSignedCents(oemRepriceEvidence.commissionDeltaCents)}`
+                      ? ` · ${
+                        formatSignedCents(
+                          oemRepriceEvidence.commissionDeltaCents,
+                        )
+                      }`
                       : ""}
                   </p>
                 </div>
@@ -400,13 +502,17 @@ export function QuoteApprovalDecisionDialog({
                 <div className="flex gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <p>
-                    Projected margin is below policy floor. Approval requires an explicit exception reason in the decision note.
+                    Projected margin is below policy floor. Approval requires an
+                    explicit exception reason in the decision note.
                   </p>
                 </div>
               )}
 
               {oemRepriceEvidence.changeCategories.length > 0 && (
-                <div className="flex flex-wrap gap-2" aria-label="OEM change categories">
+                <div
+                  className="flex flex-wrap gap-2"
+                  aria-label="OEM change categories"
+                >
                   {oemRepriceEvidence.changeCategories.map((category) => (
                     <span
                       key={category}
@@ -422,35 +528,50 @@ export function QuoteApprovalDecisionDialog({
                 <p className="text-xs font-medium text-foreground">
                   Affected quote lines ({oemRepriceEvidence.lines.length})
                 </p>
-                {oemRepriceEvidence.lines.length === 0 ? (
-                  <p className="mt-2 text-xs text-muted-foreground">No normalized line evidence is available.</p>
-                ) : (
-                  <div className="mt-2 max-h-52 space-y-2 overflow-y-auto pr-1">
-                    {oemRepriceEvidence.lines.map((line, index) => (
-                      <div
-                        key={line.impactLineId ?? line.quotePackageLineItemId ?? `${line.modelCode}-${index}`}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-background/50 px-3 py-2 text-xs"
-                      >
-                        <div>
-                          <span className="font-medium text-foreground">{line.modelCode ?? "Quote line"}</span>
-                          <span className="ml-2 text-muted-foreground">Qty {line.quantity}</span>
-                          {line.suppressedByStockLock && (
-                            <span className="ml-2 text-amber-300">Yard-stock locked</span>
-                          )}
+                {oemRepriceEvidence.lines.length === 0
+                  ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      No normalized line evidence is available.
+                    </p>
+                  )
+                  : (
+                    <div className="mt-2 max-h-52 space-y-2 overflow-y-auto pr-1">
+                      {oemRepriceEvidence.lines.map((line, index) => (
+                        <div
+                          key={line.impactLineId ??
+                            line.quotePackageLineItemId ??
+                            `${line.modelCode}-${index}`}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-background/50 px-3 py-2 text-xs"
+                        >
+                          <div>
+                            <span className="font-medium text-foreground">
+                              {line.modelCode ?? "Quote line"}
+                            </span>
+                            <span className="ml-2 text-muted-foreground">
+                              Qty {line.quantity}
+                            </span>
+                            {line.suppressedByStockLock && (
+                              <span className="ml-2 text-amber-300">
+                                Yard-stock locked
+                              </span>
+                            )}
+                          </div>
+                          <span className="tabular-nums text-muted-foreground">
+                            {formatCents(line.oldPriceCents)} →{" "}
+                            {formatCents(line.newPriceCents)}
+                          </span>
                         </div>
-                        <span className="tabular-nums text-muted-foreground">
-                          {formatCents(line.oldPriceCents)} → {formatCents(line.newPriceCents)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
               </div>
             </Card>
           )}
 
-          {/* Approval Activity Log — surfaces the rep's submission_note
-              and any prior decisions ahead of the action picker. */}
+          {
+            /* Approval Activity Log — surfaces the rep's submission_note
+              and any prior decisions ahead of the action picker. */
+          }
           {liveCase && (
             <ApprovalActivityLog
               approvalCase={liveCase}
@@ -501,126 +622,217 @@ export function QuoteApprovalDecisionDialog({
           {conditionsBuilderVisible && (
             <Card className="border-border/60 bg-card/60 p-4 space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-foreground">Structured conditions</p>
+                <p className="text-sm font-medium text-foreground">
+                  Structured conditions
+                </p>
                 <select
                   className="rounded border border-input bg-card px-2 py-1 text-xs"
                   onChange={(event) => {
-                    const nextType = event.target.value as QuoteApprovalConditionDraft["conditionType"];
+                    const nextType = event.target
+                      .value as QuoteApprovalConditionDraft["conditionType"];
                     if (!nextType) return;
-                    setConditions((current) => [...current, makeConditionDraft(nextType)]);
+                    setConditions((
+                      current,
+                    ) => [...current, makeConditionDraft(nextType)]);
                     event.currentTarget.value = "";
                   }}
                   defaultValue=""
                 >
                   <option value="" disabled>Add condition…</option>
                   {QUOTE_CONDITION_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
                   ))}
                 </select>
               </div>
 
-              {conditions.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No conditions added yet.</p>
-              ) : (
-                <div className="space-y-3">
-                  {conditions.map((condition, index) => (
-                    <Card key={`${condition.conditionType}-${index}`} className="border-border/60 bg-background/50 p-3 space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-medium text-foreground">
-                          {QUOTE_CONDITION_OPTIONS.find((option) => option.value === condition.conditionType)?.label ?? condition.conditionType}
-                        </p>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setConditions((current) => current.filter((_, currentIndex) => currentIndex !== index))}
-                        >
-                          Remove
-                        </Button>
-                      </div>
+              {conditions.length === 0
+                ? (
+                  <p className="text-xs text-muted-foreground">
+                    No conditions added yet.
+                  </p>
+                )
+                : (
+                  <div className="space-y-3">
+                    {conditions.map((condition, index) => (
+                      <Card
+                        key={`${condition.conditionType}-${index}`}
+                        className="border-border/60 bg-background/50 p-3 space-y-2"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-medium text-foreground">
+                            {QUOTE_CONDITION_OPTIONS.find((option) =>
+                              option.value === condition.conditionType
+                            )?.label ?? condition.conditionType}
+                          </p>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              setConditions((current) =>
+                                current.filter((_, currentIndex) =>
+                                  currentIndex !== index
+                                )
+                              )}
+                          >
+                            Remove
+                          </Button>
+                        </div>
 
-                      {condition.conditionType === "min_margin_pct" && (
-                        <Input
-                          type="number"
-                          value={String(condition.conditionPayload.min_margin_pct ?? 0)}
-                          onChange={(event) => {
-                            const value = Number(event.target.value || 0);
-                            setConditions((current) => current.map((row, currentIndex) =>
-                              currentIndex === index
-                                ? { ...row, conditionPayload: { ...row.conditionPayload, min_margin_pct: value } }
-                                : row));
-                          }}
-                        />
-                      )}
-                      {condition.conditionType === "max_trade_allowance" && (
-                        <Input
-                          type="number"
-                          value={String(condition.conditionPayload.max_trade_allowance ?? 0)}
-                          onChange={(event) => {
-                            const value = Number(event.target.value || 0);
-                            setConditions((current) => current.map((row, currentIndex) =>
-                              currentIndex === index
-                                ? { ...row, conditionPayload: { ...row.conditionPayload, max_trade_allowance: value } }
-                                : row));
-                          }}
-                        />
-                      )}
-                      {condition.conditionType === "required_cash_down" && (
-                        <Input
-                          type="number"
-                          value={String(condition.conditionPayload.required_cash_down ?? 0)}
-                          onChange={(event) => {
-                            const value = Number(event.target.value || 0);
-                            setConditions((current) => current.map((row, currentIndex) =>
-                              currentIndex === index
-                                ? { ...row, conditionPayload: { ...row.conditionPayload, required_cash_down: value } }
-                                : row));
-                          }}
-                        />
-                      )}
-                      {condition.conditionType === "required_finance_scenario" && (
-                        <Input
-                          value={String(condition.conditionPayload.required_finance_scenario ?? "")}
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            setConditions((current) => current.map((row, currentIndex) =>
-                              currentIndex === index
-                                ? { ...row, conditionPayload: { ...row.conditionPayload, required_finance_scenario: value } }
-                                : row));
-                          }}
-                          placeholder="Finance 48 mo"
-                        />
-                      )}
-                      {condition.conditionType === "remove_attachment" && (
-                        <Input
-                          value={String(condition.conditionPayload.attachment_title ?? "")}
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            setConditions((current) => current.map((row, currentIndex) =>
-                              currentIndex === index
-                                ? { ...row, conditionPayload: { ...row.conditionPayload, attachment_title: value } }
-                                : row));
-                          }}
-                          placeholder="Attachment title"
-                        />
-                      )}
-                      {condition.conditionType === "expiry_hours" && (
-                        <Input
-                          type="number"
-                          value={String(condition.conditionPayload.expiry_hours ?? 72)}
-                          onChange={(event) => {
-                            const value = Number(event.target.value || 0);
-                            setConditions((current) => current.map((row, currentIndex) =>
-                              currentIndex === index
-                                ? { ...row, conditionPayload: { ...row.conditionPayload, expiry_hours: value } }
-                                : row));
-                          }}
-                        />
-                      )}
-                    </Card>
-                  ))}
-                </div>
-              )}
+                        {condition.conditionType === "min_margin_pct" && (
+                          <Input
+                            type="number"
+                            value={String(
+                              condition.conditionPayload.min_margin_pct ?? 0,
+                            )}
+                            onChange={(event) => {
+                              const value = Number(event.target.value || 0);
+                              setConditions((current) =>
+                                current.map((row, currentIndex) =>
+                                  currentIndex === index
+                                    ? {
+                                      ...row,
+                                      conditionPayload: {
+                                        ...row.conditionPayload,
+                                        min_margin_pct: value,
+                                      },
+                                    }
+                                    : row
+                                )
+                              );
+                            }}
+                          />
+                        )}
+                        {condition.conditionType === "max_trade_allowance" && (
+                          <Input
+                            type="number"
+                            value={String(
+                              condition.conditionPayload.max_trade_allowance ??
+                                0,
+                            )}
+                            onChange={(event) => {
+                              const value = Number(event.target.value || 0);
+                              setConditions((current) =>
+                                current.map((row, currentIndex) =>
+                                  currentIndex === index
+                                    ? {
+                                      ...row,
+                                      conditionPayload: {
+                                        ...row.conditionPayload,
+                                        max_trade_allowance: value,
+                                      },
+                                    }
+                                    : row
+                                )
+                              );
+                            }}
+                          />
+                        )}
+                        {condition.conditionType === "required_cash_down" && (
+                          <Input
+                            type="number"
+                            value={String(
+                              condition.conditionPayload.required_cash_down ??
+                                0,
+                            )}
+                            onChange={(event) => {
+                              const value = Number(event.target.value || 0);
+                              setConditions((current) =>
+                                current.map((row, currentIndex) =>
+                                  currentIndex === index
+                                    ? {
+                                      ...row,
+                                      conditionPayload: {
+                                        ...row.conditionPayload,
+                                        required_cash_down: value,
+                                      },
+                                    }
+                                    : row
+                                )
+                              );
+                            }}
+                          />
+                        )}
+                        {condition.conditionType ===
+                            "required_finance_scenario" && (
+                          <Input
+                            value={String(
+                              condition.conditionPayload
+                                .required_finance_scenario ?? "",
+                            )}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              setConditions((current) =>
+                                current.map((row, currentIndex) =>
+                                  currentIndex === index
+                                    ? {
+                                      ...row,
+                                      conditionPayload: {
+                                        ...row.conditionPayload,
+                                        required_finance_scenario: value,
+                                      },
+                                    }
+                                    : row
+                                )
+                              );
+                            }}
+                            placeholder="Finance 48 mo"
+                          />
+                        )}
+                        {condition.conditionType === "remove_attachment" && (
+                          <Input
+                            value={String(
+                              condition.conditionPayload.attachment_title ?? "",
+                            )}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              setConditions((current) =>
+                                current.map((row, currentIndex) =>
+                                  currentIndex === index
+                                    ? {
+                                      ...row,
+                                      conditionPayload: {
+                                        ...row.conditionPayload,
+                                        attachment_title: value,
+                                      },
+                                    }
+                                    : row
+                                )
+                              );
+                            }}
+                            placeholder="Attachment title"
+                          />
+                        )}
+                        {condition.conditionType === "expiry_hours" && (
+                          <Input
+                            type="number"
+                            value={String(
+                              condition.conditionPayload.expiry_hours ?? 72,
+                            )}
+                            onChange={(event) => {
+                              const value = Number(event.target.value || 0);
+                              setConditions((current) =>
+                                current.map((row, currentIndex) =>
+                                  currentIndex === index
+                                    ? {
+                                      ...row,
+                                      conditionPayload: {
+                                        ...row.conditionPayload,
+                                        expiry_hours: value,
+                                      },
+                                    }
+                                    : row
+                                )
+                              );
+                            }}
+                          />
+                        )}
+                      </Card>
+                    ))}
+                  </div>
+                )}
             </Card>
           )}
 
@@ -635,7 +847,9 @@ export function QuoteApprovalDecisionDialog({
               onClick={handleSubmit}
               disabled={submitDisabled}
             >
-              {decideQuote.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+              {decideQuote.isPending
+                ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                : null}
               Submit Decision
             </Button>
           </div>

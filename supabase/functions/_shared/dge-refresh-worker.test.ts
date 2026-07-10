@@ -18,16 +18,20 @@ const claimedJob = {
 
 class RpcClient {
   completionCalls: Array<Record<string, unknown>> = [];
+  renewalCalls: Array<Record<string, unknown>> = [];
+  claimCalls: Array<Record<string, unknown>> = [];
 
   constructor(
     private readonly options: {
       job?: Record<string, unknown> | null;
       completionError?: string | null;
+      renewalError?: string | null;
     } = {},
   ) {}
 
   rpc(name: string, args: Record<string, unknown>) {
     if (name === "claim_dge_refresh_job") {
+      this.claimCalls.push(args);
       const job = this.options.job === undefined
         ? claimedJob
         : this.options.job;
@@ -39,6 +43,15 @@ class RpcClient {
         data: null,
         error: this.options.completionError
           ? { message: this.options.completionError }
+          : null,
+      });
+    }
+    if (name === "renew_dge_refresh_job_lease") {
+      this.renewalCalls.push(args);
+      return Promise.resolve({
+        data: null,
+        error: this.options.renewalError
+          ? { message: this.options.renewalError }
           : null,
       });
     }
@@ -85,7 +98,46 @@ Deno.test("DGE refresh worker uses authoritative claimed requested_by instead of
   });
   assertEquals(result.processed, true);
   assertEquals(actorUserId, "trusted-user");
+  assertEquals(client.claimCalls[0].p_lease_seconds, 300);
+  assertEquals(client.renewalCalls.length, 1);
+  assertEquals(client.renewalCalls[0].p_lease_token, "lease-token-1");
   assertEquals(client.completionCalls[0].p_lease_token, "lease-token-1");
+});
+
+Deno.test("DGE refresh worker heartbeats while resilient work is still running", async () => {
+  const client = new RpcClient();
+  await runNextDgeRefreshJob(
+    client as never,
+    {
+      runEconomicSyncRefresh: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 8));
+        return { refreshed: true };
+      },
+    },
+    { heartbeatIntervalMs: 1, leaseSeconds: 300 },
+  );
+  assertEquals(client.renewalCalls.length >= 2, true);
+  assertEquals(
+    client.renewalCalls.every((call) =>
+      call.p_job_id === "job-1" &&
+      call.p_lease_token === "lease-token-1" &&
+      call.p_lease_seconds === 300
+    ),
+    true,
+  );
+});
+
+Deno.test("DGE refresh worker does not execute terminal completion after lease renewal fails", async () => {
+  const client = new RpcClient({ renewalError: "lease store unavailable" });
+  const error = await assertRejects(
+    () =>
+      runNextDgeRefreshJob(client as never, {
+        runEconomicSyncRefresh: async () => ({ refreshed: true }),
+      }),
+    Error,
+  );
+  assertStringIncludes(error.message, "lease renewal failed");
+  assertEquals(client.completionCalls.length, 0);
 });
 
 Deno.test("DGE refresh worker fails when successful job completion persistence errors", async () => {

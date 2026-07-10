@@ -17,6 +17,12 @@ const migrationPath = join(
   "migrations",
   "813_a77_a79_atomic_reprice_apply_reversal.sql",
 );
+const retryHardeningMigrationPath = join(
+  process.cwd(),
+  "supabase",
+  "migrations",
+  "817_oem_publish_atomicity_and_idempotent_retry.sql",
+);
 const sql = readFileSync(migrationPath, "utf8");
 const compactSql = sql.replace(/\s+/g, " ").toLowerCase();
 
@@ -99,16 +105,43 @@ describe("813 A7.7/A7.9 atomic apply and reversal contract", () => {
     expect(fn).toContain("security definer set search_path = ''");
     expect(fn).toContain("pg_advisory_xact_lock");
     const quoteLock = fn.indexOf("from public.quote_packages quote");
-    const draftLock = fn.indexOf("from public.qb_quote_reprice_drafts draft", quoteLock);
-    const impactLock = fn.indexOf("from public.qb_quote_reprice_impacts impact", draftLock);
-    const approvalLock = fn.indexOf("from public.quote_approval_cases approval", impactLock);
+    const draftLock = fn.indexOf(
+      "from public.qb_quote_reprice_drafts draft",
+      quoteLock,
+    );
+    const impactLock = fn.indexOf(
+      "from public.qb_quote_reprice_impacts impact",
+      draftLock,
+    );
+    const approvalLock = fn.indexOf(
+      "from public.quote_approval_cases approval",
+      impactLock,
+    );
     const dealLock = fn.indexOf("from public.qrm_deals deal", approvalLock);
-    const companyLock = fn.indexOf("from public.qrm_companies company", dealLock);
-    const impactLineLock = fn.indexOf("from public.qb_quote_reprice_impact_lines impact_line", companyLock);
-    const quoteLineLock = fn.indexOf("from public.quote_package_line_items quote_line", impactLineLock);
-    const versionLock = fn.indexOf("from public.quote_package_versions version", quoteLineLock);
-    const epochLock = fn.indexOf("from public.qb_quote_pricing_epochs epoch", versionLock);
-    const eventLock = fn.indexOf("from public.qb_price_change_events event", epochLock);
+    const companyLock = fn.indexOf(
+      "from public.qrm_companies company",
+      dealLock,
+    );
+    const impactLineLock = fn.indexOf(
+      "from public.qb_quote_reprice_impact_lines impact_line",
+      companyLock,
+    );
+    const quoteLineLock = fn.indexOf(
+      "from public.quote_package_line_items quote_line",
+      impactLineLock,
+    );
+    const versionLock = fn.indexOf(
+      "from public.quote_package_versions version",
+      quoteLineLock,
+    );
+    const epochLock = fn.indexOf(
+      "from public.qb_quote_pricing_epochs epoch",
+      versionLock,
+    );
+    const eventLock = fn.indexOf(
+      "from public.qb_price_change_events event",
+      epochLock,
+    );
     expect(fn).not.toContain("lock table");
     expect(quoteLock).toBeGreaterThanOrEqual(0);
     expect(draftLock).toBeGreaterThan(quoteLock);
@@ -124,9 +157,13 @@ describe("813 A7.7/A7.9 atomic apply and reversal contract", () => {
     expect(fn).toContain("actor identity, role, or workspace is not current");
     expect(fn).toContain("oem reprice draft belongs to another rep");
     expect(fn).toContain("customer has an active oem price lock");
-    expect(fn).toContain("oem_reprice_draft_version is distinct from v_draft.draft_version");
+    expect(fn).toContain(
+      "oem_reprice_draft_version is distinct from v_draft.draft_version",
+    );
     expect(fn).toContain("quote line compare-and-swap failed during oem apply");
-    expect(fn).toContain("below-floor oem reprice lacks authorized override evidence");
+    expect(fn).toContain(
+      "below-floor oem reprice lacks authorized override evidence",
+    );
     expect(fn).not.toContain("exception when others");
   });
 
@@ -184,9 +221,15 @@ describe("813 A7.7/A7.9 atomic apply and reversal contract", () => {
   it("reverses inclusively through seven days and rejects later work", () => {
     const fn = functionSql("reverse_qb_oem_reprice_apply");
     expect(fn).toContain("qb_oem_reprice_reversal_within_window");
-    expect(fn).toContain("quote changed after oem apply; reversal would overwrite later work");
-    expect(fn).toContain("quote has advanced to an irreversible customer state");
-    expect(fn).toContain("reversal no longer reconstructs pre-apply totals exactly");
+    expect(fn).toContain(
+      "quote changed after oem apply; reversal would overwrite later work",
+    );
+    expect(fn).toContain(
+      "quote has advanced to an irreversible customer state",
+    );
+    expect(fn).toContain(
+      "reversal no longer reconstructs pre-apply totals exactly",
+    );
     expect(fn).toContain("set status = 'reversed', reversed_at = v_now");
     expect(fn).toContain("set state = 'visible'");
     expect(fn).toContain("'customer_communication', 'none'");
@@ -500,6 +543,82 @@ create table public.qb_price_change_events (
   status text not null
 );
 
+-- Minimal pre-817 publisher/persister doubles let this scratch database prove
+-- that the new composed RPC has real transaction rollback semantics. Migration
+-- 812 separately exercises the production implementations in depth.
+create function public.publish_qb_price_sheet_atomic(
+  p_workspace_id text,
+  p_price_sheet_id uuid,
+  p_actor_id uuid,
+  p_auto_approve boolean default false
+)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_rows integer;
+begin
+  update public.qb_price_sheets
+  set status = 'published'
+  where id = p_price_sheet_id
+    and workspace_id = p_workspace_id
+    and status = 'extracted';
+  get diagnostics v_rows = row_count;
+  if v_rows <> 1 and not exists (
+    select 1 from public.qb_price_sheets
+    where id = p_price_sheet_id
+      and workspace_id = p_workspace_id
+      and status = 'published'
+  ) then
+    raise exception 'scratch publish rejected';
+  end if;
+  return jsonb_build_object(
+    'itemsApplied', case when v_rows = 1 then 1 else 0 end,
+    'programsApplied', 0,
+    'actorId', p_actor_id,
+    'autoApprove', p_auto_approve
+  );
+end;
+$$;
+
+create function public.persist_qb_oem_price_change_event(
+  p_workspace_id text,
+  p_brand_id uuid,
+  p_price_sheet_id uuid,
+  p_publish_group_id uuid,
+  p_created_by uuid,
+  p_source_metadata jsonb,
+  p_effective_date date,
+  p_quote_pricing_epoch bigint,
+  p_materiality_rule jsonb,
+  p_approval_policy jsonb,
+  p_streams jsonb
+)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+begin
+  if coalesce((p_source_metadata->>'force_failure')::boolean, false) then
+    raise exception 'scratch persistence failure';
+  end if;
+  if not exists (
+    select 1 from public.qb_price_sheets
+    where id = p_price_sheet_id
+      and workspace_id = p_workspace_id
+      and brand_id = p_brand_id
+      and status = 'published'
+  ) then
+    raise exception 'scratch persistence observed unpublished sheet';
+  end if;
+  return jsonb_build_object(
+    'event_id', p_publish_group_id,
+    'event_ids', jsonb_build_object('price_book', p_publish_group_id),
+    'publish_group_id', p_publish_group_id,
+    'created_by', p_created_by,
+    'effective_date', p_effective_date,
+    'quote_pricing_epoch', p_quote_pricing_epoch,
+    'materiality_rule', p_materiality_rule,
+    'approval_policy', p_approval_policy,
+    'stream_count', jsonb_array_length(p_streams)
+  );
+end;
+$$;
+
 create table public.qb_quote_reprice_impacts (
   id uuid primary key,
   event_id uuid not null references public.qb_price_change_events(id),
@@ -616,11 +735,12 @@ create table public.qb_margin_thresholds (
 );
 `;
 
-postgresBehavior("813 behavior on scratch Postgres", () => {
+postgresBehavior("813 + 817 behavior on scratch Postgres", () => {
   it("creates, approves, applies, rejects conflicts, reverses, and replays idempotently", () => {
     withScratchPostgres((psql) => {
       psql(scratchSchemaSql);
       psql(`\\i ${migrationPath}`);
+      psql(`\\i ${retryHardeningMigrationPath}`);
       psql(`
         do $$
         declare fn text;
@@ -643,6 +763,17 @@ postgresBehavior("813 behavior on scratch Postgres", () => {
           ) then
             raise exception 'internal totals helper leaked to service_role';
           end if;
+          if has_function_privilege(
+               'service_role',
+               'public.apply_qb_oem_reprice_draft_v813(text,uuid,uuid,text)',
+               'EXECUTE'
+             ) or has_function_privilege(
+               'service_role',
+               'public.reverse_qb_oem_reprice_apply_v813(text,uuid,uuid,text)',
+               'EXECUTE'
+             ) then
+            raise exception 'legacy mutation implementation leaked to service_role';
+          end if;
           if not has_table_privilege(
             'service_role', 'public.qb_quote_reprice_audits', 'SELECT'
           ) or has_table_privilege(
@@ -656,6 +787,57 @@ postgresBehavior("813 behavior on scratch Postgres", () => {
       `);
       psql(`
         set request.jwt.claim.role = 'service_role';
+
+        insert into public.qb_brands(id, workspace_id, code, name) values (
+          'f1000000-0000-0000-0000-000000000001',
+          'workspace-atomic', 'ATOMIC', 'Atomic Test'
+        );
+        insert into public.qb_price_sheets(
+          id, workspace_id, brand_id, status
+        ) values (
+          'f2000000-0000-0000-0000-000000000001',
+          'workspace-atomic',
+          'f1000000-0000-0000-0000-000000000001',
+          'extracted'
+        );
+        do $$
+        declare v_result jsonb;
+        begin
+          begin
+            perform public.publish_and_persist_qb_oem_price_change_event(
+              'workspace-atomic',
+              'f1000000-0000-0000-0000-000000000001',
+              'f2000000-0000-0000-0000-000000000001',
+              'f3000000-0000-0000-0000-000000000001',
+              '00000000-0000-0000-0000-000000000003',
+              '{"force_failure":true}'::jsonb,
+              current_date, 0, '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, false
+            );
+            raise exception 'forced event failure unexpectedly committed';
+          exception when others then
+            if sqlerrm not like '%scratch persistence failure%' then raise; end if;
+          end;
+          if (select status from public.qb_price_sheets
+              where id = 'f2000000-0000-0000-0000-000000000001')
+             <> 'extracted' then
+            raise exception 'event failure did not roll catalog publication back';
+          end if;
+          v_result := public.publish_and_persist_qb_oem_price_change_event(
+            'workspace-atomic',
+            'f1000000-0000-0000-0000-000000000001',
+            'f2000000-0000-0000-0000-000000000001',
+            'f3000000-0000-0000-0000-000000000001',
+            '00000000-0000-0000-0000-000000000003',
+            '{}'::jsonb,
+            current_date, 0, '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, false
+          );
+          if (select status from public.qb_price_sheets
+              where id = 'f2000000-0000-0000-0000-000000000001')
+             <> 'published'
+             or (v_result #>> '{publish,itemsApplied}')::integer <> 1 then
+            raise exception 'composed OEM publication did not commit both results';
+          end if;
+        end $$;
 
         do $$
         declare v_applied timestamptz := '2026-07-09T12:00:00Z';
@@ -1096,11 +1278,41 @@ postgresBehavior("813 behavior on scratch Postgres", () => {
           'workspace-a', (select (payload->>'draft_id')::uuid from create_result),
           '00000000-0000-0000-0000-000000000001', 'rep'
         ) as payload;
+
+        -- A successful retry must resolve from immutable audit evidence even
+        -- after the live assignment and source-event state have advanced.
+        update public.qrm_deals
+        set assigned_rep_id = '00000000-0000-0000-0000-000000000002'
+        where id = (
+          select quote.deal_id
+          from public.quote_packages quote
+          join apply_result result
+            on quote.id = (result.payload->>'quote_package_id')::uuid
+        );
+        update public.qb_price_change_events
+        set status = 'superseded'
+        where id = (
+          select audit.source_event_id
+          from public.qb_quote_reprice_audits audit
+          join apply_result result
+            on audit.id = (result.payload->>'audit_id')::uuid
+        );
         create temp table apply_replay as
         select public.apply_qb_oem_reprice_draft(
           'workspace-a', (select (payload->>'draft_id')::uuid from create_result),
           '00000000-0000-0000-0000-000000000001', 'rep'
         ) as payload;
+        update public.qrm_deals
+        set assigned_rep_id = '00000000-0000-0000-0000-000000000001'
+        where assigned_rep_id = '00000000-0000-0000-0000-000000000002';
+        update public.qb_price_change_events
+        set status = 'active'
+        where id = (
+          select audit.source_event_id
+          from public.qb_quote_reprice_audits audit
+          join apply_result result
+            on audit.id = (result.payload->>'audit_id')::uuid
+        );
 
         do $$
         declare v_apply uuid;
@@ -1178,6 +1390,17 @@ postgresBehavior("813 behavior on scratch Postgres", () => {
           'workspace-a', (select (payload->>'audit_id')::uuid from apply_result),
           '00000000-0000-0000-0000-000000000001', 'rep'
         ) as payload;
+        update public.qrm_deals
+        set assigned_rep_id = '00000000-0000-0000-0000-000000000002'
+        where assigned_rep_id = '00000000-0000-0000-0000-000000000001';
+        update public.qb_price_change_events
+        set status = 'superseded'
+        where id = (
+          select audit.source_event_id
+          from public.qb_quote_reprice_audits audit
+          join reverse_result result
+            on audit.id = (result.payload->>'audit_id')::uuid
+        );
         create temp table reverse_replay as
         select public.reverse_qb_oem_reprice_apply(
           'workspace-a', (select (payload->>'audit_id')::uuid from apply_result),

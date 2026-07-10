@@ -13,6 +13,7 @@ export interface UseQuoteBuilderPrimaryActionInput {
   currentStep: Step;
   approvalCaseCanSend: boolean;
   sendReady: boolean;
+  customerFacingBlocked: boolean;
   canSubmitForApproval: boolean;
   requiresApprovalJustification: boolean;
   onSave: () => void | Promise<void>;
@@ -25,6 +26,7 @@ export function useQuoteBuilderPrimaryAction({
   currentStep,
   approvalCaseCanSend,
   sendReady,
+  customerFacingBlocked,
   canSubmitForApproval,
   requiresApprovalJustification,
   onSave,
@@ -36,7 +38,7 @@ export function useQuoteBuilderPrimaryAction({
       void onSave();
       return;
     }
-    if (approvalCaseCanSend && sendReady) {
+    if (approvalCaseCanSend && sendReady && !customerFacingBlocked) {
       setStep("review");
       return;
     }
@@ -52,6 +54,7 @@ export function useQuoteBuilderPrimaryAction({
   }, [
     approvalCaseCanSend,
     canSubmitForApproval,
+    customerFacingBlocked,
     currentStep,
     onSave,
     onSubmitApproval,

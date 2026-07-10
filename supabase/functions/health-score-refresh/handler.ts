@@ -25,6 +25,37 @@ interface HealthProfileRow {
   health_score_updated_at: string | null;
 }
 
+interface HealthRefreshJobRow {
+  job_id: string;
+  workspace_id: string;
+  snapshot_at: string;
+  phase: "scores" | "dna";
+  score_cursor_updated_at: string | null;
+  score_cursor_id: string | null;
+  dna_cursor_id: string | null;
+  attempt_count: number;
+  failure_count: number;
+  lease_token: string;
+}
+
+interface HealthJobTransition {
+  status: "queued" | "succeeded";
+  phase: "scores" | "dna";
+  scoreCursorUpdatedAt: string | null;
+  scoreCursorId: string | null;
+  dnaCursorId: string | null;
+  result: Record<string, unknown>;
+}
+
+const CRON_JOB_BATCH_SIZE = 2;
+const SCORE_SLICE_SIZE = 20;
+const DNA_SLICE_SIZE = 5;
+const MANUAL_SCORE_LIMIT = 200;
+const MANUAL_DNA_LIMIT = 50;
+const MANUAL_SCORE_CONCURRENCY = 8;
+const MANUAL_DNA_CONCURRENCY = 4;
+const HEALTH_JOB_LEASE_SECONDS = 300;
+
 export interface HealthScoreRefreshDependencies {
   createAdminClient: typeof createAdminClient;
   resolveCallerContext: typeof resolveCallerContext;
@@ -44,10 +75,41 @@ class HealthScoreRefreshError extends Error {
   }
 }
 
+class HealthJobSliceError extends Error {
+  constructor(
+    message: string,
+    readonly checkpoint: {
+      scoreCursorUpdatedAt: string | null;
+      scoreCursorId: string | null;
+      dnaCursorId: string | null;
+    },
+  ) {
+    super(message);
+    this.name = "HealthJobSliceError";
+  }
+}
+
 function cleanString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim()
     : null;
+}
+
+async function mapWithConcurrency<T, R>(
+  values: T[],
+  concurrency: number,
+  mapper: (value: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(concurrency, 1), values.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < values.length) {
+      const index = nextIndex++;
+      results[index] = await mapper(values[index], index);
+    }
+  }));
+  return results;
 }
 
 function assertDatabaseResult(
@@ -185,6 +247,60 @@ async function loadWorkspaceHealthProfiles(
   return profiles;
 }
 
+async function loadWorkspaceHealthProfilePage(
+  admin: SupabaseClient,
+  job: HealthRefreshJobRow,
+): Promise<HealthProfileRow[]> {
+  const { data, error } = await admin.rpc(
+    "list_customer_health_profiles_page",
+    {
+      p_workspace_id: job.workspace_id,
+      p_snapshot_at: job.snapshot_at,
+      p_after_updated_at: job.score_cursor_updated_at,
+      p_after_id: job.score_cursor_id,
+      p_limit: SCORE_SLICE_SIZE + 1,
+    },
+  );
+  assertDatabaseResult(error, "Workspace health profile page read failed");
+  return ((data ?? []) as Array<Record<string, unknown>>).flatMap((row) => {
+    const id = cleanString(row.id);
+    if (!id) return [];
+    return [{
+      id,
+      crm_company_id: cleanString(row.crm_company_id),
+      health_score: (row.health_score as number | null) ?? null,
+      customer_name: String(row.customer_name ?? "Unknown customer"),
+      health_score_updated_at: (row.health_score_updated_at as string | null) ??
+        null,
+    }];
+  });
+}
+
+async function loadActiveDnaProfileIds(
+  admin: SupabaseClient,
+  params: {
+    workspaceId: string;
+    snapshotAt: string;
+    afterProfileId: string | null;
+    limit: number;
+  },
+): Promise<string[]> {
+  const { data, error } = await admin.rpc(
+    "list_active_customer_dna_profiles_page",
+    {
+      p_workspace_id: params.workspaceId,
+      p_snapshot_at: params.snapshotAt,
+      p_after_id: params.afterProfileId,
+      p_limit: params.limit,
+    },
+  );
+  assertDatabaseResult(error, "Workspace active DNA profile page read failed");
+  return ((data ?? []) as Array<Record<string, unknown>>).flatMap((row) => {
+    const id = cleanString(row.id);
+    return id ? [id] : [];
+  });
+}
+
 async function summarizeWorkspace(
   admin: SupabaseClient,
   workspaceId: string,
@@ -228,7 +344,7 @@ async function refreshWorkspace(
     admin,
     workspaceId,
     "stale_asc",
-    200,
+    MANUAL_SCORE_LIMIT,
   ))
     .sort((a, b) => {
       if (!a.health_score_updated_at) return -1;
@@ -236,17 +352,21 @@ async function refreshWorkspace(
       return Date.parse(a.health_score_updated_at) -
         Date.parse(b.health_score_updated_at);
     })
-    .slice(0, 200);
+    .slice(0, MANUAL_SCORE_LIMIT);
 
-  let scoresRefreshed = 0;
-  let scoresFailed = 0;
-  for (const profile of profiles) {
-    const { error } = await admin.rpc("compute_customer_health_score", {
-      p_customer_profile_id: profile.id,
-    });
-    if (error) scoresFailed++;
-    else scoresRefreshed++;
-  }
+  const scoreResults = await mapWithConcurrency(
+    profiles,
+    MANUAL_SCORE_CONCURRENCY,
+    async (profile) => {
+      const { error } = await admin.rpc("compute_customer_health_score", {
+        p_customer_profile_id: profile.id,
+      });
+      return error ? "failed" : "refreshed";
+    },
+  );
+  const scoresRefreshed =
+    scoreResults.filter((value) => value === "refreshed").length;
+  const scoresFailed = scoreResults.length - scoresRefreshed;
 
   const { data: alertCount, error: alertError } = await admin.rpc(
     "generate_cross_department_alerts",
@@ -257,117 +377,34 @@ async function refreshWorkspace(
     "Workspace cross-department alert generation failed",
   );
 
-  const since = new Date(Date.now() - 36 * 3600 * 1000).toISOString();
-  const [parts, invoices, deals, rentalInvoices] = await Promise.all([
-    admin.from("parts_orders").select("crm_company_id").eq(
-      "workspace_id",
-      workspaceId,
-    ).gt("created_at", since).not("crm_company_id", "is", null).limit(500),
-    admin.from("customer_invoices").select("crm_company_id").eq(
-      "workspace_id",
-      workspaceId,
-    ).gt("created_at", since).not("crm_company_id", "is", null).limit(500),
-    admin.from("crm_deals").select("company_id").eq(
-      "workspace_id",
-      workspaceId,
-    ).gt("updated_at", since).not("company_id", "is", null).limit(500),
-    admin.from("rental_invoices").select("rental_contract_id").eq(
-      "workspace_id",
-      workspaceId,
-    ).gt("created_at", since).limit(500),
-  ]);
-  assertDatabaseResult(parts.error, "Workspace parts activity read failed");
-  assertDatabaseResult(
-    invoices.error,
-    "Workspace invoice activity read failed",
-  );
-  assertDatabaseResult(deals.error, "Workspace deal activity read failed");
-  assertDatabaseResult(
-    rentalInvoices.error,
-    "Workspace rental invoice activity read failed",
-  );
-
-  const activeCompanies = new Set<string>();
-  for (const row of parts.data ?? []) {
-    const id = cleanString(row.crm_company_id);
-    if (id) activeCompanies.add(id);
-  }
-  for (const row of invoices.data ?? []) {
-    const id = cleanString(row.crm_company_id);
-    if (id) activeCompanies.add(id);
-  }
-  for (const row of deals.data ?? []) {
-    const id = cleanString(row.company_id);
-    if (id) activeCompanies.add(id);
-  }
-
-  const contractIds = [
-    ...new Set(
-      (rentalInvoices.data ?? []).map((row) =>
-        cleanString(row.rental_contract_id)
-      ).filter((id): id is string => Boolean(id)),
-    ),
-  ];
-  if (contractIds.length > 0) {
-    const { data: contracts, error } = await admin
-      .from("rental_contracts")
-      .select("qrm_company_id")
-      .eq("workspace_id", workspaceId)
-      .in("id", contractIds)
-      .not("qrm_company_id", "is", null);
-    assertDatabaseResult(
-      error,
-      "Workspace rental contract activity read failed",
-    );
-    for (const row of contracts ?? []) {
-      const id = cleanString(row.qrm_company_id);
-      if (id) activeCompanies.add(id);
-    }
-  }
-
-  let dnaRefreshed = 0;
-  let dnaFailed = 0;
-  if (activeCompanies.size > 0) {
-    const companyIds = [...activeCompanies].slice(0, 200);
-    const { data: companyScopes, error: companyError } = await admin
-      .from("crm_companies")
-      .select("id")
-      .eq("workspace_id", workspaceId)
-      .in("id", companyIds)
-      .is("deleted_at", null);
-    assertDatabaseResult(
-      companyError,
-      "Workspace active company scope read failed",
-    );
-    const scopedCompanyIds = (companyScopes ?? []).map((row) =>
-      row.id as string
-    );
-    if (scopedCompanyIds.length > 0) {
-      const { data: activeProfiles, error: profileError } = await admin
-        .from("customer_profiles_extended")
-        .select("id, crm_company_id")
-        .in("crm_company_id", scopedCompanyIds)
-        .limit(50);
-      assertDatabaseResult(
-        profileError,
-        "Workspace active DNA profile read failed",
-      );
-      for (const profile of activeProfiles ?? []) {
-        try {
-          await dependencies.refreshCustomerProfileSnapshot(admin, {
-            lookup: { customer_profiles_extended_id: profile.id as string },
-            actorRole: "owner",
-            actorUserId: null,
-            isServiceRole: true,
-            workspaceId,
-          });
-          dnaRefreshed++;
-        } catch {
-          dnaFailed++;
-        }
+  const snapshotAt = new Date().toISOString();
+  const activeProfileIds = await loadActiveDnaProfileIds(admin, {
+    workspaceId,
+    snapshotAt,
+    afterProfileId: null,
+    limit: MANUAL_DNA_LIMIT,
+  });
+  const dnaResults = await mapWithConcurrency(
+    activeProfileIds,
+    MANUAL_DNA_CONCURRENCY,
+    async (profileId) => {
+      try {
+        await dependencies.refreshCustomerProfileSnapshot(admin, {
+          lookup: { customer_profiles_extended_id: profileId },
+          actorRole: "owner",
+          actorUserId: null,
+          isServiceRole: true,
+          workspaceId,
+        });
+        return "refreshed";
+      } catch {
+        return "failed";
       }
-    }
-  }
+    },
+  );
+  const dnaRefreshed =
+    dnaResults.filter((value) => value === "refreshed").length;
+  const dnaFailed = dnaResults.length - dnaRefreshed;
 
   return {
     ok: true,
@@ -377,6 +414,240 @@ async function refreshWorkspace(
     alerts_generated: alertCount ?? 0,
     dna_refreshed: dnaRefreshed,
     dna_failed: dnaFailed,
+  };
+}
+
+async function completeHealthRefreshJob(
+  admin: SupabaseClient,
+  params: {
+    job: HealthRefreshJobRow;
+    status: "queued" | "succeeded" | "failed";
+    phase: "scores" | "dna";
+    scoreCursorUpdatedAt: string | null;
+    scoreCursorId: string | null;
+    dnaCursorId: string | null;
+    error: string | null;
+  },
+): Promise<void> {
+  const { error } = await admin.rpc("complete_health_score_refresh_job", {
+    p_job_id: params.job.job_id,
+    p_lease_token: params.job.lease_token,
+    p_status: params.status,
+    p_phase: params.phase,
+    p_score_cursor_updated_at: params.scoreCursorUpdatedAt,
+    p_score_cursor_id: params.scoreCursorId,
+    p_dna_cursor_id: params.dnaCursorId,
+    p_last_error: params.error,
+  });
+  assertDatabaseResult(error, "Health refresh job completion failed");
+}
+
+async function processHealthRefreshJobSlice(
+  admin: SupabaseClient,
+  job: HealthRefreshJobRow,
+  dependencies: HealthScoreRefreshDependencies,
+): Promise<HealthJobTransition> {
+  if (job.phase === "scores") {
+    const page = await loadWorkspaceHealthProfilePage(admin, job);
+    const profiles = page.slice(0, SCORE_SLICE_SIZE);
+    const scoreResults = await Promise.all(profiles.map(async (profile) => {
+      const { error } = await admin.rpc("compute_customer_health_score", {
+        p_customer_profile_id: profile.id,
+      });
+      return error ? "failed" : "refreshed";
+    }));
+    const refreshed = scoreResults.filter((value) => value === "refreshed")
+      .length;
+    const failed = scoreResults.length - refreshed;
+    const last = profiles.at(-1);
+
+    if (failed > 0) {
+      throw new HealthJobSliceError(
+        `Health score slice has ${failed} transient profile failure${
+          failed === 1 ? "" : "s"
+        }`,
+        {
+          scoreCursorUpdatedAt: job.score_cursor_updated_at,
+          scoreCursorId: job.score_cursor_id,
+          dnaCursorId: job.dna_cursor_id,
+        },
+      );
+    }
+
+    if (page.length > SCORE_SLICE_SIZE && last) {
+      return {
+        status: "queued",
+        phase: "scores",
+        scoreCursorUpdatedAt: last.health_score_updated_at,
+        scoreCursorId: last.id,
+        dnaCursorId: job.dna_cursor_id,
+        result: {
+          workspace_id: job.workspace_id,
+          phase: "scores",
+          scores_refreshed: refreshed,
+          scores_failed: failed,
+          continuation: true,
+        },
+      };
+    }
+
+    const { data: alertCount, error: alertError } = await admin.rpc(
+      "generate_cross_department_alerts",
+      { p_workspace_id: job.workspace_id },
+    );
+    assertDatabaseResult(
+      alertError,
+      "Workspace cross-department alert generation failed",
+    );
+    return {
+      status: "queued",
+      phase: "dna",
+      scoreCursorUpdatedAt: last?.health_score_updated_at ??
+        job.score_cursor_updated_at,
+      scoreCursorId: last?.id ?? job.score_cursor_id,
+      dnaCursorId: job.dna_cursor_id,
+      result: {
+        workspace_id: job.workspace_id,
+        phase: "scores",
+        scores_refreshed: refreshed,
+        scores_failed: failed,
+        alerts_generated: alertCount ?? 0,
+        continuation: true,
+      },
+    };
+  }
+
+  const page = await loadActiveDnaProfileIds(admin, {
+    workspaceId: job.workspace_id,
+    snapshotAt: job.snapshot_at,
+    afterProfileId: job.dna_cursor_id,
+    limit: DNA_SLICE_SIZE + 1,
+  });
+  const profileIds = page.slice(0, DNA_SLICE_SIZE);
+  let refreshed = 0;
+  let lastProfileId = job.dna_cursor_id;
+  for (const profileId of profileIds) {
+    try {
+      await dependencies.refreshCustomerProfileSnapshot(admin, {
+        lookup: { customer_profiles_extended_id: profileId },
+        actorRole: "owner",
+        actorUserId: null,
+        isServiceRole: true,
+        workspaceId: job.workspace_id,
+      });
+      refreshed++;
+      lastProfileId = profileId;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new HealthJobSliceError(
+        `Customer DNA slice failed at ${profileId}: ${message}`,
+        {
+          scoreCursorUpdatedAt: job.score_cursor_updated_at,
+          scoreCursorId: job.score_cursor_id,
+          dnaCursorId: lastProfileId,
+        },
+      );
+    }
+  }
+  return {
+    status: page.length > DNA_SLICE_SIZE ? "queued" : "succeeded",
+    phase: "dna",
+    scoreCursorUpdatedAt: job.score_cursor_updated_at,
+    scoreCursorId: job.score_cursor_id,
+    dnaCursorId: lastProfileId,
+    result: {
+      workspace_id: job.workspace_id,
+      phase: "dna",
+      dna_refreshed: refreshed,
+      dna_failed: 0,
+      continuation: page.length > DNA_SLICE_SIZE,
+    },
+  };
+}
+
+async function runHealthRefreshCronBatch(
+  admin: SupabaseClient,
+  dependencies: HealthScoreRefreshDependencies,
+): Promise<Record<string, unknown>> {
+  const { data: enqueued, error: enqueueError } = await admin.rpc(
+    "enqueue_health_score_refresh_jobs",
+    { p_refresh_on: new Date().toISOString().slice(0, 10) },
+  );
+  assertDatabaseResult(enqueueError, "Health refresh workspace enqueue failed");
+
+  const { data, error: claimError } = await admin.rpc(
+    "claim_health_score_refresh_jobs",
+    {
+      p_limit: CRON_JOB_BATCH_SIZE,
+      p_lease_seconds: HEALTH_JOB_LEASE_SECONDS,
+    },
+  );
+  assertDatabaseResult(claimError, "Health refresh workspace claim failed");
+  const jobs = (Array.isArray(data) ? data : []) as HealthRefreshJobRow[];
+  // Claimed leases begin at the same instant, so process the small bounded
+  // batch concurrently. A later job never waits behind an earlier tenant long
+  // enough to consume its lease before work starts.
+  const results = await Promise.all(jobs.map(async (job) => {
+    try {
+      const transition = await processHealthRefreshJobSlice(
+        admin,
+        job,
+        dependencies,
+      );
+      await completeHealthRefreshJob(admin, {
+        job,
+        status: transition.status,
+        phase: transition.phase,
+        scoreCursorUpdatedAt: transition.scoreCursorUpdatedAt,
+        scoreCursorId: transition.scoreCursorId,
+        dnaCursorId: transition.dnaCursorId,
+        error: null,
+      });
+      return {
+        ok: true,
+        job_id: job.job_id,
+        job_status: transition.status,
+        ...transition.result,
+      };
+    } catch (jobError) {
+      const message = jobError instanceof Error
+        ? jobError.message
+        : String(jobError);
+      const terminal = job.failure_count + 1 >= 5;
+      const checkpoint = jobError instanceof HealthJobSliceError
+        ? jobError.checkpoint
+        : {
+          scoreCursorUpdatedAt: job.score_cursor_updated_at,
+          scoreCursorId: job.score_cursor_id,
+          dnaCursorId: job.dna_cursor_id,
+        };
+      await completeHealthRefreshJob(admin, {
+        job,
+        status: terminal ? "failed" : "queued",
+        phase: job.phase,
+        scoreCursorUpdatedAt: checkpoint.scoreCursorUpdatedAt,
+        scoreCursorId: checkpoint.scoreCursorId,
+        dnaCursorId: checkpoint.dnaCursorId,
+        error: message,
+      });
+      return {
+        ok: false,
+        job_id: job.job_id,
+        workspace_id: job.workspace_id,
+        job_status: terminal ? "failed" : "queued",
+        error: message,
+      };
+    }
+  }));
+  const terminalFailures =
+    results.filter((result) => result.job_status === "failed").length;
+
+  return {
+    ok: terminalFailures === 0,
+    enqueued_workspace_count: typeof enqueued === "number" ? enqueued : 0,
+    claimed_workspace_count: jobs.length,
+    terminal_failure_count: terminalFailures,
+    workspaces: results,
   };
 }
 
@@ -428,16 +699,6 @@ export async function handleHealthScoreRefresh(
       return safeJsonError(selection.message, selection.status, origin);
     }
 
-    const workspaceIds = selection.mode === "single"
-      ? [selection.workspaceId]
-      : await discoverServiceWorkspaces(admin);
-    if (selection.mode === "service_cron" && workspaceIds.length === 0) {
-      return safeJsonOk(
-        { ok: true, workspaces: [], workspace_count: 0 },
-        origin,
-      );
-    }
-
     if (selection.mode === "single") {
       const result = req.method === "GET"
         ? await summarizeWorkspace(admin, selection.workspaceId)
@@ -449,30 +710,8 @@ export async function handleHealthScoreRefresh(
       return safeJsonOk(result, origin);
     }
 
-    const results: Array<Record<string, unknown>> = [];
-    let failed = 0;
-    for (const workspaceId of workspaceIds) {
-      try {
-        results.push(await refreshWorkspace(admin, workspaceId, dependencies));
-      } catch (error) {
-        failed++;
-        results.push({
-          ok: false,
-          workspace_id: workspaceId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-    return safeJsonOk(
-      {
-        ok: failed === 0,
-        workspace_count: workspaceIds.length,
-        failed_workspace_count: failed,
-        workspaces: results,
-      },
-      origin,
-      failed === 0 ? 200 : 500,
-    );
+    const result = await runHealthRefreshCronBatch(admin, dependencies);
+    return safeJsonOk(result, origin, result.ok === true ? 200 : 500);
   } catch (error) {
     if (error instanceof SyntaxError) {
       return safeJsonError("Request body must be valid JSON", 400, origin);

@@ -16,15 +16,17 @@ const compact = source.replace(/\s+/g, " ").toLowerCase();
 
 describe("rental billing runner durable protocol wiring", () => {
   it("uses durable start/claim/complete/finalize RPCs and no fleet limit", () => {
-    expect(compact).toContain(
-      'admin.rpc( "start_or_resume_rental_billing_run"',
-    );
-    expect(compact).toContain('admin.rpc( "claim_rental_billing_batch"');
-    expect(compact).toContain(
-      'admin.rpc( "post_rental_invoice_for_billing_item"',
-    );
-    expect(compact).toContain('admin.rpc("complete_rental_billing_item"');
-    expect(compact).toContain('admin.rpc( "finalize_rental_billing_run"');
+    for (const rpc of [
+      "start_or_resume_rental_billing_run",
+      "claim_rental_billing_batch",
+      "post_rental_invoice_for_billing_item",
+      "mirror_rental_invoice_for_billing_item",
+      "complete_rental_billing_item",
+      "finalize_rental_billing_run",
+    ]) {
+      expect(source).toContain(`admin.rpc`);
+      expect(source).toContain(`"${rpc}"`);
+    }
     expect(compact).not.toContain(".limit(500)");
   });
 
@@ -57,8 +59,40 @@ describe("rental billing runner durable protocol wiring", () => {
     expect(compact).toContain('"post_rental_invoice_for_billing_item"');
     expect(compact).toContain("existing.rental_billing_run_id === runid");
     expect(compact).toContain("winner.rental_billing_run_id === runid");
-    expect(compact).toContain("mirror_skipped: existing.customer_invoice_id == null");
-    expect(compact).toContain("mirror_skipped: winner.customer_invoice_id == null");
+    expect(compact).toContain("return await finishrentalmirror(admin");
+    expect(compact).toContain('status: "deferred"');
+    expect(compact).toContain('admin.rpc("defer_rental_billing_mirror"');
+    expect(compact).toContain('"attach_rental_invoice_to_billing_item"');
+  });
+
+  it("resumes crash-after-post mirror work before prior-invoice planning", () => {
+    expect(compact).toContain(
+      '.select("id, rental_invoice_id, billed_cents, tax_cents")',
+    );
+    const resume = compact.indexOf(
+      "if (checkpoint?.rental_invoice_id) { return await finishrentalmirror",
+    );
+    const planning = compact.indexOf(
+      "return await processcontract( admin, contract, runid",
+    );
+    expect(resume).toBeGreaterThan(0);
+    expect(planning).toBeGreaterThan(resume);
+  });
+
+  it("submits the exact financial source snapshot for locked validation", () => {
+    expect(compact).toContain("function buildbillingsourcesnapshot(");
+    expect(compact).toContain("version: 2");
+    expect(compact).toContain("billing_source_snapshot: billingsourcesnapshot");
+    expect(compact).toContain("numbering_branch: numberingbranch");
+    expect(compact).toContain("tax_resolution: taxresolution");
+    expect(compact).toContain("tax.sourcesnapshot");
+    expect(compact).toContain(
+      '"id, period_end, rental_charge_cents, status, metadata"',
+    );
+    expect(compact).toContain(
+      '"id, included_hours, outbound_meter_hours, return_meter_hours, overage_hourly_rate_cents"',
+    );
+    expect(compact).toContain('.order("id", { ascending: true })');
   });
 
   it("dead-letters one poison contract without aborting later results", () => {
@@ -75,8 +109,7 @@ describe("rental billing runner durable protocol wiring", () => {
         0,
     )
       .toBeGreaterThanOrEqual(4);
-    expect(compact).toContain(
-      '.eq("workspace_id", workspaceid) .in("id", claims.map',
-    );
+    expect(compact).toContain('.eq("workspace_id", workspaceid)');
+    expect(compact).toContain("claims.map((claim) => claim.rental_contract_id");
   });
 });

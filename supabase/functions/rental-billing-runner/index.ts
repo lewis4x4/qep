@@ -7,10 +7,11 @@
  * bounded durable batch; continuation requests drain the stable run cohort
  * without holding one HTTP request open for the whole fleet.
  *
- * Per contract: plan → write rental_invoices (per-workspace RENT- number,
- * posted) → mirror an AR-facing customer_invoices row when a portal identity
- * exists (counter-only contracts record a mirror-skip note until the AR
- * id-space unification) → final invoices settle the deposit in metadata.
+ * Per contract: plan → validate the exact financial source snapshot under
+ * database locks → write rental_invoices (per-workspace RENT- number, posted)
+ * → atomically persist the AR header, line, rental backlink, and GL outbox →
+ * final invoices settle the deposit in metadata. A posted rental invoice with
+ * incomplete downstream work remains a reclaimable, nonterminal queue item.
  * Idempotent: an active (contract, period_start, period_end) unique index
  * arbitrates concurrent workers after the read-before-write fast path.
  * Per-contract failures dead-letter to
@@ -35,9 +36,10 @@ import {
 } from "../../../shared/rental-billing-core.ts";
 import {
   mintRentalInvoiceNumber,
-  mirrorRentalInvoiceToAR,
+  type NumberingBranch,
   resolveNumberingBranch,
   resolveRentalTax,
+  type RentalTaxSourceSnapshot,
 } from "../_shared/rental-finance.ts";
 import { clampInteger, mapWithConcurrency } from "./batch-core.ts";
 
@@ -61,15 +63,23 @@ type ClaimedItem = {
   claim_attempt_count: number;
 };
 
+type ClaimedItemCheckpoint = {
+  id: string;
+  rental_invoice_id: string | null;
+  billed_cents: number;
+  tax_cents: number;
+};
+
 type ItemOutcome =
   | { status: "skipped"; reason: string }
+  | { status: "deferred"; reason: string; invoice_id: string | null }
   | {
-    status: "invoiced";
-    invoice_id: string;
-    billed_cents: number;
-    tax_cents: number;
-    mirror_skipped: boolean;
-  };
+      status: "invoiced";
+      invoice_id: string;
+      billed_cents: number;
+      tax_cents: number;
+      mirror_skipped: boolean;
+    };
 
 type RunTotals = {
   billing_run_id: string;
@@ -90,11 +100,158 @@ type RunTotals = {
 };
 
 function firstRow<T>(data: T[] | T | null): T | null {
-  return Array.isArray(data) ? data[0] ?? null : data;
+  return Array.isArray(data) ? (data[0] ?? null) : data;
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+type BillingSourceSnapshot = {
+  version: 2;
+  contract: Record<string, unknown>;
+  lines: Record<string, unknown>[];
+  returns: Record<string, unknown>[];
+  prior_invoices: Record<string, unknown>[];
+  numbering_branch: NumberingBranch | null;
+  tax_resolution: RentalTaxSourceSnapshot;
+};
+
+function buildBillingSourceSnapshot(
+  contract: RentalContractRow,
+  lines: Array<Record<string, unknown>>,
+  returns: Array<Record<string, unknown>>,
+  priorInvoices: Array<Record<string, unknown>>,
+  numberingBranch: NumberingBranch | null,
+  taxResolution: RentalTaxSourceSnapshot,
+): BillingSourceSnapshot {
+  return {
+    version: 2,
+    contract: {
+      id: contract.id,
+      workspace_id: contract.workspace_id,
+      contract_number: contract.contract_number,
+      contract_type: contract.contract_type,
+      lifecycle_state: contract.lifecycle_state,
+      on_rent_at: contract.on_rent_at,
+      off_rent_at: contract.off_rent_at,
+      returned_at: contract.returned_at,
+      agreed_daily_rate: contract.agreed_daily_rate,
+      agreed_weekly_rate: contract.agreed_weekly_rate,
+      agreed_monthly_rate: contract.agreed_monthly_rate,
+      delivery_fee_cents: contract.delivery_fee_cents,
+      pickup_fee_cents: contract.pickup_fee_cents,
+      damage_waiver_accepted: contract.damage_waiver_accepted,
+      damage_waiver_rate_pct: contract.damage_waiver_rate_pct,
+      deposit_status: contract.deposit_status,
+      deposit_amount: contract.deposit_amount,
+      portal_customer_id: contract.portal_customer_id,
+      qrm_company_id: contract.qrm_company_id,
+      branch_id: contract.branch_id,
+      ship_to_address_id: contract.ship_to_address_id,
+      tax_sourcing_method: contract.tax_sourcing_method,
+    },
+    lines: lines.map((line) => ({
+      id: line.id,
+      included_hours: line.included_hours,
+      outbound_meter_hours: line.outbound_meter_hours,
+      return_meter_hours: line.return_meter_hours,
+      overage_hourly_rate_cents: line.overage_hourly_rate_cents,
+    })),
+    returns: returns.map((row) => ({
+      id: row.id,
+      workspace_id: row.workspace_id,
+      rental_contract_id: row.rental_contract_id,
+      equipment_id: row.equipment_id,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      deleted_at: row.deleted_at,
+      fuel_charge_cents: row.fuel_charge_cents,
+      cleaning_charge_cents: row.cleaning_charge_cents,
+      damage_charge_cents: row.damage_charge_cents,
+      environmental_fee_cents: row.environmental_fee_cents,
+      damage_disposition: row.damage_disposition,
+    })),
+    prior_invoices: priorInvoices.map((row) => ({
+      id: row.id,
+      period_end: row.period_end,
+      rental_charge_cents: row.rental_charge_cents,
+      status: row.status,
+      kind: (row.metadata as { kind?: string } | null)?.kind ?? null,
+    })),
+    numbering_branch: numberingBranch,
+    tax_resolution: taxResolution,
+  };
+}
+
+async function deferBillingItem(
+  admin: AdminClient,
+  itemId: string,
+  workerToken: string,
+  detail: string,
+): Promise<void> {
+  const { data, error } = await admin.rpc("defer_rental_billing_mirror", {
+    p_item_id: itemId,
+    p_worker_token: workerToken,
+    p_error_detail: detail,
+    p_retry_seconds: 300,
+  });
+  if (error || data !== true) {
+    throw new Error(
+      `billing retry checkpoint failed: ${error?.message ?? "lease lost"}`,
+    );
+  }
+}
+
+async function finishRentalMirror(
+  admin: AdminClient,
+  input: {
+    itemId: string;
+    workerToken: string;
+    invoiceId: string;
+    billedCents: number;
+    taxCents: number;
+  },
+): Promise<ItemOutcome> {
+  const { error } = await admin.rpc("mirror_rental_invoice_for_billing_item", {
+    p_item_id: input.itemId,
+    p_worker_token: input.workerToken,
+  });
+  if (error) {
+    const detail = `AR mirror retry pending: ${error.message}`;
+    await deferBillingItem(admin, input.itemId, input.workerToken, detail);
+    return { status: "deferred", reason: detail, invoice_id: input.invoiceId };
+  }
+  return {
+    status: "invoiced",
+    invoice_id: input.invoiceId,
+    billed_cents: input.billedCents,
+    tax_cents: input.taxCents,
+    mirror_skipped: false,
+  };
+}
+
+async function attachExistingRentalInvoice(
+  admin: AdminClient,
+  itemId: string,
+  workerToken: string,
+  invoiceId: string,
+): Promise<void> {
+  const { data, error } = await admin.rpc(
+    "attach_rental_invoice_to_billing_item",
+    {
+      p_item_id: itemId,
+      p_worker_token: workerToken,
+      p_rental_invoice_id: invoiceId,
+    },
+  );
+  if (error || data !== true) {
+    throw new Error(
+      `billing invoice recovery attach failed: ${
+        error?.message ?? "lease lost"
+      }`,
+    );
+  }
 }
 
 async function completeItem(
@@ -110,9 +267,8 @@ async function completeItem(
     p_invoice_id: outcome.status === "invoiced" ? outcome.invoice_id : null,
     p_billed_cents: outcome.status === "invoiced" ? outcome.billed_cents : 0,
     p_tax_cents: outcome.status === "invoiced" ? outcome.tax_cents : 0,
-    p_mirror_skipped: outcome.status === "invoiced"
-      ? outcome.mirror_skipped
-      : false,
+    p_mirror_skipped:
+      outcome.status === "invoiced" ? outcome.mirror_skipped : false,
     p_error_detail: outcome.status === "invoiced" ? null : outcome.reason,
   });
   if (error) throw new Error(`billing checkpoint failed: ${error.message}`);
@@ -129,11 +285,12 @@ async function processContract(
 ): Promise<ItemOutcome> {
   const { data: priorRows, error: priorError } = await admin
     .from("rental_invoices")
-    .select("period_end, rental_charge_cents, status, metadata")
+    .select("id, period_end, rental_charge_cents, status, metadata")
     .eq("workspace_id", contract.workspace_id)
     .eq("rental_contract_id", contract.id)
     .is("deleted_at", null)
-    .not("status", "in", "(void,reversed)");
+    .not("status", "in", "(void,reversed)")
+    .order("id", { ascending: true });
   if (priorError) {
     throw new Error(`prior invoice lookup failed: ${priorError.message}`);
   }
@@ -159,11 +316,12 @@ async function processContract(
   const { data: lines, error: linesError } = await admin
     .from("rental_contract_lines")
     .select(
-      "included_hours, outbound_meter_hours, return_meter_hours, overage_hourly_rate_cents",
+      "id, included_hours, outbound_meter_hours, return_meter_hours, overage_hourly_rate_cents",
     )
     .eq("workspace_id", contract.workspace_id)
     .eq("rental_contract_id", contract.id)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .order("id", { ascending: true });
   if (linesError) {
     throw new Error(`contract line lookup failed: ${linesError.message}`);
   }
@@ -178,7 +336,8 @@ async function processContract(
     )
     .eq("rental_contract_id", contract.id)
     .eq("workspace_id", contract.workspace_id)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .order("id", { ascending: true });
   if (returnRowsError) {
     throw new Error(`return charge lookup failed: ${returnRowsError.message}`);
   }
@@ -227,13 +386,19 @@ async function processContract(
         Number(existing.taxable_amount_cents ?? existing.total_cents ?? 0) -
           (existing.taxable_amount_cents == null ? taxCents : 0),
       );
-      return {
-        status: "invoiced",
-        invoice_id: String(existing.id),
-        billed_cents: billedCents,
-        tax_cents: taxCents,
-        mirror_skipped: existing.customer_invoice_id == null,
-      };
+      await attachExistingRentalInvoice(
+        admin,
+        itemId,
+        workerToken,
+        String(existing.id),
+      );
+      return await finishRentalMirror(admin, {
+        itemId,
+        workerToken,
+        invoiceId: String(existing.id),
+        billedCents,
+        taxCents,
+      });
     }
     return { status: "skipped", reason: "contract period already invoiced" };
   }
@@ -258,6 +423,14 @@ async function processContract(
     branch,
     periodLabel,
   );
+  const billingSourceSnapshot = buildBillingSourceSnapshot(
+    contract,
+    (lines ?? []) as Array<Record<string, unknown>>,
+    (returnRows ?? []) as Array<Record<string, unknown>>,
+    (priorRows ?? []) as Array<Record<string, unknown>>,
+    branch,
+    tax.sourceSnapshot,
+  );
   const totalCents = c.subtotal_cents + tax.taxCents;
   const depositCents =
     plan.kind === "final" && contract.deposit_status === "paid"
@@ -271,6 +444,7 @@ async function processContract(
       p_item_id: itemId,
       p_worker_token: workerToken,
       p_invoice: {
+        billing_source_snapshot: billingSourceSnapshot,
         workspace_id: contract.workspace_id,
         rental_contract_id: contract.id,
         rental_billing_run_id: runId,
@@ -310,16 +484,17 @@ async function processContract(
           tax_profile: contract.tax_sourcing_method ?? "destination_ship_to",
           ...(plan.kind === "final"
             ? {
-              source_return_ids: returnAggregation.billed_return_ids,
-              return_charge_audit: {
-                aggregation_strategy: "latest_assessment_per_equipment_v1",
-                selected_return_ids: returnAggregation.selected_return_ids,
-                superseded_return_ids: returnAggregation.superseded_return_ids,
-                legacy_null_equipment_return_id:
-                  returnAggregation.legacy_null_equipment_return_id,
-                sources: returnAggregation.sources,
-              },
-            }
+                source_return_ids: returnAggregation.billed_return_ids,
+                return_charge_audit: {
+                  aggregation_strategy: "latest_assessment_per_equipment_v1",
+                  selected_return_ids: returnAggregation.selected_return_ids,
+                  superseded_return_ids:
+                    returnAggregation.superseded_return_ids,
+                  legacy_null_equipment_return_id:
+                    returnAggregation.legacy_null_equipment_return_id,
+                  sources: returnAggregation.sources,
+                },
+              }
             : {}),
         },
       },
@@ -350,13 +525,19 @@ async function processContract(
             Number(winner.taxable_amount_cents ?? winner.total_cents ?? 0) -
               (winner.taxable_amount_cents == null ? taxCents : 0),
           );
-          return {
-            status: "invoiced",
-            invoice_id: String(winner.id),
-            billed_cents: billedCents,
-            tax_cents: taxCents,
-            mirror_skipped: winner.customer_invoice_id == null,
-          };
+          await attachExistingRentalInvoice(
+            admin,
+            itemId,
+            workerToken,
+            String(winner.id),
+          );
+          return await finishRentalMirror(admin, {
+            itemId,
+            workerToken,
+            invoiceId: String(winner.id),
+            billedCents,
+            taxCents,
+          });
         }
         return {
           status: "skipped",
@@ -364,7 +545,12 @@ async function processContract(
         };
       }
     }
-    throw new Error(invoiceError?.message ?? "invoice insert failed");
+    const detail = invoiceError?.message ?? "invoice insert failed";
+    if (detail.includes("RENTAL_BILLING_SOURCE_STALE")) {
+      await deferBillingItem(admin, itemId, workerToken, detail);
+      return { status: "deferred", reason: detail, invoice_id: null };
+    }
+    throw new Error(detail);
   }
 
   if (tax.warning) {
@@ -385,94 +571,13 @@ async function processContract(
     });
   }
 
-  let portalCustomerId: string | null = null;
-  let crmCompanyId: string | null = contract.qrm_company_id ?? null;
-  if (contract.portal_customer_id) {
-    const { data: pc } = await admin
-      .from("portal_customers")
-      .select("id, crm_company_id")
-      .eq("id", contract.portal_customer_id)
-      .maybeSingle();
-    if (pc) {
-      portalCustomerId = pc.id as string;
-      crmCompanyId = crmCompanyId ??
-        ((pc.crm_company_id as string | null) ?? null);
-    }
-  }
-
-  let mirrorSkipped = false;
-  if (!portalCustomerId && !crmCompanyId) {
-    mirrorSkipped = true;
-    await admin.rpc("enqueue_exception", {
-      p_source: "rental_billing_failed",
-      p_title:
-        `Rental invoice ${invoiceNumber} has no AR anchor — not mirrored`,
-      p_severity: "error",
-      p_detail: `Contract ${
-        contract.contract_number ?? contract.id
-      } carries neither portal_customer_id nor qrm_company_id; the invoice posted in rental_invoices but is invisible to AR aging until an anchor is set and the mirror is backfilled.`,
-      p_payload: {
-        rental_invoice_id: invoice.id,
-        rental_contract_id: contract.id,
-        run_id: runId,
-      },
-      p_entity_table: "rental_invoices",
-      p_entity_id: invoice.id,
-    });
-  } else {
-    try {
-      const mirror = await mirrorRentalInvoiceToAR(admin, {
-        workspaceId: contract.workspace_id,
-        rentalInvoiceId: invoice.id as string,
-        invoiceNumber,
-        description: `Rental ${plan.kind} invoice · ${
-          contract.contract_number ?? contract.id
-        } · ${periodLabel}`,
-        portalCustomerId,
-        crmCompanyId,
-        amountDollars: c.subtotal_cents / 100,
-        taxDollars: tax.taxCents / 100,
-        amountPaidDollars: depositApplied / 100,
-        dueDate: today,
-        branchSlug: branch?.slug ?? null,
-        tax,
-        enqueueGl: true,
-      });
-      for (const warning of mirror.warnings) {
-        console.error(`rental mirror warning (${invoiceNumber}):`, warning);
-      }
-    } catch (error) {
-      // The rental invoice is already posted and remains the money truth. A
-      // downstream AR mirror outage must be loud but cannot relabel that real
-      // invoice as an unissued/failed item (or invite a duplicate retry).
-      mirrorSkipped = true;
-      const detail = `AR mirror failed after rental invoice posted: ${
-        errorMessage(error)
-      }`;
-      console.error(`rental mirror failed (${invoiceNumber}):`, detail);
-      await admin.rpc("enqueue_exception", {
-        p_source: "rental_billing_failed",
-        p_title: `Rental invoice ${invoiceNumber} AR mirror failed`,
-        p_severity: "error",
-        p_detail: detail,
-        p_payload: {
-          rental_invoice_id: invoice.id,
-          rental_contract_id: contract.id,
-          run_id: runId,
-        },
-        p_entity_table: "rental_invoices",
-        p_entity_id: invoice.id,
-      });
-    }
-  }
-
-  return {
-    status: "invoiced",
-    invoice_id: invoice.id as string,
-    billed_cents: c.subtotal_cents,
-    tax_cents: tax.taxCents,
-    mirror_skipped: mirrorSkipped,
-  };
+  return await finishRentalMirror(admin, {
+    itemId,
+    workerToken,
+    invoiceId: invoice.id as string,
+    billedCents: c.subtotal_cents,
+    taxCents: tax.taxCents,
+  });
 }
 
 function scheduleContinuation(
@@ -501,24 +606,28 @@ function scheduleContinuation(
       lease_seconds: input.leaseSeconds,
       auto_continue: true,
     }),
-  }).then(async (response) => {
-    if (!response.ok) {
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        console.error(
+          "rental billing continuation failed:",
+          response.status,
+          await response.text(),
+        );
+      }
+    })
+    .catch((error) => {
       console.error(
-        "rental billing continuation failed:",
-        response.status,
-        await response.text(),
+        "rental billing continuation dispatch failed:",
+        errorMessage(error),
       );
-    }
-  }).catch((error) => {
-    console.error(
-      "rental billing continuation dispatch failed:",
-      errorMessage(error),
-    );
-  });
+    });
 
-  const runtime = (globalThis as typeof globalThis & {
-    EdgeRuntime?: { waitUntil(promise: Promise<unknown>): void };
-  }).EdgeRuntime;
+  const runtime = (
+    globalThis as typeof globalThis & {
+      EdgeRuntime?: { waitUntil(promise: Promise<unknown>): void };
+    }
+  ).EdgeRuntime;
   if (runtime?.waitUntil) {
     runtime.waitUntil(continuation);
     return true;
@@ -576,18 +685,22 @@ Deno.serve(async (req) => {
       typeof body.workspace_id === "string" && body.workspace_id.trim()
         ? body.workspace_id.trim()
         : "default";
-    const requestedRunId = typeof body.run_id === "string" && body.run_id.trim()
-      ? body.run_id.trim()
-      : null;
+    const requestedRunId =
+      typeof body.run_id === "string" && body.run_id.trim()
+        ? body.run_id.trim()
+        : null;
     const batchSize = clampInteger(body.batch_size, 25, 1, 100);
     const concurrency = clampInteger(body.concurrency, 4, 1, 8);
     const leaseSeconds = clampInteger(body.lease_seconds, 120, 30, 600);
     const autoContinue = body.auto_continue !== false;
     const forceNew = requestedRunId == null && body.force_new === true;
     const contractIds = Array.isArray(body.contract_ids)
-      ? body.contract_ids.filter((value): value is string =>
-        typeof value === "string" && value.trim().length > 0
-      ).map((value) => value.trim())
+      ? body.contract_ids
+          .filter(
+            (value): value is string =>
+              typeof value === "string" && value.trim().length > 0,
+          )
+          .map((value) => value.trim())
       : null;
     if (contractIds && contractIds.length > 2_000) {
       return safeJsonError("contract_ids is limited to 2000 rows", 400, origin);
@@ -633,26 +746,64 @@ Deno.serve(async (req) => {
     const claims = (claimData ?? []) as ClaimedItem[];
 
     let contracts: RentalContractRow[] = [];
+    let itemCheckpoints: ClaimedItemCheckpoint[] = [];
     if (claims.length > 0) {
-      const { data, error } = await admin
-        .from("rental_contracts")
-        .select(
-          "id, workspace_id, contract_number, contract_type, lifecycle_state, on_rent_at, off_rent_at, returned_at, agreed_daily_rate, agreed_weekly_rate, agreed_monthly_rate, delivery_fee_cents, pickup_fee_cents, damage_waiver_accepted, damage_waiver_rate_pct, deposit_status, deposit_amount, portal_customer_id, qrm_company_id, branch_id, ship_to_address_id, tax_sourcing_method",
-        )
-        .eq("workspace_id", workspaceId)
-        .in("id", claims.map((claim) => claim.rental_contract_id))
-        .is("deleted_at", null);
-      if (error) return safeJsonError(error.message, 500, origin);
-      contracts = (data ?? []) as RentalContractRow[];
+      const [contractResult, checkpointResult] = await Promise.all([
+        admin
+          .from("rental_contracts")
+          .select(
+            "id, workspace_id, contract_number, contract_type, lifecycle_state, on_rent_at, off_rent_at, returned_at, agreed_daily_rate, agreed_weekly_rate, agreed_monthly_rate, delivery_fee_cents, pickup_fee_cents, damage_waiver_accepted, damage_waiver_rate_pct, deposit_status, deposit_amount, portal_customer_id, qrm_company_id, branch_id, ship_to_address_id, tax_sourcing_method",
+          )
+          .eq("workspace_id", workspaceId)
+          .in(
+            "id",
+            claims.map((claim) => claim.rental_contract_id),
+          )
+          .is("deleted_at", null),
+        admin
+          .from("rental_billing_run_items")
+          .select("id, rental_invoice_id, billed_cents, tax_cents")
+          .eq("rental_billing_run_id", runId)
+          .eq("worker_token", workerToken)
+          .in(
+            "id",
+            claims.map((claim) => claim.item_id),
+          ),
+      ]);
+      if (contractResult.error) {
+        return safeJsonError(contractResult.error.message, 500, origin);
+      }
+      if (checkpointResult.error) {
+        return safeJsonError(checkpointResult.error.message, 500, origin);
+      }
+      contracts = (contractResult.data ?? []) as RentalContractRow[];
+      itemCheckpoints = (checkpointResult.data ??
+        []) as ClaimedItemCheckpoint[];
     }
     const contractsById = new Map(
       contracts.map((contract) => [contract.id, contract]),
+    );
+    const checkpointsById = new Map(
+      itemCheckpoints.map((checkpoint) => [checkpoint.id, checkpoint]),
     );
 
     const results = await mapWithConcurrency(
       claims,
       Math.min(concurrency, Math.max(claims.length, 1)),
       async (claim): Promise<ItemOutcome> => {
+        // Crash-after-post recovery must run before prior-invoice planning:
+        // the posted row is itself part of prior history and can make the
+        // planner return `nothing due`, which would strand the AR mirror.
+        const checkpoint = checkpointsById.get(claim.item_id);
+        if (checkpoint?.rental_invoice_id) {
+          return await finishRentalMirror(admin, {
+            itemId: claim.item_id,
+            workerToken,
+            invoiceId: checkpoint.rental_invoice_id,
+            billedCents: Math.max(0, Number(checkpoint.billed_cents ?? 0)),
+            taxCents: Math.max(0, Number(checkpoint.tax_cents ?? 0)),
+          });
+        }
         const contract = contractsById.get(claim.rental_contract_id);
         if (!contract) {
           return {
@@ -677,6 +828,7 @@ Deno.serve(async (req) => {
       invoiced: 0,
       skipped: 0,
       failed: 0,
+      deferred: 0,
       mirror_skipped: 0,
       total_billed_cents: 0,
       total_tax_cents: 0,
@@ -695,11 +847,49 @@ Deno.serve(async (req) => {
           batch.total_billed_cents += outcome.billed_cents;
           batch.total_tax_cents += outcome.tax_cents;
           if (outcome.mirror_skipped) batch.mirror_skipped++;
-        } else {
+          // m815 atomically terminalizes the item with its AR graph; a second
+          // completion RPC would correctly see the cleared lease as stale.
+          continue;
+        } else if (outcome.status === "skipped") {
           batch.skipped++;
+        } else {
+          batch.deferred++;
+          console.error("rental billing item deferred:", outcome.reason);
+          const entityTable = outcome.invoice_id
+            ? "rental_invoices"
+            : "rental_contracts";
+          const entityId = outcome.invoice_id ?? claim.rental_contract_id;
+          const { error: retryExceptionError } = await admin.rpc(
+            "enqueue_exception",
+            {
+              p_source: "rental_billing_failed",
+              p_title: outcome.invoice_id
+                ? "Rental AR mirror deferred for durable retry"
+                : "Rental billing source changed during posting",
+              p_severity: "error",
+              p_detail: outcome.reason,
+              p_payload: {
+                rental_invoice_id: outcome.invoice_id,
+                rental_contract_id: claim.rental_contract_id,
+                run_id: runId,
+                item_id: claim.item_id,
+              },
+              p_entity_table: entityTable,
+              p_entity_id: entityId,
+            },
+          );
+          if (retryExceptionError) {
+            console.error(
+              "rental billing retry exception failed:",
+              retryExceptionError.message,
+            );
+          }
+          continue;
         }
         try {
-          if (!await completeItem(admin, claim.item_id, workerToken, outcome)) {
+          if (
+            !(await completeItem(admin, claim.item_id, workerToken, outcome))
+          ) {
             batch.stale_completions++;
           }
         } catch (error) {
@@ -736,10 +926,10 @@ Deno.serve(async (req) => {
       }
       try {
         if (
-          !await completeItem(admin, claim.item_id, workerToken, {
+          !(await completeItem(admin, claim.item_id, workerToken, {
             status: "failed",
             reason: detail,
-          })
+          }))
         ) {
           batch.stale_completions++;
         }
@@ -766,33 +956,36 @@ Deno.serve(async (req) => {
     }
 
     const hasMore = totals.pending_count + totals.processing_count > 0;
-    const continuationScheduled = autoContinue && totals.claimable_count > 0
-      ? scheduleContinuation(req, {
-        runId,
-        workspaceId,
-        batchSize,
-        concurrency,
-        leaseSeconds,
-      })
-      : false;
+    const continuationScheduled =
+      autoContinue && totals.claimable_count > 0
+        ? scheduleContinuation(req, {
+            runId,
+            workspaceId,
+            batchSize,
+            concurrency,
+            leaseSeconds,
+          })
+        : false;
 
-    return safeJsonOk({
-      run_id: runId,
-      protocol: "durable_batch_v1",
-      created_new: run.created_new,
-      status: totals.run_status,
-      has_more: hasMore,
-      continuation_scheduled: continuationScheduled,
-      batch: {
-        ...batch,
-        claimed: claims.length,
-        concurrency: claims.length === 0
-          ? 0
-          : Math.min(concurrency, claims.length),
-        duration_ms: Math.round(performance.now() - batchStartedAt),
+    return safeJsonOk(
+      {
+        run_id: runId,
+        protocol: "durable_batch_v1",
+        created_new: run.created_new,
+        status: totals.run_status,
+        has_more: hasMore,
+        continuation_scheduled: continuationScheduled,
+        batch: {
+          ...batch,
+          claimed: claims.length,
+          concurrency:
+            claims.length === 0 ? 0 : Math.min(concurrency, claims.length),
+          duration_ms: Math.round(performance.now() - batchStartedAt),
+        },
+        totals,
       },
-      totals,
-    }, origin);
+      origin,
+    );
   } catch (err) {
     captureEdgeException(err, { fn: "rental-billing-runner", req });
     console.error("rental-billing-runner:", err);

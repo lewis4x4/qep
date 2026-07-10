@@ -23,6 +23,14 @@ export interface DgeRefreshWorkerDependencies {
   runEconomicSyncRefresh: typeof runEconomicSyncRefresh;
 }
 
+export interface DgeRefreshWorkerOptions {
+  heartbeatIntervalMs?: number;
+  leaseSeconds?: number;
+}
+
+const DEFAULT_LEASE_SECONDS = 300;
+const DEFAULT_HEARTBEAT_INTERVAL_MS = 60_000;
+
 const defaultDependencies: DgeRefreshWorkerDependencies = {
   refreshCustomerProfileSnapshot,
   runMarketValuationRefresh,
@@ -53,13 +61,34 @@ async function completeRefreshJob(
   }
 }
 
+async function renewRefreshJobLease(
+  adminClient: SupabaseClient,
+  params: { jobId: string; leaseToken: string; leaseSeconds: number },
+): Promise<void> {
+  const { error } = await adminClient.rpc("renew_dge_refresh_job_lease", {
+    p_job_id: params.jobId,
+    p_lease_token: params.leaseToken,
+    p_lease_seconds: params.leaseSeconds,
+  });
+  if (error) {
+    throw new Error(
+      `DGE refresh job ${params.jobId} lease renewal failed: ${error.message}`,
+    );
+  }
+}
+
 export async function runNextDgeRefreshJob(
   adminClient: SupabaseClient,
   overrides: Partial<DgeRefreshWorkerDependencies> = {},
+  options: DgeRefreshWorkerOptions = {},
 ): Promise<Record<string, unknown>> {
   const dependencies = { ...defaultDependencies, ...overrides };
+  const leaseSeconds = Math.min(
+    Math.max(options.leaseSeconds ?? DEFAULT_LEASE_SECONDS, 60),
+    900,
+  );
   const { data, error } = await adminClient.rpc("claim_dge_refresh_job", {
-    p_lease_seconds: 75,
+    p_lease_seconds: leaseSeconds,
   });
 
   if (error) {
@@ -79,7 +108,29 @@ export async function runNextDgeRefreshJob(
     ? job.requested_by
     : null;
 
-  let result: Record<string, unknown>;
+  let result: Record<string, unknown> | undefined;
+  let executionError: unknown;
+  let heartbeatError: Error | null = null;
+  let heartbeatPromise: Promise<void> | null = null;
+  const heartbeatIntervalMs = Math.max(
+    options.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS,
+    1,
+  );
+  const heartbeatId = setInterval(() => {
+    if (heartbeatPromise || heartbeatError) return;
+    heartbeatPromise = renewRefreshJobLease(adminClient, {
+      jobId: job.job_id,
+      leaseToken: job.lease_token,
+      leaseSeconds,
+    }).catch((renewalError) => {
+      heartbeatError = renewalError instanceof Error
+        ? renewalError
+        : new Error(String(renewalError));
+    }).finally(() => {
+      heartbeatPromise = null;
+    });
+  }, heartbeatIntervalMs);
+
   try {
     if (job.job_type === "customer_profile_refresh") {
       result = await dependencies.refreshCustomerProfileSnapshot(adminClient, {
@@ -109,7 +160,28 @@ export async function runNextDgeRefreshJob(
       });
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    executionError = error;
+  } finally {
+    clearInterval(heartbeatId);
+    const pendingHeartbeat = heartbeatPromise;
+    if (pendingHeartbeat) await pendingHeartbeat;
+  }
+
+  if (heartbeatError) throw heartbeatError;
+
+  // Extend once more immediately before the terminal write. This closes the
+  // race between the last periodic heartbeat and completion, while the
+  // database rejects any stale token instead of resurrecting an expired lease.
+  await renewRefreshJobLease(adminClient, {
+    jobId: job.job_id,
+    leaseToken: job.lease_token,
+    leaseSeconds,
+  });
+
+  if (executionError) {
+    const message = executionError instanceof Error
+      ? executionError.message
+      : String(executionError);
     try {
       await completeRefreshJob(adminClient, {
         jobId: job.job_id,
@@ -132,6 +204,10 @@ export async function runNextDgeRefreshJob(
       job_type: job.job_type,
       error: message,
     };
+  }
+
+  if (!result) {
+    throw new Error(`DGE refresh job ${job.job_id} returned no result`);
   }
 
   // Completion is intentionally outside the execution catch. If the durable

@@ -98,8 +98,8 @@ async function cohort(runId) {
   const { data, error } = await admin
     .from("rental_contracts")
     .select("id")
-    .like("dealer_notes", `LOADTEST:${runId}:%`)
-    .is("deleted_at", null);
+    .eq("workspace_id", "default")
+    .like("dealer_notes", `LOADTEST:${runId}:%`);
   if (error) {
     console.error(error.message);
     process.exit(1);
@@ -165,6 +165,30 @@ async function callRunner(body) {
   return { payload, durationMs: performance.now() - started };
 }
 
+async function tagBillingRunForCleanup(billingRunId, cohortRunId) {
+  const { data: run, error: lookupError } = await admin
+    .from("rental_billing_runs")
+    .select("metadata")
+    .eq("workspace_id", "default")
+    .eq("id", billingRunId)
+    .single();
+  if (lookupError || !run) {
+    throw new Error(
+      `load run cleanup-tag lookup failed: ${lookupError?.message ?? "run missing"}`,
+    );
+  }
+  const { error: updateError } = await admin
+    .from("rental_billing_runs")
+    .update({
+      metadata: { ...(run.metadata ?? {}), load_test_cohort_id: cohortRunId },
+    })
+    .eq("workspace_id", "default")
+    .eq("id", billingRunId);
+  if (updateError) {
+    throw new Error(`load run cleanup-tag update failed: ${updateError.message}`);
+  }
+}
+
 async function drain(runId, workerCount, batchSize) {
   const ids = await cohort(runId);
   if (ids.length <= 500) {
@@ -192,6 +216,7 @@ async function drain(runId, workerCount, batchSize) {
   samples.push(first);
   const billingRunId = first.payload.run_id;
   if (!billingRunId) throw new Error("runner did not return run_id");
+  await tagBillingRunForCleanup(billingRunId, runId);
 
   let status = first.payload.status;
   let round = 0;
@@ -207,7 +232,8 @@ async function drain(runId, workerCount, batchSize) {
           batch_size: batch,
           concurrency: 4,
           auto_continue: false,
-        })),
+        }),
+      ),
     );
     samples.push(...roundSamples);
 
@@ -227,8 +253,8 @@ async function drain(runId, workerCount, batchSize) {
 
   const wallMs = performance.now() - wallStarted;
   const items = await runItemsFor(ids, billingRunId);
-  const nonTerminal = items.filter((item) =>
-    !["invoiced", "skipped", "failed"].includes(item.status)
+  const nonTerminal = items.filter(
+    (item) => !["invoiced", "skipped", "failed"].includes(item.status),
   );
   const failedItems = items.filter((item) => item.status === "failed");
   const invoicesBeforeReplay = await invoicesFor(ids);
@@ -295,7 +321,8 @@ async function drain(runId, workerCount, batchSize) {
   };
   console.log(JSON.stringify(evidence, null, 2));
 
-  const ok = items.length === ids.length &&
+  const ok =
+    items.length === ids.length &&
     nonTerminal.length === 0 &&
     failedItems.length === 0 &&
     replay.payload.batch?.claimed === 0 &&
@@ -343,8 +370,8 @@ async function assertCorrect(runId) {
     `max ${Math.max(0, ...byContract.values())}`,
   );
 
-  const wrongAmount = invoices.filter((inv) =>
-    inv.total_cents !== EXPECTED_FIRST_CYCLE_CENTS
+  const wrongAmount = invoices.filter(
+    (inv) => inv.total_cents !== EXPECTED_FIRST_CYCLE_CENTS,
   );
   check(
     "all invoices at optimizer amount",
@@ -409,32 +436,309 @@ async function cleanup(runId) {
   const ids = await cohort(runId);
   const now = new Date().toISOString();
   const billingRunIds = new Set();
+  const rentalInvoiceIds = new Set();
+  const rentalInvoiceNumbers = new Set();
+  const customerInvoiceIds = new Set();
+
+  const requireSuccess = (label, result) => {
+    if (result.error) throw new Error(`${label}: ${result.error.message}`);
+    return result.data ?? [];
+  };
+
+  const taggedRuns = requireSuccess(
+    "load cleanup tagged-run lookup",
+    await admin
+      .from("rental_billing_runs")
+      .select("id")
+      .eq("workspace_id", "default")
+      .contains("metadata", { load_test_cohort_id: runId }),
+  );
+  for (const run of taggedRuns) billingRunIds.add(run.id);
+
   for (let i = 0; i < ids.length; i += 100) {
     const slice = ids.slice(i, i + 100);
-    const { data: items } = await admin
-      .from("rental_billing_run_items")
-      .select("rental_billing_run_id")
-      .in("rental_contract_id", slice);
-    for (const item of items ?? []) {
+    const items = requireSuccess(
+      "load cleanup billing-item lookup",
+      await admin
+        .from("rental_billing_run_items")
+        .select("rental_billing_run_id")
+        .in("rental_contract_id", slice),
+    );
+    for (const item of items) {
       billingRunIds.add(item.rental_billing_run_id);
     }
-    await admin.from("rental_invoices").update({ deleted_at: now }).in(
-      "rental_contract_id",
-      slice,
+
+    const invoices = requireSuccess(
+      "load cleanup rental-invoice lookup",
+      await admin
+        .from("rental_invoices")
+        .select(
+          "id, invoice_number, customer_invoice_id, rental_billing_run_id",
+        )
+        .in("rental_contract_id", slice),
     );
-    await admin.from("rental_contracts").update({ deleted_at: now }).in(
-      "id",
-      slice,
+    for (const invoice of invoices) {
+      rentalInvoiceIds.add(invoice.id);
+      rentalInvoiceNumbers.add(invoice.invoice_number);
+      if (invoice.customer_invoice_id) {
+        customerInvoiceIds.add(invoice.customer_invoice_id);
+      }
+      if (invoice.rental_billing_run_id) {
+        billingRunIds.add(invoice.rental_billing_run_id);
+      }
+    }
+  }
+
+  // A run header may only be removed when every durable item belongs to this
+  // fixture cohort. Abort before mutating anything if a fixture was ever mixed
+  // into a user run.
+  const fixtureContractIds = new Set(ids);
+  const runIds = [...billingRunIds];
+  for (let i = 0; i < runIds.length; i += 100) {
+    const runItems = requireSuccess(
+      "load cleanup run ownership guard",
+      await admin
+        .from("rental_billing_run_items")
+        .select("rental_billing_run_id, rental_contract_id")
+        .in("rental_billing_run_id", runIds.slice(i, i + 100)),
+    );
+    const foreignItems = runItems.filter(
+      (item) => !fixtureContractIds.has(item.rental_contract_id),
+    );
+    if (foreignItems.length > 0) {
+      throw new Error(
+        `load cleanup blocked: ${foreignItems.length} billing item(s) belong to non-fixture contracts`,
+      );
+    }
+  }
+
+  // Recover pre-m815 orphan AR headers whose backlink write failed. Invoice
+  // numbers are workspace-unique for this synthetic cohort and invoice_type
+  // keeps unrelated department documents out of cleanup scope.
+  const numbers = [...rentalInvoiceNumbers];
+  for (let i = 0; i < numbers.length; i += 100) {
+    const mirrors = requireSuccess(
+      "load cleanup AR mirror lookup",
+      await admin
+        .from("customer_invoices")
+        .select("id, invoice_number, amount_paid")
+        .eq("workspace_id", "default")
+        .eq("invoice_type", "rental")
+        .in("invoice_number", numbers.slice(i, i + 100)),
+    );
+    for (const mirror of mirrors) {
+      if (Number(mirror.amount_paid ?? 0) !== 0) {
+        throw new Error(
+          `load cleanup blocked: customer invoice ${mirror.invoice_number} has payment activity`,
+        );
+      }
+      customerInvoiceIds.add(mirror.id);
+    }
+  }
+
+  const customerIds = [...customerInvoiceIds];
+  for (let i = 0; i < customerIds.length; i += 100) {
+    const slice = customerIds.slice(i, i + 100);
+    const jobs = requireSuccess(
+      "load cleanup GL lookup",
+      await admin
+        .from("quickbooks_gl_sync_jobs")
+        .select("id, invoice_id, status, quickbooks_txn_id")
+        .in("invoice_id", slice),
+    );
+    const externallyEscaped = jobs.filter(
+      (job) =>
+        job.status === "processing" ||
+        job.status === "posted" ||
+        Boolean(job.quickbooks_txn_id),
+    );
+    if (externallyEscaped.length > 0) {
+      throw new Error(
+        `load cleanup blocked: ${externallyEscaped.length} fixture GL job(s) reached QuickBooks; reverse them before retrying cleanup`,
+      );
+    }
+
+    requireSuccess(
+      "load cleanup GL delete",
+      await admin
+        .from("quickbooks_gl_sync_jobs")
+        .delete()
+        .in("invoice_id", slice),
+    );
+    requireSuccess(
+      "load cleanup AR line delete",
+      await admin
+        .from("customer_invoice_line_items")
+        .delete()
+        .in("invoice_id", slice),
+    );
+    requireSuccess(
+      "load cleanup AR header delete",
+      await admin.from("customer_invoices").delete().in("id", slice),
     );
   }
-  if (billingRunIds.size > 0) {
-    await admin.from("rental_billing_runs").update({ deleted_at: now }).in(
-      "id",
-      [...billingRunIds],
+
+  const invoiceIds = [...rentalInvoiceIds];
+  for (let i = 0; i < invoiceIds.length; i += 100) {
+    requireSuccess(
+      "load cleanup exception delete",
+      await admin
+        .from("exception_queue")
+        .delete()
+        .eq("entity_table", "rental_invoices")
+        .in("entity_id", invoiceIds.slice(i, i + 100)),
     );
   }
+
+  for (let i = 0; i < ids.length; i += 100) {
+    requireSuccess(
+      "load cleanup contract exception delete",
+      await admin
+        .from("exception_queue")
+        .delete()
+        .eq("entity_table", "rental_contracts")
+        .in("entity_id", ids.slice(i, i + 100)),
+    );
+  }
+
+  for (let i = 0; i < ids.length; i += 100) {
+    const slice = ids.slice(i, i + 100);
+    requireSuccess(
+      "load cleanup rental-invoice soft delete",
+      await admin
+        .from("rental_invoices")
+        .update({ deleted_at: now })
+        .in("rental_contract_id", slice),
+    );
+    requireSuccess(
+      "load cleanup contract soft delete",
+      await admin
+        .from("rental_contracts")
+        .update({ deleted_at: now })
+        .in("id", slice),
+    );
+  }
+  for (let i = 0; i < ids.length; i += 100) {
+    requireSuccess(
+      "load cleanup billing-item delete",
+      await admin
+        .from("rental_billing_run_items")
+        .delete()
+        .in("rental_contract_id", ids.slice(i, i + 100)),
+    );
+  }
+  for (let i = 0; i < runIds.length; i += 100) {
+    requireSuccess(
+      "load cleanup billing-run delete",
+      await admin
+        .from("rental_billing_runs")
+        .delete()
+        .in("id", runIds.slice(i, i + 100)),
+    );
+  }
+
+  for (let i = 0; i < customerIds.length; i += 100) {
+    const slice = customerIds.slice(i, i + 100);
+    const [headers, lines, jobs] = await Promise.all([
+      admin.from("customer_invoices").select("id").in("id", slice),
+      admin
+        .from("customer_invoice_line_items")
+        .select("id")
+        .in("invoice_id", slice),
+      admin
+        .from("quickbooks_gl_sync_jobs")
+        .select("id")
+        .in("invoice_id", slice),
+    ]);
+    if (
+      requireSuccess("load cleanup AR verification", headers).length > 0 ||
+      requireSuccess("load cleanup line verification", lines).length > 0 ||
+      requireSuccess("load cleanup GL verification", jobs).length > 0
+    ) {
+      throw new Error("load cleanup verification found residual AR/GL rows");
+    }
+  }
+
+  let activeContracts = 0;
+  let activeRentalInvoices = 0;
+  let residualBillingItems = 0;
+  let residualExceptions = 0;
+  for (let i = 0; i < ids.length; i += 100) {
+    const slice = ids.slice(i, i + 100);
+    const [contracts, invoices, billingItems, contractExceptions] =
+      await Promise.all([
+        admin
+          .from("rental_contracts")
+          .select("id")
+          .in("id", slice)
+          .is("deleted_at", null),
+        admin
+          .from("rental_invoices")
+          .select("id")
+          .in("rental_contract_id", slice)
+          .is("deleted_at", null),
+        admin
+          .from("rental_billing_run_items")
+          .select("id")
+          .in("rental_contract_id", slice),
+        admin
+          .from("exception_queue")
+          .select("id")
+          .eq("entity_table", "rental_contracts")
+          .in("entity_id", slice),
+      ]);
+    activeContracts += requireSuccess(
+      "load cleanup contract verification",
+      contracts,
+    ).length;
+    activeRentalInvoices += requireSuccess(
+      "load cleanup rental-invoice verification",
+      invoices,
+    ).length;
+    residualBillingItems += requireSuccess(
+      "load cleanup billing-item verification",
+      billingItems,
+    ).length;
+    residualExceptions += requireSuccess(
+      "load cleanup contract exception verification",
+      contractExceptions,
+    ).length;
+  }
+  for (let i = 0; i < invoiceIds.length; i += 100) {
+    residualExceptions += requireSuccess(
+      "load cleanup invoice exception verification",
+      await admin
+        .from("exception_queue")
+        .select("id")
+        .eq("entity_table", "rental_invoices")
+        .in("entity_id", invoiceIds.slice(i, i + 100)),
+    ).length;
+  }
+
+  let residualBillingRuns = 0;
+  for (let i = 0; i < runIds.length; i += 100) {
+    residualBillingRuns += requireSuccess(
+      "load cleanup billing-run verification",
+      await admin
+        .from("rental_billing_runs")
+        .select("id")
+        .in("id", runIds.slice(i, i + 100)),
+    ).length;
+  }
+  if (
+    activeContracts > 0 ||
+    activeRentalInvoices > 0 ||
+    residualBillingItems > 0 ||
+    residualBillingRuns > 0 ||
+    residualExceptions > 0
+  ) {
+    throw new Error(
+      `load cleanup verification found ${activeContracts} active contracts, ${activeRentalInvoices} active rental invoices, ${residualBillingItems} billing items, ${residualBillingRuns} billing runs, and ${residualExceptions} exceptions`,
+    );
+  }
+
   console.log(
-    `soft-deleted ${ids.length} contracts + invoices and ${billingRunIds.size} billing runs`,
+    `cleaned ${ids.length} contracts, ${rentalInvoiceIds.size} rental invoices, ${customerInvoiceIds.size} AR mirrors, and ${billingRunIds.size} billing runs`,
   );
 }
 

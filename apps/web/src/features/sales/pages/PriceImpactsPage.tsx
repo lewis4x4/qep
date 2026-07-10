@@ -21,6 +21,7 @@ import {
   type RepPriceImpact,
   type RepPriceImpactLine,
   type RepRepriceAudit,
+  type RepPriceImpactSummary,
 } from "@/features/price-intelligence/lib/price-intelligence-api";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +44,15 @@ function formatCents(cents: number | null): string {
   return `${sign}$${dollars.toLocaleString(undefined, {
     maximumFractionDigits: dollars >= 1_000 ? 0 : 2,
   })}`;
+}
+
+function formatCurrencyCents(cents: number | null): string {
+  if (cents === null || cents === undefined || Number.isNaN(cents)) return "—";
+  const dollars = Math.abs(cents) / 100;
+  const formatted = `$${dollars.toLocaleString(undefined, {
+    maximumFractionDigits: dollars >= 1_000 ? 0 : 2,
+  })}`;
+  return cents < 0 ? `-${formatted}` : formatted;
 }
 
 function formatPercent(value: number | null): string {
@@ -106,6 +116,18 @@ function groupByEvent(
   ]);
 }
 
+export function summarizeVisibleImpacts(
+  impacts: RepPriceImpact[],
+): RepPriceImpactSummary {
+  const actionable = impacts.filter((impact) => impact.state !== "applied");
+  return {
+    visibleImpactCount: actionable.length,
+    affectedQuoteCount: new Set(actionable.map((impact) => impact.quotePackageId)).size,
+    totalDeltaCents: actionable.reduce((sum, impact) => sum + impact.totalDeltaCents, 0),
+    needsApprovalCount: actionable.filter((impact) => impact.requiresManagerReview).length,
+  };
+}
+
 export function PriceImpactsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -137,6 +159,10 @@ export function PriceImpactsPage() {
       : impacts;
   }, [focusedQuotePackageId, impactsQuery.data?.impacts]);
   const grouped = useMemo(() => groupByEvent(visibleImpacts), [visibleImpacts]);
+  const focusedSummary = useMemo(
+    () => summarizeVisibleImpacts(visibleImpacts),
+    [visibleImpacts],
+  );
 
   const createDraftMutation = useMutation({
     mutationFn: (impact: RepPriceImpact) => createRepriceDraft(impact.id),
@@ -242,7 +268,9 @@ export function PriceImpactsPage() {
     },
   });
 
-  const summary = impactsQuery.data?.summary;
+  const summary = focusedQuotePackageId
+    ? focusedSummary
+    : impactsQuery.data?.summary;
 
   return (
     <div className="flex flex-col pb-20 max-w-2xl mx-auto">
@@ -730,11 +758,11 @@ function CommissionProjection({ impact }: { impact: RepPriceImpact }) {
       <div className="mt-2 grid grid-cols-3 gap-2">
         <MiniMetric
           label="Old"
-          value={formatCents(impact.oldCommissionCents)}
+          value={formatCurrencyCents(impact.oldCommissionCents)}
         />
         <MiniMetric
           label="New"
-          value={formatCents(impact.projectedCommissionCents)}
+          value={formatCurrencyCents(impact.projectedCommissionCents)}
         />
         <MiniMetric
           label="Delta"

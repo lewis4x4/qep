@@ -14,6 +14,7 @@ function runPrimaryAction(overrides: Partial<Parameters<typeof useQuoteBuilderPr
       currentStep: "review",
       approvalCaseCanSend: false,
       sendReady: false,
+      customerFacingBlocked: false,
       canSubmitForApproval: false,
       requiresApprovalJustification: false,
       onSave,
@@ -42,6 +43,17 @@ describe("useQuoteBuilderPrimaryAction", () => {
     });
     expect(setStep).toHaveBeenCalledWith("review");
     expect(onSave).not.toHaveBeenCalled();
+  });
+
+  test("does not enter Review & Send when a customer-facing blocker is active", () => {
+    const { onSave, onSubmitApproval, setStep } = runPrimaryAction({
+      approvalCaseCanSend: true,
+      sendReady: true,
+      customerFacingBlocked: true,
+    });
+    expect(setStep).not.toHaveBeenCalled();
+    expect(onSubmitApproval).not.toHaveBeenCalled();
+    expect(onSave).toHaveBeenCalledTimes(1);
   });
 
   test("does not treat packet readiness alone as approval to send", () => {

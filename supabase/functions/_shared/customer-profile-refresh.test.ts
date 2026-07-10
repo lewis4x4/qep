@@ -35,6 +35,7 @@ const profile: Row = {
 class QueryBuilder implements PromiseLike<QueryResult> {
   #mode: "read" | "update" = "read";
   #patch: Row = {};
+  readonly filters: Array<{ column: string; value: unknown }> = [];
 
   constructor(
     private readonly owner: RefreshClient,
@@ -46,7 +47,9 @@ class QueryBuilder implements PromiseLike<QueryResult> {
     return this;
   }
 
-  eq(_column: string, _value: unknown): this {
+  eq(column: string, value: unknown): this {
+    this.filters.push({ column, value });
+    this.owner.filters.push({ table: this.table, column, value });
     return this;
   }
 
@@ -117,6 +120,11 @@ class QueryBuilder implements PromiseLike<QueryResult> {
 
 class RefreshClient {
   readonly #counts = new Map<string, number>();
+  readonly filters: Array<{
+    table: string;
+    column: string;
+    value: unknown;
+  }> = [];
   finalUpdates = 0;
 
   constructor(
@@ -209,6 +217,26 @@ Deno.test("customer profile refresh performs one final update after all source r
   const result = await runRefresh(admin);
   assertEquals(result.id, "profile-1");
   assertEquals(admin.finalUpdates, 1);
+  for (
+    const table of [
+      "crm_deals",
+      "customer_deal_history",
+      "parts_orders",
+      "portal_customers",
+      "customer_invoices",
+      "rental_contracts",
+      "rental_invoices",
+    ]
+  ) {
+    assertEquals(
+      admin.filters.some((filter) =>
+        filter.table === table && filter.column === "workspace_id" &&
+        filter.value === "workspace-1"
+      ),
+      true,
+      `${table} source read must be workspace-scoped`,
+    );
+  }
 });
 
 Deno.test("customer profile refresh does not write DNA fields when the atomic identity RPC fails", async () => {

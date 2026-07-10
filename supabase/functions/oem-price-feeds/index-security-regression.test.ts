@@ -23,13 +23,43 @@ Deno.test("existing-event replay is scoped by workspace before idempotent return
   );
 });
 
-Deno.test("publish pins lane lineage and delegates catalog mutation to one SQL RPC", () => {
+Deno.test("publish pins lane lineage and commits catalog plus impacts through one SQL RPC", () => {
   const body = functionBody("handlePublish");
   assertStringIncludes(body, "await pinResolvedLineage");
-  assertStringIncludes(body, "await invokePublish");
-  assertStringIncludes(publisher, '.rpc("publish_qb_price_sheet_atomic"');
+  assertStringIncludes(body, "await publishAndPersistEvent");
+  assert(!body.includes("invokePublish"));
+  assertStringIncludes(
+    source,
+    '.rpc(\n    "publish_and_persist_qb_oem_price_change_event"',
+  );
+  assertStringIncludes(
+    publisher,
+    "Direct catalog-only publication is disabled",
+  );
+  assert(!publisher.includes("publish_qb_price_sheet_atomic"));
   assert(!publisher.includes('.from("qb_equipment_models").insert'));
   assert(!publisher.includes('.from("qb_price_sheets").update'));
+});
+
+Deno.test("non-auto-approved publishes diff only manager-approved source rows", () => {
+  const body = functionBody("handlePublish");
+  assertStringIncludes(
+    body,
+    'candidateReviewMode: autoApprove ? "all" : "approved"',
+  );
+  const diffBody = functionBody("buildItemDiffs");
+  assertStringIncludes(diffBody, 'row.review_status === "approved"');
+  assertStringIncludes(diffBody, "overlayPreservedPriorRows(");
+});
+
+Deno.test("stale pinned lineage fails with re-extraction guidance instead of futile retry", () => {
+  const body = functionBody("handlePublish");
+  assertStringIncludes(body, "isPinnedLineageConflict(error)");
+  assertStringIncludes(body, "pinnedLineageConflictResponse(ctx.origin)");
+  assertStringIncludes(
+    source,
+    "upload and extract a new sheet against the current OEM catalog",
+  );
 });
 
 Deno.test("full scans use the workspace epoch while rep impacts expose draft state", () => {

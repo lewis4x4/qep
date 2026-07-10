@@ -474,6 +474,23 @@ function canonicalKey(row: CanonicalPriceSheetRow): string {
   );
 }
 
+/** Preserve catalog state for reviewed rows the SQL publisher will not apply. */
+export function overlayPreservedPriorRows(
+  priorRows: readonly CanonicalPriceSheetRow[],
+  incomingRows: readonly CanonicalPriceSheetRow[],
+  preservedIdentityRows: readonly CanonicalPriceSheetRow[],
+): CanonicalPriceSheetRow[] {
+  const priorByKey = indexRows(priorRows, "prior");
+  const result = indexRows(incomingRows, "incoming");
+  for (const preserved of preservedIdentityRows) {
+    const key = canonicalKey(preserved);
+    if (result.has(key)) continue;
+    const prior = priorByKey.get(key);
+    if (prior) result.set(key, prior);
+  }
+  return [...result.values()];
+}
+
 function indexRows(
   rows: readonly CanonicalPriceSheetRow[],
   side: "prior" | "incoming",

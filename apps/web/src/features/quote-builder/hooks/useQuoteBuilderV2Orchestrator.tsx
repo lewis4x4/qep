@@ -245,7 +245,7 @@ export function useQuoteBuilderV2Orchestrator() {
     marginAmount,
     marginPct,
     approvalState,
-    packetReadiness,
+    packetReadiness: basePacketReadiness,
   } = useLiveMargin(draft, { marginFloorPct });
 
   const { pricingLine, upsertPricingLine } = useQuoteBuilderPricingLines({
@@ -515,7 +515,7 @@ export function useQuoteBuilderV2Orchestrator() {
     quotePackageId: activeQuotePackageId,
     quoteStatus,
     draftHasBranch: Boolean(draft.branchSlug),
-    draftReady: packetReadiness.draft.ready,
+    draftReady: basePacketReadiness.draft.ready,
   });
   void approvalState.requiresManagerApproval; // retained in state; not used for gating
 
@@ -527,6 +527,7 @@ export function useQuoteBuilderV2Orchestrator() {
     whyThisMachineBlocker,
     approvalBlocker,
     customerFacingDocumentBlocker,
+    packetReadiness,
     displayedSavedLabel,
     financeMethodLabel,
     quoteTitle,
@@ -548,6 +549,8 @@ export function useQuoteBuilderV2Orchestrator() {
     allFinanceScenarios,
     leaseQuotingEnabled,
     activeQuotePackageId,
+    basePacketReadiness,
+    requiresRequote: existingQuote?.requires_requote === true,
     activeQuoteNumber,
     activeApprovalCaseLoading,
     bypassApprovedWithoutCase,
@@ -653,6 +656,7 @@ export function useQuoteBuilderV2Orchestrator() {
     currentStep: step,
     approvalCaseCanSend,
     sendReady: packetReadiness.send.ready,
+    customerFacingBlocked: Boolean(customerFacingDocumentBlocker),
     canSubmitForApproval,
     requiresApprovalJustification: !marginFloorResolved || approvalState.requiresManagerApproval,
     onSave: handleSaveClick,
