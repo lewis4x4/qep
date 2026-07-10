@@ -6,7 +6,7 @@ import { AlertTriangle, ArrowUpRight, DollarSign, RefreshCcw, TrendingUp, Truck,
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { AskIronAdvisorButton } from "@/components/primitives";
+import { AskIronAdvisorButton, MapLibreCanvas, type MapPolygon } from "@/components/primitives";
 import { formatCurrency } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import { rentalOpsApi } from "../lib/rental-ops-api";
@@ -315,6 +315,24 @@ export function RentalCommandCenterPage() {
   const [fenceLng, setFenceLng] = useState("");
   const [fenceRadius, setFenceRadius] = useState("250");
   const [fenceResult, setFenceResult] = useState<string | null>(null);
+
+  // L11.3: live circle preview for the fence picker. ~111,320 m per degree
+  // of latitude; longitude shrinks by cos(lat).
+  const fenceCirclePreview = useMemo<MapPolygon[]>(() => {
+    const lat = Number(fenceLat);
+    const lng = Number(fenceLng);
+    const radius = Number(fenceRadius) > 0 ? Math.min(Number(fenceRadius), 5000) : 250;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !fenceLat || !fenceLng) return [];
+    const ring: number[][] = [];
+    for (let i = 0; i <= 48; i += 1) {
+      const angle = (i / 48) * 2 * Math.PI;
+      ring.push([
+        lng + (radius / (111_320 * Math.cos((lat * Math.PI) / 180))) * Math.cos(angle),
+        lat + (radius / 111_320) * Math.sin(angle),
+      ]);
+    }
+    return [{ id: "fence-preview", coordinates: [ring] }];
+  }, [fenceLat, fenceLng, fenceRadius]);
   const [exchangeUnits, setExchangeUnits] = useState<Record<string, string>>({});
   const [exchangeContinuity, setExchangeContinuity] = useState<Record<string, boolean>>({});
   const [checkoutHours, setCheckoutHours] = useState<Record<string, string>>({});
@@ -853,6 +871,80 @@ export function RentalCommandCenterPage() {
     staleTime: 300_000,
   });
 
+  // L11.1: operate/observe/tune surface — commission coverage, cycle-alert
+  // resolution, availability pressure, geofence signal quality (m823 RPC).
+  const opsHealthQuery = useQuery({
+    queryKey: ["qrm", "rental-ops-health"],
+    queryFn: async () => {
+      const { data: session } = await supabase.auth.getUser();
+      const userId = session.user?.id;
+      let workspaceId = "default";
+      if (userId) {
+        const { data: profileRow } = await supabase
+          .from("profiles")
+          .select("active_workspace_id")
+          .eq("id", userId)
+          .maybeSingle();
+        workspaceId = (profileRow?.active_workspace_id as string | null) ?? "default";
+      }
+      const { data, error } = await supabase.rpc("rental_ops_health", {
+        p_workspace_id: workspaceId,
+      });
+      if (error) throw new Error(error.message);
+      return data as unknown as {
+        commission: {
+          live_contracts: number;
+          with_commission: number;
+          coverage_pct: number | null;
+          missing_count: number;
+          missing_sample: string[];
+        };
+        cycle: {
+          alerts_30d: number;
+          in_window: number;
+          billed_within_3d: number;
+          resolution_pct: number | null;
+          invoices_posted_30d: number;
+        };
+        availability: {
+          alerts_30d: number;
+          current_low: Array<{
+            category: string;
+            fleet_count: number;
+            peak_demand: number;
+            headroom: number;
+            critical_date: string;
+          }>;
+        };
+        geofence: {
+          active_jobsite_fences: number;
+          exit_events_30d: number;
+          exit_events_7d: number;
+        };
+        generated_at: string;
+      };
+    },
+    staleTime: 60_000,
+    refetchInterval: 300_000,
+  });
+
+  const profileRoleQuery = useQuery({
+    queryKey: ["qrm", "profile-role"],
+    queryFn: async () => {
+      const { data: session } = await supabase.auth.getUser();
+      const userId = session.user?.id;
+      if (!userId) return null;
+      const { data: profileRow } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", userId)
+        .maybeSingle();
+      return (profileRow?.role as string | null) ?? null;
+    },
+    staleTime: 300_000,
+  });
+  const canEditCommissions = ["manager", "admin", "owner"].includes(profileRoleQuery.data ?? "");
+
   const onRentOpsQuery = useQuery({
     queryKey: ["qrm", "rental-onrent-ops"],
     queryFn: async () => {
@@ -1110,6 +1202,102 @@ export function RentalCommandCenterPage() {
           </DeckSurface>
 
           <DeckSurface className="p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <AlertTriangle className="h-4 w-4" /> Rental ops health
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  The observe window after the world-class release: attribution coverage, cycle-bill
+                  follow-through, live availability pressure, and geofence signal quality.
+                </p>
+              </div>
+              {opsHealthQuery.data?.generated_at ? (
+                <span className="text-[10px] text-muted-foreground">
+                  as of {new Date(opsHealthQuery.data.generated_at).toLocaleTimeString()}
+                </span>
+              ) : null}
+            </div>
+            {opsHealthQuery.isLoading ? (
+              <p className="mt-3 text-xs text-muted-foreground">Reading ops health…</p>
+            ) : opsHealthQuery.isError ? (
+              <p className="mt-3 text-xs text-red-300">
+                {opsHealthQuery.error instanceof Error ? opsHealthQuery.error.message : "Ops health unavailable."}
+              </p>
+            ) : opsHealthQuery.data ? (
+              <div className="mt-3 grid gap-3 md:grid-cols-4">
+                <div className="rounded-lg border border-border/60 p-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Commission coverage</h3>
+                  <p className="mt-2 text-lg font-semibold text-foreground">
+                    {opsHealthQuery.data.commission.coverage_pct ?? "—"}
+                    {opsHealthQuery.data.commission.coverage_pct != null ? "%" : ""}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {opsHealthQuery.data.commission.with_commission} of {opsHealthQuery.data.commission.live_contracts} live contracts attributed
+                  </p>
+                  {opsHealthQuery.data.commission.missing_count > 0 ? (
+                    <p className="mt-1 text-xs text-amber-300">
+                      Missing: {opsHealthQuery.data.commission.missing_sample.slice(0, 3).join(", ")}
+                      {opsHealthQuery.data.commission.missing_count > 3
+                        ? ` +${opsHealthQuery.data.commission.missing_count - 3} more`
+                        : ""}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-emerald-300">Every live contract has a split.</p>
+                  )}
+                </div>
+                <div className="rounded-lg border border-border/60 p-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cycle billing · 30d</h3>
+                  <p className="mt-2 text-lg font-semibold text-foreground">
+                    {opsHealthQuery.data.cycle.resolution_pct != null
+                      ? `${opsHealthQuery.data.cycle.resolution_pct}%`
+                      : "—"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {opsHealthQuery.data.cycle.billed_within_3d} of {opsHealthQuery.data.cycle.alerts_30d} cycle alerts billed within 3 days
+                    {opsHealthQuery.data.cycle.in_window > 0
+                      ? ` · ${opsHealthQuery.data.cycle.in_window} still in window`
+                      : ""}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {opsHealthQuery.data.cycle.invoices_posted_30d} rental invoices posted in 30d
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/60 p-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Availability pressure</h3>
+                  {opsHealthQuery.data.availability.current_low.length === 0 ? (
+                    <p className="mt-2 text-xs text-emerald-300">
+                      No category under pressure in the next 14 days.
+                    </p>
+                  ) : (
+                    <ul className="mt-2 space-y-1">
+                      {opsHealthQuery.data.availability.current_low.slice(0, 4).map((row) => (
+                        <li key={row.category} className="text-xs text-amber-300">
+                          {row.category}: headroom {row.headroom} on {row.critical_date}
+                          <span className="text-muted-foreground"> ({row.peak_demand}/{row.fleet_count} committed)</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {opsHealthQuery.data.availability.alerts_30d} low-availability alerts in 30d
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/60 p-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Geofence signals</h3>
+                  <p className="mt-2 text-lg font-semibold text-foreground">
+                    {opsHealthQuery.data.geofence.active_jobsite_fences}
+                  </p>
+                  <p className="text-xs text-muted-foreground">active jobsite fences</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    exits: {opsHealthQuery.data.geofence.exit_events_7d} in 7d · {opsHealthQuery.data.geofence.exit_events_30d} in 30d
+                  </p>
+                </div>
+              </div>
+            ) : null}
+          </DeckSurface>
+
+          <DeckSurface className="p-4">
             <h2 className="text-sm font-semibold text-foreground">New counter contract</h2>
             <p className="mt-1 text-xs text-muted-foreground">
               Open a draft rental contract for a walk-in or phone customer — no portal account needed.
@@ -1289,9 +1477,31 @@ export function RentalCommandCenterPage() {
           <DeckSurface className="p-4">
             <h2 className="text-sm font-semibold text-foreground">Jobsite geofence</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Drop a circular customer jobsite fence (lat/lng + radius meters). On-rent units with
-              telematics GPS will fire exit events when they leave.
+              Click the map to place a circular customer jobsite fence — the radius ring previews
+              live. On-rent units with telematics GPS will fire exit events when they leave.
             </p>
+            <div className="mt-3 h-64 overflow-hidden rounded-lg border border-border/60">
+              <MapLibreCanvas
+                cluster={false}
+                zoom={fenceLat && fenceLng ? 13 : 6}
+                center={
+                  fenceLat && fenceLng && Number.isFinite(Number(fenceLat)) && Number.isFinite(Number(fenceLng))
+                    ? [Number(fenceLng), Number(fenceLat)]
+                    : [-81.69, 28.03]
+                }
+                markers={
+                  fenceLat && fenceLng && Number.isFinite(Number(fenceLat)) && Number.isFinite(Number(fenceLng))
+                    ? [{ id: "fence-center", lat: Number(fenceLat), lng: Number(fenceLng), tone: "orange" as const }]
+                    : []
+                }
+                polygons={fenceCirclePreview}
+                onMapClick={({ lat, lng }) => {
+                  setFenceLat(lat.toFixed(6));
+                  setFenceLng(lng.toFixed(6));
+                  setFenceResult(null);
+                }}
+              />
+            </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               <Input
                 value={fenceCompanyId || counterCompanyId}
@@ -1575,6 +1785,9 @@ export function RentalCommandCenterPage() {
                           {convertRpoMutation.isPending ? "Converting…" : "Convert to purchase"}
                         </button>
                       </div>
+                    ) : null}
+                    {canEditCommissions ? (
+                      <ContractCommissionEditor contractId={contract.id} />
                     ) : null}
                     {contract.lifecycle_state === "reserved" ? (() => {
                       const runs = (onRentOpsQuery.data?.inspections ?? []).filter(
@@ -1990,6 +2203,193 @@ export function RentalCommandCenterPage() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * L11.2 — multi-rep commission splits, manager and above (the mount is
+ * role-gated; rental-ops re-checks and the m823 RPC is the only mutation
+ * path). Rows are edited locally and saved as a full replacement set that
+ * must total 100%.
+ */
+function ContractCommissionEditor({ contractId }: { contractId: string }) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [edited, setEdited] = useState<
+    Array<{ salesperson_id: string; split_pct: string; role: string }> | null
+  >(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const commissionsQuery = useQuery({
+    queryKey: ["qrm", "contract-commissions", contractId],
+    enabled: open,
+    queryFn: () => rentalOpsApi.listContractCommissions({ contract_id: contractId }),
+    staleTime: 30_000,
+  });
+
+  const repsQuery = useQuery({
+    queryKey: ["qrm", "workspace-profiles-for-commissions"],
+    enabled: open,
+    queryFn: async () => {
+      // Fixture accounts (RFC 2606 domains, e2e users) never earn commission.
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .not("email", "ilike", "%.invalid")
+        .not("email", "ilike", "%.test")
+        .not("email", "ilike", "%@example.%")
+        .order("full_name")
+        .limit(200);
+      if (error) throw new Error(error.message);
+      return ((data ?? []) as Array<{ id: string; full_name: string | null; email: string | null }>)
+        .filter((row) => !/playwright|e2e/i.test(row.full_name ?? ""));
+    },
+    staleTime: 300_000,
+  });
+
+  const serverRows = (commissionsQuery.data?.commissions ?? []).map((row) => ({
+    salesperson_id: row.salesperson_id,
+    split_pct: String(row.split_pct),
+    role: row.role ?? "",
+  }));
+  const rows = edited ?? serverRows;
+  const total = rows.reduce((sum, row) => sum + (Number(row.split_pct) || 0), 0);
+  const totalOk = Math.abs(total - 100) <= 0.01 && rows.length > 0 &&
+    rows.every((row) => row.salesperson_id && Number(row.split_pct) > 0);
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      rentalOpsApi.setContractCommissions({
+        contract_id: contractId,
+        commissions: rows.map((row) => ({
+          salesperson_id: row.salesperson_id,
+          split_pct: Number(row.split_pct),
+          role: row.role.trim() || null,
+        })),
+      }),
+    onSuccess: () => {
+      setEdited(null);
+      setMessage("Splits saved.");
+      void queryClient.invalidateQueries({ queryKey: ["qrm", "contract-commissions", contractId] });
+      void queryClient.invalidateQueries({ queryKey: ["qrm", "rental-ops-health"] });
+    },
+    onError: (error: unknown) => {
+      setMessage(error instanceof Error ? error.message : "Saving splits failed.");
+    },
+  });
+
+  const repLabel = (id: string) => {
+    const rep = (repsQuery.data ?? []).find((row) => row.id === id);
+    return rep?.full_name || rep?.email || id.slice(0, 8);
+  };
+
+  return (
+    <div className="mt-1.5 rounded-lg border border-border/60 bg-muted/5 px-2.5 py-1.5">
+      <button
+        type="button"
+        className="text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+        onClick={() => {
+          setOpen((prev) => !prev);
+          setMessage(null);
+        }}
+      >
+        Commissions {open ? "▾" : "▸"}
+      </button>
+      {open ? (
+        commissionsQuery.isLoading ? (
+          <p className="mt-1 text-[11px] text-muted-foreground">Loading splits…</p>
+        ) : commissionsQuery.isError ? (
+          <p className="mt-1 text-[11px] text-red-300">
+            {commissionsQuery.error instanceof Error
+              ? commissionsQuery.error.message
+              : "Could not load splits."}
+          </p>
+        ) : (
+          <div className="mt-2 space-y-1.5">
+            {rows.length === 0 ? (
+              <p className="text-[11px] text-amber-300">
+                No attribution yet — add the originating rep.
+              </p>
+            ) : null}
+            {rows.map((row, index) => (
+              <div key={`${row.salesperson_id || "new"}-${index}`} className="flex flex-wrap items-center gap-1.5">
+                <select
+                  value={row.salesperson_id}
+                  onChange={(event) => {
+                    const next = rows.map((r, i) =>
+                      i === index ? { ...r, salesperson_id: event.target.value } : r,
+                    );
+                    setEdited(next);
+                  }}
+                  className="h-7 min-w-[10rem] rounded-md border border-border/60 bg-background px-1.5 text-[11px] text-foreground"
+                >
+                  <option value="">Select rep…</option>
+                  {(repsQuery.data ?? []).map((rep) => (
+                    <option key={rep.id} value={rep.id}>
+                      {rep.full_name || rep.email || rep.id.slice(0, 8)}
+                    </option>
+                  ))}
+                </select>
+                <Input
+                  value={row.split_pct}
+                  onChange={(event) => {
+                    const next = rows.map((r, i) =>
+                      i === index ? { ...r, split_pct: event.target.value } : r,
+                    );
+                    setEdited(next);
+                  }}
+                  inputMode="decimal"
+                  placeholder="%"
+                  className="h-7 w-16 text-[11px]"
+                />
+                <Input
+                  value={row.role}
+                  onChange={(event) => {
+                    const next = rows.map((r, i) =>
+                      i === index ? { ...r, role: event.target.value } : r,
+                    );
+                    setEdited(next);
+                  }}
+                  placeholder="role (originator…)"
+                  className="h-7 w-32 text-[11px]"
+                />
+                <button
+                  type="button"
+                  aria-label={`Remove ${repLabel(row.salesperson_id)}`}
+                  className="rounded-md border border-border/60 px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-300"
+                  onClick={() => setEdited(rows.filter((_, i) => i !== index))}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="rounded-md border border-border/60 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/20 hover:text-foreground"
+                onClick={() =>
+                  setEdited([...rows, { salesperson_id: "", split_pct: "", role: "" }])
+                }
+              >
+                Add rep
+              </button>
+              <span className={`text-[11px] ${totalOk ? "text-emerald-300" : "text-amber-300"}`}>
+                total {Number.isFinite(total) ? total : 0}%
+              </span>
+              <Button
+                size="sm"
+                className="h-7 px-2 text-[11px]"
+                disabled={!totalOk || saveMutation.isPending || edited === null}
+                onClick={() => saveMutation.mutate()}
+              >
+                {saveMutation.isPending ? "Saving…" : "Save splits"}
+              </Button>
+            </div>
+            {message ? <p className="text-[11px] text-muted-foreground">{message}</p> : null}
+          </div>
+        )
+      ) : null}
     </div>
   );
 }

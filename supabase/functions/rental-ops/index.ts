@@ -139,6 +139,22 @@ type UpsertJobsiteGeofencePayload = {
   radius_meters?: number | string | null;
 };
 
+type ListContractCommissionsPayload = {
+  action: "list_contract_commissions";
+  contract_id?: string;
+};
+
+type SetContractCommissionsPayload = {
+  action: "set_contract_commissions";
+  contract_id?: string;
+  /** Full replacement set; split_pct must total 100 (L11.2). */
+  commissions?: Array<{
+    salesperson_id?: string;
+    split_pct?: number | string;
+    role?: string | null;
+  }>;
+};
+
 type StartCheckoutInspectionPayload = {
   action: "start_checkout_inspection";
   contract_id?: string;
@@ -282,6 +298,8 @@ type RentalOpsPayload =
   | IssueRentalQuotePayload
   | CloseContractPayload
   | UpsertJobsiteGeofencePayload
+  | ListContractCommissionsPayload
+  | SetContractCommissionsPayload
   | CheckOutContractPayload;
 
 const RENTAL_CHECKOUT_TEMPLATE = {
@@ -721,6 +739,54 @@ Deno.serve(async (req) => {
         return safeJsonError(fenceError?.message ?? "Failed to save jobsite geofence", 400, origin);
       }
       return safeJsonOk({ geofence_id: fenceId }, origin);
+    }
+
+    if (body.action === "list_contract_commissions") {
+      // Commission money is manager-and-above, matching the m530 RLS policy.
+      if (!["manager", "admin", "owner"].includes(auth.role)) {
+        return safeJsonError("Commission access requires manager or above", 403, origin);
+      }
+      if (!body.contract_id) return safeJsonError("contract_id required", 400, origin);
+      const { data: rows, error: listError } = await admin
+        .from("rental_contract_commissions")
+        .select("id, salesperson_id, split_pct, role, created_at, profiles(full_name, email)")
+        .eq("workspace_id", workspaceId)
+        .eq("rental_contract_id", body.contract_id)
+        .is("deleted_at", null)
+        .order("split_pct", { ascending: false });
+      if (listError) return safeJsonError(listError.message, 400, origin);
+      return safeJsonOk({ commissions: rows ?? [] }, origin);
+    }
+
+    if (body.action === "set_contract_commissions") {
+      if (!["manager", "admin", "owner"].includes(auth.role)) {
+        return safeJsonError("Editing commissions requires manager or above", 403, origin);
+      }
+      if (!body.contract_id) return safeJsonError("contract_id required", 400, origin);
+      if (!Array.isArray(body.commissions) || body.commissions.length === 0) {
+        return safeJsonError("commissions array required", 400, origin);
+      }
+      const splits = body.commissions.map((entry) => ({
+        salesperson_id: typeof entry.salesperson_id === "string" ? entry.salesperson_id : null,
+        split_pct: typeof entry.split_pct === "number" ? entry.split_pct : Number(entry.split_pct),
+        role: typeof entry.role === "string" && entry.role.trim() ? entry.role.trim() : null,
+      }));
+      if (splits.some((s) => !s.salesperson_id || !Number.isFinite(s.split_pct))) {
+        return safeJsonError("every split needs salesperson_id and a numeric split_pct", 400, origin);
+      }
+      // The m823 RPC re-validates everything (service-only, membership,
+      // sum-to-100, resurrect-in-place) — this call is the only mutation path.
+      const { data: saved, error: setError } = await admin.rpc(
+        "rental_set_contract_commissions",
+        {
+          p_workspace_id: workspaceId,
+          p_contract_id: body.contract_id,
+          p_commissions: splits,
+          p_actor_id: auth.userId,
+        },
+      );
+      if (setError) return safeJsonError(setError.message, 400, origin);
+      return safeJsonOk({ commissions: saved ?? [] }, origin);
     }
 
     if (body.action === "exchange_line") {

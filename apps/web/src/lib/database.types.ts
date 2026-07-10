@@ -3537,6 +3537,7 @@ export type Database = {
           context_entity_type: string | null
           created_at: string
           customer_profile_id: string | null
+          dedupe_entity_key: string
           id: string
           resolution_notes: string | null
           resolved_at: string | null
@@ -3556,6 +3557,7 @@ export type Database = {
           context_entity_type?: string | null
           created_at?: string
           customer_profile_id?: string | null
+          dedupe_entity_key: string
           id?: string
           resolution_notes?: string | null
           resolved_at?: string | null
@@ -3575,6 +3577,7 @@ export type Database = {
           context_entity_type?: string | null
           created_at?: string
           customer_profile_id?: string | null
+          dedupe_entity_key?: string
           id?: string
           resolution_notes?: string | null
           resolved_at?: string | null
@@ -3722,6 +3725,7 @@ export type Database = {
           service_contract_sold: boolean | null
           sold_price: number | null
           trade_in_value: number | null
+          workspace_id: string | null
         }
         Insert: {
           attachments_sold?: number | null
@@ -3748,6 +3752,7 @@ export type Database = {
           service_contract_sold?: boolean | null
           sold_price?: number | null
           trade_in_value?: number | null
+          workspace_id?: string | null
         }
         Update: {
           attachments_sold?: number | null
@@ -3774,6 +3779,7 @@ export type Database = {
           service_contract_sold?: boolean | null
           sold_price?: number | null
           trade_in_value?: number | null
+          workspace_id?: string | null
         }
         Relationships: [
           {
@@ -3796,6 +3802,48 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_dna_profile_identities: {
+        Row: {
+          created_at: string
+          customer_profile_id: string
+          identity_type: string
+          normalized_identifier: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          customer_profile_id: string
+          identity_type: string
+          normalized_identifier: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          customer_profile_id?: string
+          identity_type?: string
+          normalized_identifier?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_dna_profile_identities_customer_profile_id_fkey"
+            columns: ["customer_profile_id"]
+            isOneToOne: false
+            referencedRelation: "customer_profiles_extended"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_dna_profile_identities_customer_profile_id_fkey"
+            columns: ["customer_profile_id"]
+            isOneToOne: false
+            referencedRelation: "exec_health_movers"
+            referencedColumns: ["customer_profile_id"]
           },
         ]
       }
@@ -14791,6 +14839,69 @@ export type Database = {
             referencedColumns: ["customer_profile_id"]
           },
         ]
+      }
+      health_score_refresh_jobs: {
+        Row: {
+          attempt_count: number
+          available_at: string
+          created_at: string
+          dna_cursor_id: string | null
+          failure_count: number
+          finished_at: string | null
+          id: string
+          last_error: string | null
+          lease_expires_at: string | null
+          lease_token: string | null
+          phase: string
+          refresh_on: string
+          score_cursor_id: string | null
+          score_cursor_updated_at: string | null
+          snapshot_at: string
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          attempt_count?: number
+          available_at?: string
+          created_at?: string
+          dna_cursor_id?: string | null
+          failure_count?: number
+          finished_at?: string | null
+          id?: string
+          last_error?: string | null
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          phase?: string
+          refresh_on: string
+          score_cursor_id?: string | null
+          score_cursor_updated_at?: string | null
+          snapshot_at?: string
+          status?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          attempt_count?: number
+          available_at?: string
+          created_at?: string
+          dna_cursor_id?: string | null
+          failure_count?: number
+          finished_at?: string | null
+          id?: string
+          last_error?: string | null
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          phase?: string
+          refresh_on?: string
+          score_cursor_id?: string | null
+          score_cursor_updated_at?: string | null
+          snapshot_at?: string
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
       }
       hub_build_items: {
         Row: {
@@ -27217,6 +27328,8 @@ export type Database = {
       purchase_order_lines: {
         Row: {
           created_at: string
+          demand_fingerprint: string | null
+          demand_version: number
           description: string | null
           expected_at: string | null
           id: string
@@ -27229,14 +27342,18 @@ export type Database = {
           qty_backordered: number
           qty_ordered: number
           qty_received: number
+          service_demand_key: string | null
           service_parts_requirement_id: string | null
           status: string
+          superseded_at: string | null
           unit_cost_cents: number
           updated_at: string
           workspace_id: string
         }
         Insert: {
           created_at?: string
+          demand_fingerprint?: string | null
+          demand_version?: number
           description?: string | null
           expected_at?: string | null
           id?: string
@@ -27249,14 +27366,18 @@ export type Database = {
           qty_backordered?: number
           qty_ordered?: number
           qty_received?: number
+          service_demand_key?: string | null
           service_parts_requirement_id?: string | null
           status?: string
+          superseded_at?: string | null
           unit_cost_cents?: number
           updated_at?: string
           workspace_id?: string
         }
         Update: {
           created_at?: string
+          demand_fingerprint?: string | null
+          demand_version?: number
           description?: string | null
           expected_at?: string | null
           id?: string
@@ -27269,8 +27390,10 @@ export type Database = {
           qty_backordered?: number
           qty_ordered?: number
           qty_received?: number
+          service_demand_key?: string | null
           service_parts_requirement_id?: string | null
           status?: string
+          superseded_at?: string | null
           unit_cost_cents?: number
           updated_at?: string
           workspace_id?: string
@@ -28458,10 +28581,12 @@ export type Database = {
           materiality_rule: Json
           price_sheet_id: string
           prior_price_sheet_id: string | null
+          publish_group_id: string
           published_at: string | null
           source_metadata: Json
           source_type: string
           status: string
+          stream_kind: string
           updated_at: string
           workspace_id: string
         }
@@ -28475,10 +28600,12 @@ export type Database = {
           materiality_rule?: Json
           price_sheet_id: string
           prior_price_sheet_id?: string | null
+          publish_group_id?: string
           published_at?: string | null
           source_metadata?: Json
           source_type?: string
           status?: string
+          stream_kind?: string
           updated_at?: string
           workspace_id?: string
         }
@@ -28492,10 +28619,12 @@ export type Database = {
           materiality_rule?: Json
           price_sheet_id?: string
           prior_price_sheet_id?: string | null
+          publish_group_id?: string
           published_at?: string | null
           source_metadata?: Json
           source_type?: string
           status?: string
+          stream_kind?: string
           updated_at?: string
           workspace_id?: string
         }
@@ -28517,7 +28646,7 @@ export type Database = {
           {
             foreignKeyName: "qb_price_change_events_price_sheet_id_fkey"
             columns: ["price_sheet_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "qb_price_sheets"
             referencedColumns: ["id"]
           },
@@ -28667,6 +28796,55 @@ export type Database = {
             columns: ["proposed_model_id"]
             isOneToOne: false
             referencedRelation: "qb_equipment_models"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qb_price_sheet_lineage: {
+        Row: {
+          brand_id: string
+          created_at: string
+          lane: string
+          predecessor_price_sheet_id: string | null
+          price_sheet_id: string
+          workspace_id: string
+        }
+        Insert: {
+          brand_id: string
+          created_at?: string
+          lane: string
+          predecessor_price_sheet_id?: string | null
+          price_sheet_id: string
+          workspace_id: string
+        }
+        Update: {
+          brand_id?: string
+          created_at?: string
+          lane?: string
+          predecessor_price_sheet_id?: string | null
+          price_sheet_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_price_sheet_lineage_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "qb_brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_price_sheet_lineage_predecessor_price_sheet_id_fkey"
+            columns: ["predecessor_price_sheet_id"]
+            isOneToOne: false
+            referencedRelation: "qb_price_sheets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_price_sheet_lineage_price_sheet_id_fkey"
+            columns: ["price_sheet_id"]
+            isOneToOne: false
+            referencedRelation: "qb_price_sheets"
             referencedColumns: ["id"]
           },
         ]
@@ -29217,19 +29395,233 @@ export type Database = {
           },
         ]
       }
+      qb_quote_pricing_epochs: {
+        Row: {
+          epoch: number
+          quote_package_id: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          epoch?: number
+          quote_package_id: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          epoch?: number
+          quote_package_id?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
+      }
+      qb_quote_reprice_audits: {
+        Row: {
+          action: string
+          actor_id: string
+          actor_role: string
+          after_quote_status: string
+          after_quote_version_id: string
+          after_totals: Json
+          after_version_number: number
+          apply_audit_id: string | null
+          approval_case_id: string
+          before_quote_status: string
+          before_quote_version_id: string
+          before_totals: Json
+          before_version_number: number
+          commission_projection: Json
+          created_at: string
+          customer_communication_sent: boolean
+          draft_id: string
+          id: string
+          idempotency_key: string
+          impact_id: string
+          line_changes: Json
+          margin_override: Json | null
+          payload: Json
+          price_sheet_id: string
+          prior_price_sheet_id: string | null
+          quote_package_id: string
+          source_event_id: string
+          workspace_id: string
+        }
+        Insert: {
+          action: string
+          actor_id: string
+          actor_role: string
+          after_quote_status: string
+          after_quote_version_id: string
+          after_totals: Json
+          after_version_number: number
+          apply_audit_id?: string | null
+          approval_case_id: string
+          before_quote_status: string
+          before_quote_version_id: string
+          before_totals: Json
+          before_version_number: number
+          commission_projection: Json
+          created_at?: string
+          customer_communication_sent?: boolean
+          draft_id: string
+          id?: string
+          idempotency_key: string
+          impact_id: string
+          line_changes: Json
+          margin_override?: Json | null
+          payload: Json
+          price_sheet_id: string
+          prior_price_sheet_id?: string | null
+          quote_package_id: string
+          source_event_id: string
+          workspace_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          actor_role?: string
+          after_quote_status?: string
+          after_quote_version_id?: string
+          after_totals?: Json
+          after_version_number?: number
+          apply_audit_id?: string | null
+          approval_case_id?: string
+          before_quote_status?: string
+          before_quote_version_id?: string
+          before_totals?: Json
+          before_version_number?: number
+          commission_projection?: Json
+          created_at?: string
+          customer_communication_sent?: boolean
+          draft_id?: string
+          id?: string
+          idempotency_key?: string
+          impact_id?: string
+          line_changes?: Json
+          margin_override?: Json | null
+          payload?: Json
+          price_sheet_id?: string
+          prior_price_sheet_id?: string | null
+          quote_package_id?: string
+          source_event_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_quote_reprice_audits_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quote_reprice_audits_after_quote_version_id_fkey"
+            columns: ["after_quote_version_id"]
+            isOneToOne: false
+            referencedRelation: "quote_package_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quote_reprice_audits_apply_audit_id_fkey"
+            columns: ["apply_audit_id"]
+            isOneToOne: false
+            referencedRelation: "qb_quote_reprice_audits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quote_reprice_audits_approval_case_id_fkey"
+            columns: ["approval_case_id"]
+            isOneToOne: false
+            referencedRelation: "quote_approval_cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quote_reprice_audits_approval_case_id_fkey"
+            columns: ["approval_case_id"]
+            isOneToOne: false
+            referencedRelation: "v_margin_exceptions"
+            referencedColumns: ["approval_case_id"]
+          },
+          {
+            foreignKeyName: "qb_quote_reprice_audits_before_quote_version_id_fkey"
+            columns: ["before_quote_version_id"]
+            isOneToOne: false
+            referencedRelation: "quote_package_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quote_reprice_audits_draft_id_fkey"
+            columns: ["draft_id"]
+            isOneToOne: false
+            referencedRelation: "qb_quote_reprice_drafts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quote_reprice_audits_impact_id_fkey"
+            columns: ["impact_id"]
+            isOneToOne: false
+            referencedRelation: "qb_quote_reprice_impacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quote_reprice_audits_price_sheet_id_fkey"
+            columns: ["price_sheet_id"]
+            isOneToOne: false
+            referencedRelation: "qb_price_sheets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quote_reprice_audits_prior_price_sheet_id_fkey"
+            columns: ["prior_price_sheet_id"]
+            isOneToOne: false
+            referencedRelation: "qb_price_sheets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quote_reprice_audits_quote_package_id_fkey"
+            columns: ["quote_package_id"]
+            isOneToOne: false
+            referencedRelation: "price_change_impact"
+            referencedColumns: ["quote_package_id"]
+          },
+          {
+            foreignKeyName: "qb_quote_reprice_audits_quote_package_id_fkey"
+            columns: ["quote_package_id"]
+            isOneToOne: false
+            referencedRelation: "quote_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quote_reprice_audits_source_event_id_fkey"
+            columns: ["source_event_id"]
+            isOneToOne: false
+            referencedRelation: "qb_price_change_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       qb_quote_reprice_drafts: {
         Row: {
           applied_at: string | null
           approval_case_id: string | null
+          approved_draft_updated_at_snapshot: string | null
           before_snapshot: Json
           created_at: string
           created_by: string | null
+          draft_version: number
           email_draft_id: string | null
           id: string
           impact_id: string
+          impact_updated_at_snapshot: string | null
           projected_totals: Json
           proposed_patch: Json
           quote_package_id: string
+          quote_package_version_id: string | null
+          quote_pricing_epoch_snapshot: number | null
+          quote_updated_at_snapshot: string | null
+          quote_version_number: number | null
+          reversed_at: string | null
           status: string
           updated_at: string
           workspace_id: string
@@ -29237,15 +29629,23 @@ export type Database = {
         Insert: {
           applied_at?: string | null
           approval_case_id?: string | null
+          approved_draft_updated_at_snapshot?: string | null
           before_snapshot?: Json
           created_at?: string
           created_by?: string | null
+          draft_version?: number
           email_draft_id?: string | null
           id?: string
           impact_id: string
+          impact_updated_at_snapshot?: string | null
           projected_totals?: Json
           proposed_patch?: Json
           quote_package_id: string
+          quote_package_version_id?: string | null
+          quote_pricing_epoch_snapshot?: number | null
+          quote_updated_at_snapshot?: string | null
+          quote_version_number?: number | null
+          reversed_at?: string | null
           status?: string
           updated_at?: string
           workspace_id?: string
@@ -29253,20 +29653,42 @@ export type Database = {
         Update: {
           applied_at?: string | null
           approval_case_id?: string | null
+          approved_draft_updated_at_snapshot?: string | null
           before_snapshot?: Json
           created_at?: string
           created_by?: string | null
+          draft_version?: number
           email_draft_id?: string | null
           id?: string
           impact_id?: string
+          impact_updated_at_snapshot?: string | null
           projected_totals?: Json
           proposed_patch?: Json
           quote_package_id?: string
+          quote_package_version_id?: string | null
+          quote_pricing_epoch_snapshot?: number | null
+          quote_updated_at_snapshot?: string | null
+          quote_version_number?: number | null
+          reversed_at?: string | null
           status?: string
           updated_at?: string
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "qb_quote_reprice_drafts_approval_case_fk"
+            columns: ["approval_case_id"]
+            isOneToOne: false
+            referencedRelation: "quote_approval_cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quote_reprice_drafts_approval_case_fk"
+            columns: ["approval_case_id"]
+            isOneToOne: false
+            referencedRelation: "v_margin_exceptions"
+            referencedColumns: ["approval_case_id"]
+          },
           {
             foreignKeyName: "qb_quote_reprice_drafts_created_by_fkey"
             columns: ["created_by"]
@@ -29300,6 +29722,13 @@ export type Database = {
             columns: ["quote_package_id"]
             isOneToOne: false
             referencedRelation: "quote_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quote_reprice_drafts_quote_version_fk"
+            columns: ["quote_package_version_id"]
+            isOneToOne: false
+            referencedRelation: "quote_package_versions"
             referencedColumns: ["id"]
           },
         ]
@@ -29391,8 +29820,14 @@ export type Database = {
           approval_required_reasons: string[]
           assigned_rep_id: string | null
           below_margin_floor: boolean
+          catalog_changes: Json
+          change_categories: string[]
           commission_delta_cents: number | null
+          context_snapshot: Json
           created_at: string
+          customer_company_id: string | null
+          customer_price_lock_expires_at: string | null
+          customer_price_lock_reason: string | null
           deal_id: string | null
           dismissed_reason: string | null
           event_id: string
@@ -29409,6 +29844,7 @@ export type Database = {
           quote_updated_at_snapshot: string | null
           requires_manager_review: boolean
           state: string
+          suppressed_by_customer_lock: boolean
           total_delta_cents: number
           updated_at: string
           workspace_id: string
@@ -29417,8 +29853,14 @@ export type Database = {
           approval_required_reasons?: string[]
           assigned_rep_id?: string | null
           below_margin_floor?: boolean
+          catalog_changes?: Json
+          change_categories?: string[]
           commission_delta_cents?: number | null
+          context_snapshot?: Json
           created_at?: string
+          customer_company_id?: string | null
+          customer_price_lock_expires_at?: string | null
+          customer_price_lock_reason?: string | null
           deal_id?: string | null
           dismissed_reason?: string | null
           event_id: string
@@ -29435,6 +29877,7 @@ export type Database = {
           quote_updated_at_snapshot?: string | null
           requires_manager_review?: boolean
           state?: string
+          suppressed_by_customer_lock?: boolean
           total_delta_cents?: number
           updated_at?: string
           workspace_id?: string
@@ -29443,8 +29886,14 @@ export type Database = {
           approval_required_reasons?: string[]
           assigned_rep_id?: string | null
           below_margin_floor?: boolean
+          catalog_changes?: Json
+          change_categories?: string[]
           commission_delta_cents?: number | null
+          context_snapshot?: Json
           created_at?: string
+          customer_company_id?: string | null
+          customer_price_lock_expires_at?: string | null
+          customer_price_lock_reason?: string | null
           deal_id?: string | null
           dismissed_reason?: string | null
           event_id?: string
@@ -29461,6 +29910,7 @@ export type Database = {
           quote_updated_at_snapshot?: string | null
           requires_manager_review?: boolean
           state?: string
+          suppressed_by_customer_lock?: boolean
           total_delta_cents?: number
           updated_at?: string
           workspace_id?: string
@@ -29472,6 +29922,41 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quote_reprice_impacts_customer_company_id_fkey"
+            columns: ["customer_company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quote_reprice_impacts_customer_company_id_fkey"
+            columns: ["customer_company_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quote_reprice_impacts_customer_company_id_fkey"
+            columns: ["customer_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "qb_quote_reprice_impacts_customer_company_id_fkey"
+            columns: ["customer_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "qb_quote_reprice_impacts_customer_company_id_fkey"
+            columns: ["customer_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
           },
           {
             foreignKeyName: "qb_quote_reprice_impacts_event_id_fkey"
@@ -30084,6 +30569,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      qb_workspace_pricing_epochs: {
+        Row: {
+          epoch: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          epoch?: number
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          epoch?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
       }
       qep_agent_work_orders: {
         Row: {
@@ -36876,6 +37379,9 @@ export type Database = {
           id: string
           margin_pct: number | null
           net_total: number | null
+          oem_reprice_draft_id: string | null
+          oem_reprice_draft_updated_at: string | null
+          oem_reprice_draft_version: number | null
           policy_snapshot_json: Json
           quote_number: string | null
           quote_package_id: string
@@ -36910,6 +37416,9 @@ export type Database = {
           id?: string
           margin_pct?: number | null
           net_total?: number | null
+          oem_reprice_draft_id?: string | null
+          oem_reprice_draft_updated_at?: string | null
+          oem_reprice_draft_version?: number | null
           policy_snapshot_json?: Json
           quote_number?: string | null
           quote_package_id: string
@@ -36944,6 +37453,9 @@ export type Database = {
           id?: string
           margin_pct?: number | null
           net_total?: number | null
+          oem_reprice_draft_id?: string | null
+          oem_reprice_draft_updated_at?: string | null
+          oem_reprice_draft_version?: number | null
           policy_snapshot_json?: Json
           quote_number?: string | null
           quote_package_id?: string
@@ -37020,6 +37532,13 @@ export type Database = {
             columns: ["flow_approval_id"]
             isOneToOne: false
             referencedRelation: "flow_approvals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_approval_cases_oem_reprice_draft_fk"
+            columns: ["oem_reprice_draft_id"]
+            isOneToOne: false
+            referencedRelation: "qb_quote_reprice_drafts"
             referencedColumns: ["id"]
           },
           {
@@ -38589,6 +39108,77 @@ export type Database = {
           },
         ]
       }
+      quote_send_authorizations: {
+        Row: {
+          actor_id: string
+          completed_at: string | null
+          created_at: string
+          document_artifact_id: string
+          error_detail: string | null
+          expires_at: string
+          id: string
+          quote_package_id: string
+          quote_package_version_id: string
+          status: string
+          workspace_id: string
+        }
+        Insert: {
+          actor_id: string
+          completed_at?: string | null
+          created_at?: string
+          document_artifact_id: string
+          error_detail?: string | null
+          expires_at: string
+          id?: string
+          quote_package_id: string
+          quote_package_version_id: string
+          status?: string
+          workspace_id: string
+        }
+        Update: {
+          actor_id?: string
+          completed_at?: string | null
+          created_at?: string
+          document_artifact_id?: string
+          error_detail?: string | null
+          expires_at?: string
+          id?: string
+          quote_package_id?: string
+          quote_package_version_id?: string
+          status?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_send_authorizations_document_artifact_id_fkey"
+            columns: ["document_artifact_id"]
+            isOneToOne: false
+            referencedRelation: "quote_document_artifacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_send_authorizations_quote_package_id_fkey"
+            columns: ["quote_package_id"]
+            isOneToOne: false
+            referencedRelation: "price_change_impact"
+            referencedColumns: ["quote_package_id"]
+          },
+          {
+            foreignKeyName: "quote_send_authorizations_quote_package_id_fkey"
+            columns: ["quote_package_id"]
+            isOneToOne: false
+            referencedRelation: "quote_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_send_authorizations_quote_package_version_id_fkey"
+            columns: ["quote_package_version_id"]
+            isOneToOne: false
+            referencedRelation: "quote_package_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quote_signatures: {
         Row: {
           created_at: string
@@ -39005,60 +39595,169 @@ export type Database = {
           },
         ]
       }
+      rental_billing_run_items: {
+        Row: {
+          attempt_count: number
+          billed_cents: number
+          completed_at: string | null
+          created_at: string
+          error_detail: string | null
+          id: string
+          lease_expires_at: string | null
+          lease_started_at: string | null
+          mirror_skipped: boolean
+          rental_billing_run_id: string
+          rental_contract_id: string
+          rental_invoice_id: string | null
+          status: string
+          tax_cents: number
+          updated_at: string
+          worker_token: string | null
+          workspace_id: string
+        }
+        Insert: {
+          attempt_count?: number
+          billed_cents?: number
+          completed_at?: string | null
+          created_at?: string
+          error_detail?: string | null
+          id?: string
+          lease_expires_at?: string | null
+          lease_started_at?: string | null
+          mirror_skipped?: boolean
+          rental_billing_run_id: string
+          rental_contract_id: string
+          rental_invoice_id?: string | null
+          status?: string
+          tax_cents?: number
+          updated_at?: string
+          worker_token?: string | null
+          workspace_id: string
+        }
+        Update: {
+          attempt_count?: number
+          billed_cents?: number
+          completed_at?: string | null
+          created_at?: string
+          error_detail?: string | null
+          id?: string
+          lease_expires_at?: string | null
+          lease_started_at?: string | null
+          mirror_skipped?: boolean
+          rental_billing_run_id?: string
+          rental_contract_id?: string
+          rental_invoice_id?: string | null
+          status?: string
+          tax_cents?: number
+          updated_at?: string
+          worker_token?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rental_billing_run_items_rental_billing_run_id_fkey"
+            columns: ["rental_billing_run_id"]
+            isOneToOne: false
+            referencedRelation: "rental_billing_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_billing_run_items_rental_contract_id_fkey"
+            columns: ["rental_contract_id"]
+            isOneToOne: false
+            referencedRelation: "rental_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_billing_run_items_rental_invoice_id_fkey"
+            columns: ["rental_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "rental_invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rental_billing_runs: {
         Row: {
+          batch_count: number
+          batch_size: number
           billing_cycle:
             | Database["public"]["Enums"]["rental_billing_cycle"]
             | null
           completed_at: string | null
           created_at: string
           deleted_at: string | null
+          examined_count: number
+          failed_count: number
           id: string
           invoice_count: number
+          last_batch_at: string | null
           metadata: Json
+          mirror_skipped_count: number
+          resume_count: number
           rollback_reason: string | null
           rolled_back_at: string | null
           run_date: string
+          skipped_count: number
           status: string
           total_billed_cents: number
+          total_tax_cents: number
           triggered_by: string | null
           updated_at: string
           workspace_id: string
         }
         Insert: {
+          batch_count?: number
+          batch_size?: number
           billing_cycle?:
             | Database["public"]["Enums"]["rental_billing_cycle"]
             | null
           completed_at?: string | null
           created_at?: string
           deleted_at?: string | null
+          examined_count?: number
+          failed_count?: number
           id?: string
           invoice_count?: number
+          last_batch_at?: string | null
           metadata?: Json
+          mirror_skipped_count?: number
+          resume_count?: number
           rollback_reason?: string | null
           rolled_back_at?: string | null
           run_date?: string
+          skipped_count?: number
           status?: string
           total_billed_cents?: number
+          total_tax_cents?: number
           triggered_by?: string | null
           updated_at?: string
           workspace_id?: string
         }
         Update: {
+          batch_count?: number
+          batch_size?: number
           billing_cycle?:
             | Database["public"]["Enums"]["rental_billing_cycle"]
             | null
           completed_at?: string | null
           created_at?: string
           deleted_at?: string | null
+          examined_count?: number
+          failed_count?: number
           id?: string
           invoice_count?: number
+          last_batch_at?: string | null
           metadata?: Json
+          mirror_skipped_count?: number
+          resume_count?: number
           rollback_reason?: string | null
           rolled_back_at?: string | null
           run_date?: string
+          skipped_count?: number
           status?: string
           total_billed_cents?: number
+          total_tax_cents?: number
           triggered_by?: string | null
           updated_at?: string
           workspace_id?: string
@@ -39627,6 +40326,8 @@ export type Database = {
           rpo_rental_credit_pct: number | null
           rpo_term_months: number | null
           salesperson_id: string | null
+          share_token: string | null
+          share_token_created_at: string | null
           ship_to_address_id: string | null
           signed_terms_url: string | null
           status: string
@@ -39738,6 +40439,8 @@ export type Database = {
           rpo_rental_credit_pct?: number | null
           rpo_term_months?: number | null
           salesperson_id?: string | null
+          share_token?: string | null
+          share_token_created_at?: string | null
           ship_to_address_id?: string | null
           signed_terms_url?: string | null
           status?: string
@@ -39849,6 +40552,8 @@ export type Database = {
           rpo_rental_credit_pct?: number | null
           rpo_term_months?: number | null
           salesperson_id?: string | null
+          share_token?: string | null
+          share_token_created_at?: string | null
           ship_to_address_id?: string | null
           signed_terms_url?: string | null
           status?: string
@@ -40124,6 +40829,64 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: []
+      }
+      rental_invoice_period_quarantine: {
+        Row: {
+          canonical_rental_invoice_id: string
+          invoice_snapshot: Json
+          period_end: string
+          period_start: string
+          quarantined_at: string
+          reason: string
+          rental_contract_id: string
+          rental_invoice_id: string
+          workspace_id: string
+        }
+        Insert: {
+          canonical_rental_invoice_id: string
+          invoice_snapshot: Json
+          period_end: string
+          period_start: string
+          quarantined_at?: string
+          reason: string
+          rental_contract_id: string
+          rental_invoice_id: string
+          workspace_id: string
+        }
+        Update: {
+          canonical_rental_invoice_id?: string
+          invoice_snapshot?: Json
+          period_end?: string
+          period_start?: string
+          quarantined_at?: string
+          reason?: string
+          rental_contract_id?: string
+          rental_invoice_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rental_invoice_period_quaranti_canonical_rental_invoice_id_fkey"
+            columns: ["canonical_rental_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "rental_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_invoice_period_quarantine_rental_contract_id_fkey"
+            columns: ["rental_contract_id"]
+            isOneToOne: false
+            referencedRelation: "rental_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_invoice_period_quarantine_rental_invoice_id_fkey"
+            columns: ["rental_invoice_id"]
+            isOneToOne: true
+            referencedRelation: "rental_invoices"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       rental_invoices: {
         Row: {
@@ -40693,6 +41456,7 @@ export type Database = {
           damage_parts_cents: number | null
           decided_by: string | null
           decision_at: string | null
+          deleted_at: string | null
           deposit_amount: number | null
           deposit_covers_charges: boolean | null
           environmental_fee_cents: number | null
@@ -40733,6 +41497,7 @@ export type Database = {
           damage_parts_cents?: number | null
           decided_by?: string | null
           decision_at?: string | null
+          deleted_at?: string | null
           deposit_amount?: number | null
           deposit_covers_charges?: boolean | null
           environmental_fee_cents?: number | null
@@ -40773,6 +41538,7 @@ export type Database = {
           damage_parts_cents?: number | null
           decided_by?: string | null
           decision_at?: string | null
+          deleted_at?: string | null
           deposit_amount?: number | null
           deposit_covers_charges?: boolean | null
           environmental_fee_cents?: number | null
@@ -45456,6 +46222,8 @@ export type Database = {
           actor_id: string | null
           completed_at: string | null
           created_at: string
+          demand_fingerprint: string | null
+          demand_version: number
           expected_date: string | null
           from_branch: string | null
           id: string
@@ -45463,7 +46231,10 @@ export type Database = {
           metadata: Json
           plan_batch_id: string | null
           po_reference: string | null
+          purchase_order_id: string | null
+          purchase_order_line_id: string | null
           requirement_id: string
+          service_demand_key: string | null
           superseded_at: string | null
           to_branch: string | null
           updated_at: string
@@ -45475,6 +46246,8 @@ export type Database = {
           actor_id?: string | null
           completed_at?: string | null
           created_at?: string
+          demand_fingerprint?: string | null
+          demand_version?: number
           expected_date?: string | null
           from_branch?: string | null
           id?: string
@@ -45482,7 +46255,10 @@ export type Database = {
           metadata?: Json
           plan_batch_id?: string | null
           po_reference?: string | null
+          purchase_order_id?: string | null
+          purchase_order_line_id?: string | null
           requirement_id: string
+          service_demand_key?: string | null
           superseded_at?: string | null
           to_branch?: string | null
           updated_at?: string
@@ -45494,6 +46270,8 @@ export type Database = {
           actor_id?: string | null
           completed_at?: string | null
           created_at?: string
+          demand_fingerprint?: string | null
+          demand_version?: number
           expected_date?: string | null
           from_branch?: string | null
           id?: string
@@ -45501,7 +46279,10 @@ export type Database = {
           metadata?: Json
           plan_batch_id?: string | null
           po_reference?: string | null
+          purchase_order_id?: string | null
+          purchase_order_line_id?: string | null
           requirement_id?: string
+          service_demand_key?: string | null
           superseded_at?: string | null
           to_branch?: string | null
           updated_at?: string
@@ -45599,6 +46380,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_service_open_work_order_listing"
             referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_actions_purchase_order_id_fkey"
+            columns: ["purchase_order_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_parts_actions_purchase_order_line_id_fkey"
+            columns: ["purchase_order_line_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_order_lines"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "service_parts_actions_requirement_id_fkey"
@@ -45916,6 +46711,155 @@ export type Database = {
             columns: ["vendor_id"]
             isOneToOne: false
             referencedRelation: "vendor_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_parts_reservations: {
+        Row: {
+          branch_id: string
+          consumed_at: string | null
+          created_at: string
+          demand_fingerprint: string
+          demand_version: number
+          id: string
+          job_id: string
+          part_number: string
+          plan_batch_id: string
+          quantity: number
+          release_reason: string | null
+          released_at: string | null
+          requirement_id: string
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          branch_id: string
+          consumed_at?: string | null
+          created_at?: string
+          demand_fingerprint: string
+          demand_version: number
+          id?: string
+          job_id: string
+          part_number: string
+          plan_batch_id: string
+          quantity: number
+          release_reason?: string | null
+          released_at?: string | null
+          requirement_id: string
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          branch_id?: string
+          consumed_at?: string | null
+          created_at?: string
+          demand_fingerprint?: string
+          demand_version?: number
+          id?: string
+          job_id?: string
+          part_number?: string
+          plan_batch_id?: string
+          quantity?: number
+          release_reason?: string | null
+          released_at?: string | null
+          requirement_id?: string
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_parts_reservations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "mv_service_jobs_wip"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_parts_reservations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "service_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_parts_reservations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_reservations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_reservations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_reservations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_reservations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_haul_dispatch_board"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_reservations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_internal_cost_posting_queue"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_reservations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_jobs_grapple_production_candidates"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_reservations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_jobs_last_activity"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_reservations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_live_schedule"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_reservations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_reservations_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "service_parts_requirements"
             referencedColumns: ["id"]
           },
         ]
@@ -64347,6 +65291,24 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      apply_qb_oem_reprice_draft: {
+        Args: {
+          p_actor_id: string
+          p_actor_role: string
+          p_draft_id: string
+          p_workspace_id: string
+        }
+        Returns: Json
+      }
+      apply_qb_oem_reprice_draft_v813: {
+        Args: {
+          p_actor_id: string
+          p_actor_role: string
+          p_draft_id: string
+          p_workspace_id: string
+        }
+        Returns: Json
+      }
       apply_qep_delegated_recommendation: {
         Args: {
           p_applied_by?: string
@@ -64367,6 +65329,14 @@ export type Database = {
       assert_reversal_approver: {
         Args: { p_approver_id: string }
         Returns: string
+      }
+      attach_rental_invoice_to_billing_item: {
+        Args: {
+          p_item_id: string
+          p_rental_invoice_id: string
+          p_worker_token: string
+        }
+        Returns: boolean
       }
       audit_equipment_reversal: {
         Args: {
@@ -64406,7 +65376,26 @@ export type Database = {
         Args: { p_rows: Json }
         Returns: number
       }
+      begin_quote_send_authorization: {
+        Args: {
+          p_actor_id: string
+          p_document_artifact_id: string
+          p_quote_package_id: string
+          p_quote_package_version_id: string
+          p_ttl_seconds?: number
+          p_workspace_id: string
+        }
+        Returns: string
+      }
       bulk_update_parts_embeddings: { Args: { p_updates: Json }; Returns: Json }
+      bump_qb_quote_pricing_epoch: {
+        Args: { p_quote_package_id: string; p_workspace_id: string }
+        Returns: undefined
+      }
+      bump_qb_workspace_pricing_epoch: {
+        Args: { p_workspace_id: string }
+        Returns: undefined
+      }
       calculate_deposit_tier: {
         Args: { p_equipment_value: number }
         Returns: Json
@@ -64457,7 +65446,22 @@ export type Database = {
           job_type: string
           lease_token: string
           request_payload: Json
-          requested_by: string | null
+          requested_by: string
+          workspace_id: string
+        }[]
+      }
+      claim_health_score_refresh_jobs: {
+        Args: { p_lease_seconds?: number; p_limit?: number }
+        Returns: {
+          attempt_count: number
+          dna_cursor_id: string
+          failure_count: number
+          job_id: string
+          lease_token: string
+          phase: string
+          score_cursor_id: string
+          score_cursor_updated_at: string
+          snapshot_at: string
           workspace_id: string
         }[]
       }
@@ -64503,6 +65507,19 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      claim_rental_billing_batch: {
+        Args: {
+          p_batch_size?: number
+          p_lease_seconds?: number
+          p_run_id: string
+          p_worker_token: string
+        }
+        Returns: {
+          claim_attempt_count: number
+          item_id: string
+          rental_contract_id: string
+        }[]
+      }
       claim_service_customer_notifications: {
         Args: { p_lease_seconds?: number; p_limit?: number }
         Returns: {
@@ -64539,6 +65556,32 @@ export type Database = {
           p_status: string
         }
         Returns: undefined
+      }
+      complete_health_score_refresh_job: {
+        Args: {
+          p_dna_cursor_id?: string
+          p_job_id: string
+          p_last_error?: string
+          p_lease_token: string
+          p_phase: string
+          p_score_cursor_id?: string
+          p_score_cursor_updated_at?: string
+          p_status: string
+        }
+        Returns: undefined
+      }
+      complete_rental_billing_item: {
+        Args: {
+          p_billed_cents?: number
+          p_error_detail?: string
+          p_invoice_id?: string
+          p_item_id: string
+          p_mirror_skipped?: boolean
+          p_status: string
+          p_tax_cents?: number
+          p_worker_token: string
+        }
+        Returns: boolean
       }
       compute_customer_health_score: {
         Args: { p_customer_profile_id: string }
@@ -64657,6 +65700,16 @@ export type Database = {
         }
         Returns: string
       }
+      create_qb_oem_reprice_draft_for_approval: {
+        Args: {
+          p_actor_id: string
+          p_actor_role: string
+          p_impact_id: string
+          p_submission_note?: string
+          p_workspace_id: string
+        }
+        Returns: Json
+      }
       create_sales_cadence: {
         Args: {
           p_assigned_to?: string
@@ -64766,6 +65819,10 @@ export type Database = {
         Args: { p_fleet_id: string }
         Returns: Json
       }
+      customer_profile_visible_in_current_workspace: {
+        Args: { p_profile_id: string }
+        Returns: boolean
+      }
       deal_health_score: { Args: { p_deal_id: string }; Returns: number }
       decide_flow_approval: {
         Args: { p_approval_id: string; p_decision: string; p_reason?: string }
@@ -64774,6 +65831,25 @@ export type Database = {
       default_payment_terms_id: {
         Args: { p_workspace_id: string }
         Returns: string
+      }
+      defer_rental_billing_mirror: {
+        Args: {
+          p_error_detail: string
+          p_item_id: string
+          p_retry_seconds?: number
+          p_worker_token: string
+        }
+        Returns: boolean
+      }
+      dismiss_qb_oem_reprice_impact: {
+        Args: {
+          p_actor_id: string
+          p_actor_role: string
+          p_impact_id: string
+          p_reason: string
+          p_workspace_id: string
+        }
+        Returns: Json
       }
       document_center_duplicate_link: {
         Args: { p_document_id: string; p_target_folder_id: string }
@@ -64875,6 +65951,10 @@ export type Database = {
           p_workspace_id?: string
         }
         Returns: string
+      }
+      emit_hours_crossed_intervals: {
+        Args: { p_equipment: string; p_new_hours: number; p_old_hours: number }
+        Returns: number
       }
       employee_appraisal_acknowledge: {
         Args: {
@@ -65025,6 +66105,10 @@ export type Database = {
         }
         Returns: string
       }
+      enqueue_health_score_refresh_jobs: {
+        Args: { p_refresh_on?: string }
+        Returns: number
+      }
       enqueue_qep_agent_work_order: {
         Args: {
           p_argument?: string
@@ -65115,6 +66199,30 @@ export type Database = {
       extract_portal_quote_version_text: {
         Args: { p_key_a: string; p_key_b: string; p_quote_data: Json }
         Returns: string
+      }
+      fail_quote_send_authorization: {
+        Args: { p_authorization_id: string; p_error_detail: string }
+        Returns: undefined
+      }
+      finalize_rental_billing_run: {
+        Args: { p_run_id: string }
+        Returns: {
+          batch_count: number
+          billing_run_id: string
+          claimable_count: number
+          examined_count: number
+          failed_count: number
+          invoiced_count: number
+          mirror_skipped_count: number
+          pending_count: number
+          processing_count: number
+          resume_count: number
+          run_status: string
+          skipped_count: number
+          total_billed_cents: number
+          total_items: number
+          total_tax_cents: number
+        }[]
       }
       find_duplicate_companies: {
         Args: { p_threshold?: number }
@@ -65442,6 +66550,26 @@ export type Database = {
       }
       get_my_stakeholder_subrole: { Args: never; Returns: string }
       get_my_workspace: { Args: never; Returns: string }
+      get_or_create_customer_dna_profile: {
+        Args: {
+          p_contact_id: string
+          p_existing_profile_id?: string
+          p_hubspot_contact_id?: string
+          p_intellidealer_customer_id?: string
+          p_workspace_id: string
+        }
+        Returns: string
+      }
+      get_or_create_customer_dna_profile_contact_locked_814: {
+        Args: {
+          p_contact_id: string
+          p_existing_profile_id?: string
+          p_hubspot_contact_id?: string
+          p_intellidealer_customer_id?: string
+          p_workspace_id: string
+        }
+        Returns: string
+      }
       get_part_branch_detail: {
         Args: { p_part_number: string }
         Returns: {
@@ -65651,6 +66779,15 @@ export type Database = {
         Args: { p_company_id: string }
         Returns: boolean
       }
+      issue_quote_share_token_if_requote_resolved: {
+        Args: {
+          p_candidate_token: string
+          p_quote_package_id: string
+          p_replace?: boolean
+          p_workspace_id: string
+        }
+        Returns: string
+      }
       kb_health_snapshot: { Args: never; Returns: Json }
       kb_role_can_access_source: {
         Args: {
@@ -65660,6 +66797,17 @@ export type Database = {
           p_workspace_id: string
         }
         Returns: boolean
+      }
+      list_active_customer_dna_profiles_page: {
+        Args: {
+          p_after_id?: string
+          p_limit?: number
+          p_snapshot_at: string
+          p_workspace_id: string
+        }
+        Returns: {
+          id: string
+        }[]
       }
       list_crm_companies_page: {
         Args: {
@@ -65737,6 +66885,33 @@ export type Database = {
           workspace_id: string
         }[]
       }
+      list_customer_health_profiles_for_workspace: {
+        Args: { p_limit?: number; p_order?: string; p_workspace_id: string }
+        Returns: {
+          crm_company_id: string
+          customer_name: string
+          health_score: number
+          health_score_updated_at: string
+          id: string
+        }[]
+      }
+      list_customer_health_profiles_page: {
+        Args: {
+          p_after_id?: string
+          p_after_updated_at?: string
+          p_limit?: number
+          p_snapshot_at: string
+          p_workspace_id: string
+        }
+        Returns: {
+          crm_company_id: string
+          customer_name: string
+          health_score: number
+          health_score_updated_at: string
+          id: string
+        }[]
+      }
+      list_health_score_refresh_workspaces: { Args: never; Returns: Json }
       list_parts_catalog_page: {
         Args: {
           p_category?: string
@@ -66033,6 +67208,13 @@ export type Database = {
         }
         Returns: Json
       }
+      mirror_rental_invoice_for_billing_item: {
+        Args: { p_item_id: string; p_worker_token: string }
+        Returns: {
+          customer_invoice_id: string
+          rental_invoice_id: string
+        }[]
+      }
       next_invoice_number: {
         Args: {
           p_branch_legacy_code: string
@@ -66052,6 +67234,10 @@ export type Database = {
       normalize_knowledge_gap_question: {
         Args: { p_question: string }
         Returns: string
+      }
+      normalize_qb_program_details_atomic: {
+        Args: { p_details: Json; p_program_type: string }
+        Returns: Json
       }
       oem_portal_credential_meta_for_role: {
         Args: never
@@ -66599,9 +67785,33 @@ export type Database = {
         }[]
       }
       parts_return_policy_receipt_text: { Args: never; Returns: string }
+      persist_qb_oem_price_change_event: {
+        Args: {
+          p_approval_policy: Json
+          p_brand_id: string
+          p_created_by: string
+          p_effective_date: string
+          p_materiality_rule: Json
+          p_price_sheet_id: string
+          p_publish_group_id: string
+          p_quote_pricing_epoch: number
+          p_source_metadata: Json
+          p_streams: Json
+          p_workspace_id: string
+        }
+        Returns: Json
+      }
       pick_profile_active_workspace: {
         Args: { target_profile_id: string }
         Returns: string
+      }
+      pin_qb_price_sheet_lineage: {
+        Args: {
+          p_lineage: Json
+          p_price_sheet_id: string
+          p_workspace_id: string
+        }
+        Returns: Json
       }
       pipeline_velocity_rpc: {
         Args: { p_threshold_days?: number }
@@ -66630,6 +67840,20 @@ export type Database = {
           p_payment_reference?: string
         }
         Returns: Json
+      }
+      post_rental_invoice_for_billing_item: {
+        Args: { p_invoice: Json; p_item_id: string; p_worker_token: string }
+        Returns: {
+          created_new: boolean
+          invoice_id: string
+        }[]
+      }
+      post_rental_invoice_for_billing_item_v1_unchecked: {
+        Args: { p_invoice: Json; p_item_id: string; p_worker_token: string }
+        Returns: {
+          created_new: boolean
+          invoice_id: string
+        }[]
       }
       post_sale_playbook_summary: {
         Args: { p_limit?: number; p_workspace?: string }
@@ -66661,8 +67885,58 @@ export type Database = {
         Args: { p_document_id: string }
         Returns: number
       }
+      publish_and_persist_qb_oem_price_change_event: {
+        Args: {
+          p_approval_policy: Json
+          p_auto_approve?: boolean
+          p_brand_id: string
+          p_created_by: string
+          p_effective_date: string
+          p_materiality_rule: Json
+          p_price_sheet_id: string
+          p_publish_group_id: string
+          p_quote_pricing_epoch: number
+          p_source_metadata: Json
+          p_streams: Json
+          p_workspace_id: string
+        }
+        Returns: Json
+      }
+      publish_qb_price_sheet_atomic: {
+        Args: {
+          p_actor_id: string
+          p_auto_approve?: boolean
+          p_price_sheet_id: string
+          p_workspace_id: string
+        }
+        Returns: Json
+      }
       purge_billing_queue: { Args: { p_older_than?: string }; Returns: number }
       qb_can_access_trade_in_financial: { Args: never; Returns: boolean }
+      qb_has_meaningful_catalog_specs: {
+        Args: { p_depth?: number; p_value: Json }
+        Returns: boolean
+      }
+      qb_oem_reprice_canonical_totals: {
+        Args: { p_quote_package_id: string }
+        Returns: Json
+      }
+      qb_oem_reprice_persisted_totals_match: {
+        Args: { p_quote_package_id: string; p_totals: Json }
+        Returns: boolean
+      }
+      qb_oem_reprice_projected_totals: {
+        Args: { p_impact_id: string; p_quote_package_id: string }
+        Returns: Json
+      }
+      qb_oem_reprice_recompute_quote_flag: {
+        Args: { p_quote_package_id: string; p_workspace_id: string }
+        Returns: undefined
+      }
+      qb_oem_reprice_reversal_within_window: {
+        Args: { p_applied_at: string; p_now: string }
+        Returns: boolean
+      }
       qb_search_equipment_fuzzy: {
         Args: { p_brand_id?: string; p_limit?: number; p_query: string }
         Returns: {
@@ -66928,6 +68202,23 @@ export type Database = {
           p_provider: string
           p_quote_package_id: string
           p_recipient: string
+          p_send_authorization_id: string
+          p_sent_at: string
+          p_subject: string
+          p_workspace_id: string
+        }
+        Returns: string
+      }
+      quote_send_package_commit_v599: {
+        Args: {
+          p_created_by: string
+          p_document_artifact_id: string
+          p_follow_up_at: string
+          p_message_body: string
+          p_metadata: Json
+          p_provider: string
+          p_quote_package_id: string
+          p_recipient: string
           p_sent_at: string
           p_subject: string
           p_workspace_id: string
@@ -66956,6 +68247,26 @@ export type Database = {
       }
       recompute_qep_decision_supersessions: {
         Args: { p_actor?: string }
+        Returns: Json
+      }
+      reconcile_service_parts_plan: {
+        Args: {
+          p_actor_id: string
+          p_job_id: string
+          p_plan: Json
+          p_plan_batch_id: string
+          p_workspace_id: string
+        }
+        Returns: Json
+      }
+      reconcile_service_parts_plan_v1_unchecked: {
+        Args: {
+          p_actor_id: string
+          p_job_id: string
+          p_plan: Json
+          p_plan_batch_id: string
+          p_workspace_id: string
+        }
         Returns: Json
       }
       record_ap_payment:
@@ -67138,6 +68449,14 @@ export type Database = {
         }
         Returns: undefined
       }
+      renew_dge_refresh_job_lease: {
+        Args: {
+          p_job_id: string
+          p_lease_seconds?: number
+          p_lease_token: string
+        }
+        Returns: undefined
+      }
       rental_assert_workspace: {
         Args: { p_workspace_id: string }
         Returns: undefined
@@ -67160,6 +68479,21 @@ export type Database = {
         }
         Returns: Json
       }
+      rental_availability_pressure: {
+        Args: { p_from?: string; p_to?: string }
+        Returns: {
+          category: string
+          critical_date: string
+          fleet_count: number
+          headroom: number
+          peak_demand: number
+          workspace_id: string
+        }[]
+      }
+      rental_billing_source_snapshot: {
+        Args: { p_rental_contract_id: string; p_workspace_id: string }
+        Returns: Json
+      }
       rental_check_availability: {
         Args: {
           p_category?: string
@@ -67180,6 +68514,134 @@ export type Database = {
         }
         Returns: Json
       }
+      rental_close_contract: {
+        Args: {
+          p_actor_id: string
+          p_contract_id: string
+          p_hard_close?: boolean
+          p_hard_close_reason?: string
+          p_workspace_id: string
+        }
+        Returns: {
+          agreed_daily_rate: number | null
+          agreed_monthly_rate: number | null
+          agreed_weekly_rate: number | null
+          approved_end_date: string | null
+          approved_start_date: string | null
+          assignment_status: string
+          billing_cycle:
+            | Database["public"]["Enums"]["rental_billing_cycle"]
+            | null
+          branch_id: string | null
+          checkout_inspection_required: boolean
+          checkout_security_override_at: string | null
+          checkout_security_override_by: string | null
+          checkout_security_override_reason: string | null
+          closed_at: string | null
+          coi_document_url: string | null
+          coi_expires_at: string | null
+          coi_received_at: string | null
+          coi_required: boolean
+          contract_number: string | null
+          contract_type: string
+          created_at: string
+          customer_notes: string | null
+          damage_waiver_accepted: boolean | null
+          damage_waiver_amount_cents: number | null
+          damage_waiver_rate_pct: number | null
+          dealer_notes: string | null
+          dealer_response: string | null
+          deleted_at: string | null
+          delivery_address: Json
+          delivery_fee_cents: number | null
+          delivery_location: string | null
+          delivery_mode: string
+          delivery_required: boolean
+          deposit_amount: number | null
+          deposit_invoice_id: string | null
+          deposit_required: boolean
+          deposit_status: string | null
+          equipment_class: string | null
+          equipment_id: string | null
+          equipment_subclass: string | null
+          estimate_daily_rate: number | null
+          estimate_monthly_rate: number | null
+          estimate_weekly_rate: number | null
+          hard_close_reason: string | null
+          hard_closed_at: string | null
+          hard_closed_by: string | null
+          hourly_rate_cents: number | null
+          id: string
+          included_hours_per_day: number | null
+          insurance_expires_at: string | null
+          insurance_minimum_coverage_cents: number | null
+          insurance_policy_number: string | null
+          insurance_provider: string | null
+          lifecycle_state: string
+          native_signature_id: string | null
+          native_signed_at: string | null
+          native_signer_name: string | null
+          off_rent_at: string | null
+          on_rent_at: string | null
+          originated_by: string | null
+          origination_channel: string
+          overage_hourly_rate_cents: number | null
+          pickup_address: Json
+          pickup_fee_cents: number | null
+          pickup_required: boolean
+          po_number: string | null
+          po_received_at: string | null
+          po_required: boolean
+          portal_customer_id: string | null
+          print_pdf_generated_at: string | null
+          print_pdf_generated_by: string | null
+          print_pdf_url: string | null
+          promised_delivery_at: string | null
+          promised_pickup_at: string | null
+          proration_rule:
+            | Database["public"]["Enums"]["rental_proration_rule"]
+            | null
+          qrm_company_id: string | null
+          qrm_contact_id: string | null
+          quote_expires_at: string | null
+          rate_override_approved_at: string | null
+          rate_override_approved_by: string | null
+          rate_override_reason: string | null
+          request_type: string
+          requested_category: string | null
+          requested_end_date: string
+          requested_make: string | null
+          requested_model: string | null
+          requested_start_date: string
+          returned_at: string | null
+          rpo_credit_accrued_cents: number
+          rpo_eligible: boolean
+          rpo_exercise_deadline: string | null
+          rpo_purchase_price_cents: number | null
+          rpo_rental_credit_pct: number | null
+          rpo_term_months: number | null
+          salesperson_id: string | null
+          share_token: string | null
+          share_token_created_at: string | null
+          ship_to_address_id: string | null
+          signed_terms_url: string | null
+          status: string
+          tax_exempt: boolean
+          tax_exemption_certificate_id: string | null
+          tax_exemption_certificate_url: string | null
+          tax_jurisdiction_code: string | null
+          tax_jurisdiction_id: string | null
+          tax_sourcing_method: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "rental_contracts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       rental_compute_utilization: {
         Args: { p_workspace_id: string }
         Returns: Json
@@ -67198,9 +68660,30 @@ export type Database = {
         Args: { p_contract_id: string }
         Returns: string
       }
+      rental_conversion_board: {
+        Args: { p_limit?: number; p_workspace_id: string }
+        Returns: Json
+      }
+      rental_conversion_board_v1_unchecked: {
+        Args: { p_limit?: number; p_workspace_id: string }
+        Returns: Json
+      }
       rental_conversion_signals: {
         Args: { p_company_id: string }
         Returns: Json
+      }
+      rental_cycle_due_candidates: {
+        Args: { p_as_of?: string; p_lookahead_days?: number }
+        Returns: {
+          contract_number: string
+          equipment_id: string
+          id: string
+          last_period_end: string
+          next_cycle_due: string
+          on_rent_at: string
+          qrm_company_id: string
+          workspace_id: string
+        }[]
       }
       rental_disposal_signals: {
         Args: { p_workspace_id: string }
@@ -67210,9 +68693,62 @@ export type Database = {
         Args: { p_workspace_id: string }
         Returns: Json
       }
+      rental_ensure_default_commission: {
+        Args: {
+          p_contract_id: string
+          p_salesperson_id?: string
+          p_workspace_id: string
+        }
+        Returns: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          rental_contract_id: string
+          role: string | null
+          salesperson_id: string
+          split_pct: number
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "rental_contract_commissions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      rental_ensure_default_commission_internal: {
+        Args: {
+          p_contract_id: string
+          p_salesperson_id?: string
+          p_workspace_id: string
+        }
+        Returns: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          rental_contract_id: string
+          role: string | null
+          salesperson_id: string
+          split_pct: number
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "rental_contract_commissions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      rental_evaluate_geofence_crossings: {
+        Args: { p_workspace_id?: string }
+        Returns: Json
+      }
       rental_forecast_demand: { Args: never; Returns: number }
       rental_intelligence_scan: { Args: never; Returns: Json }
       rental_lifecycle_scan: { Args: never; Returns: number }
+      rental_ops_health: { Args: { p_workspace_id: string }; Returns: Json }
       rental_optimize_charge: {
         Args: { p_billable_days: number; p_rate_book: Json }
         Returns: Json
@@ -67260,8 +68796,45 @@ export type Database = {
         }
         Returns: Json
       }
+      rental_set_contract_commissions: {
+        Args: {
+          p_actor_id?: string
+          p_commissions: Json
+          p_contract_id: string
+          p_workspace_id: string
+        }
+        Returns: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          rental_contract_id: string
+          role: string | null
+          salesperson_id: string
+          split_pct: number
+          updated_at: string
+          workspace_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "rental_contract_commissions"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       rental_snapshot_utilization: { Args: never; Returns: number }
       rental_telematics_overage_check: { Args: never; Returns: number }
+      rental_upsert_jobsite_geofence: {
+        Args: {
+          p_actor_id?: string
+          p_company_id: string
+          p_lat: number
+          p_lng: number
+          p_name: string
+          p_radius_meters?: number
+          p_workspace_id: string
+        }
+        Returns: string
+      }
       rental_yield_suggestions: {
         Args: { p_workspace_id: string; p_write?: boolean }
         Returns: Json
@@ -67476,6 +69049,24 @@ export type Database = {
           p_revert_in_out_state?: string
           p_revert_inventory_type?: string
           p_stock_number: string
+        }
+        Returns: Json
+      }
+      reverse_qb_oem_reprice_apply: {
+        Args: {
+          p_actor_id: string
+          p_actor_role: string
+          p_apply_audit_id: string
+          p_workspace_id: string
+        }
+        Returns: Json
+      }
+      reverse_qb_oem_reprice_apply_v813: {
+        Args: {
+          p_actor_id: string
+          p_actor_role: string
+          p_apply_audit_id: string
+          p_workspace_id: string
         }
         Returns: Json
       }
@@ -67715,6 +69306,21 @@ export type Database = {
       sop_step_in_my_workspace: {
         Args: { p_template_id: string }
         Returns: boolean
+      }
+      start_or_resume_rental_billing_run: {
+        Args: {
+          p_batch_size?: number
+          p_contract_ids?: string[]
+          p_force_new?: boolean
+          p_run_id?: string
+          p_workspace_id?: string
+        }
+        Returns: {
+          billing_run_id: string
+          created_new: boolean
+          run_status: string
+          total_items: number
+        }[]
       }
       subscription_in_my_workspace: {
         Args: { p_sub_id: string }
@@ -69383,3 +70989,4 @@ export const Constants = {
 } as const
 
 export type UserRole = Database["public"]["Enums"]["user_role"]
+

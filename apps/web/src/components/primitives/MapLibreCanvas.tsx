@@ -30,6 +30,11 @@ interface MapLibreCanvasProps {
   zoom?: number;
   /** Enable marker clustering at zoom-out. Default true. */
   cluster?: boolean;
+  /**
+   * Bare-map click handler (pin placement). Clicks that land on a marker or
+   * cluster keep their own handlers and do NOT fire this.
+   */
+  onMapClick?: (coords: { lng: number; lat: number }) => void;
   className?: string;
 }
 
@@ -72,11 +77,18 @@ export function MapLibreCanvas({
   center,
   zoom = 4,
   cluster = true,
+  onMapClick,
   className = "",
 }: MapLibreCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markerByIdRef = useRef<Map<string, MapMarker>>(new Map());
+  // Ref so the one-time map setup never needs to re-run when the caller
+  // passes a new callback identity each render.
+  const onMapClickRef = useRef(onMapClick);
+  useEffect(() => {
+    onMapClickRef.current = onMapClick;
+  }, [onMapClick]);
 
   // Build GeoJSON from markers
   const markerGeoJson = useMemo(() => ({
@@ -329,6 +341,20 @@ export function MapLibreCanvas({
           marker?.onClick?.();
         });
       }
+
+      // Bare-map clicks (pin placement) — marker/cluster hits are excluded
+      // so their dedicated handlers stay the only responders.
+      activeMap.on("click", (e) => {
+        if (!onMapClickRef.current) return;
+        const hitLayers = ["clusters", "unclustered-point", "points"].filter((layer) =>
+          activeMap.getLayer(layer),
+        );
+        const hits = hitLayers.length
+          ? activeMap.queryRenderedFeatures(e.point, { layers: hitLayers })
+          : [];
+        if (hits.length > 0) return;
+        onMapClickRef.current({ lng: e.lngLat.lng, lat: e.lngLat.lat });
+      });
 
       // Auto-fit to markers if the caller didn't pin center
       if (!center && markers.length > 1) {

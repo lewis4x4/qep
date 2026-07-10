@@ -170,6 +170,25 @@ export const rentalOpsApi = {
     rentalOpsFetch({ action: "upsert_jobsite_geofence", ...data }) as Promise<{
       geofence_id: string;
     }>,
+  /** L11.2: commission splits — manager and above. */
+  listContractCommissions: (data: { contract_id: string }) =>
+    rentalOpsFetch({ action: "list_contract_commissions", ...data }) as Promise<{
+      commissions: Array<{
+        id: string;
+        salesperson_id: string;
+        split_pct: number;
+        role: string | null;
+        created_at: string;
+        profiles: { full_name: string | null; email: string | null } | null;
+      }>;
+    }>,
+  setContractCommissions: (data: {
+    contract_id: string;
+    commissions: Array<{ salesperson_id: string; split_pct: number; role?: string | null }>;
+  }) =>
+    rentalOpsFetch({ action: "set_contract_commissions", ...data }) as Promise<{
+      commissions: Array<{ salesperson_id: string; split_pct: number; role: string | null }>;
+    }>,
   /** L9.3: RPO conversion — creates (or returns) the deal for this contract. */
   convertRpoToDeal: (data: { contract_id: string }) =>
     rentalOpsFetch({ action: "convert_rpo_to_deal", ...data }) as Promise<{
