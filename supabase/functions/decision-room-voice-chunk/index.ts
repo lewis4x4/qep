@@ -100,7 +100,11 @@ async function transcribeChunk(
 ): Promise<string> {
   const form = new FormData();
   const filename = mimeType.includes("mp4") ? "chunk.mp4" : mimeType.includes("wav") ? "chunk.wav" : "chunk.webm";
-  form.append("file", new Blob([audio], { type: mimeType || "audio/webm" }), filename);
+  const audioBuffer = audio.buffer.slice(
+    audio.byteOffset,
+    audio.byteOffset + audio.byteLength,
+  ) as ArrayBuffer;
+  form.append("file", new Blob([audioBuffer], { type: mimeType || "audio/webm" }), filename);
   form.append("model", TRANSCRIBE_MODEL);
   form.append("response_format", "text");
 

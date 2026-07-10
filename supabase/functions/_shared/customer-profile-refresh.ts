@@ -7,9 +7,12 @@ import {
   type DealHistorySignal,
 } from "./customer-dna-logic.ts";
 import {
+  assertCrmCompanyWorkspace,
   cleanString,
   collectCustomerDnaBadges,
   type CustomerDnaLookupInput,
+  CustomerDnaStoreError,
+  CustomerDnaTargetNotFoundError,
   fetchExistingCustomerProfile,
   resolveContactByLookup,
 } from "./customer-dna-store.ts";
@@ -18,6 +21,17 @@ import {
   mapCustomerProfileDto,
 } from "./customer-profile-dto.ts";
 
+function assertSourceRead(
+  error: { message?: string } | null,
+  operation: string,
+): void {
+  if (error) {
+    throw new CustomerDnaStoreError(
+      `${operation}: ${error.message ?? "database request failed"}`,
+    );
+  }
+}
+
 export async function refreshCustomerProfileSnapshot(
   adminClient: SupabaseClient,
   params: {
@@ -25,53 +39,58 @@ export async function refreshCustomerProfileSnapshot(
     actorRole: "rep" | "admin" | "manager" | "owner" | null;
     actorUserId: string | null;
     isServiceRole: boolean;
+    workspaceId: string;
   },
 ): Promise<Record<string, unknown>> {
-  const contact = await resolveContactByLookup(adminClient, params.lookup);
+  const contact = await resolveContactByLookup(
+    adminClient,
+    params.lookup,
+    params.workspaceId,
+  );
+  if (contact?.primary_company_id) {
+    await assertCrmCompanyWorkspace(
+      adminClient,
+      contact.primary_company_id,
+      params.workspaceId,
+    );
+  }
   const existing = await fetchExistingCustomerProfile(
     adminClient,
     params.lookup,
     contact,
+    params.workspaceId,
   );
 
   let profileId = existing?.id ?? null;
-  if (!profileId) {
-    const customerName = `${contact?.first_name ?? "Unknown"} ${
-      contact?.last_name ?? "Customer"
-    }`.trim();
-
-    const { data: inserted, error: insertError } = await adminClient
-      .from("customer_profiles_extended")
-      .insert({
-        hubspot_contact_id: cleanString(params.lookup.hubspot_contact_id) ??
-          contact?.hubspot_contact_id ?? null,
-        intellidealer_customer_id: cleanString(
+  if (contact) {
+    // The database owns first-refresh serialization and the contact/profile
+    // link. A failed link rolls profile creation back instead of leaving an
+    // orphaned global customer_profiles_extended row.
+    const { data: resolvedProfileId, error: identityError } = await adminClient
+      .rpc("get_or_create_customer_dna_profile", {
+        p_workspace_id: params.workspaceId,
+        p_contact_id: contact.id,
+        p_existing_profile_id: profileId,
+        p_hubspot_contact_id: cleanString(params.lookup.hubspot_contact_id) ??
+          contact.hubspot_contact_id,
+        p_intellidealer_customer_id: cleanString(
           params.lookup.intellidealer_customer_id,
         ),
-        customer_name: customerName,
-        company_name: null,
-        // N4.1: stamp the company anchor at birth — unanchored profiles are
-        // invisible to Account 360, health scoring, and stream rollups.
-        crm_company_id: contact?.primary_company_id ?? null,
-        metadata: {
-          data_badges: ["DEMO"],
-          persona_reasoning: "Profile created from partial identifiers.",
-        },
-      })
-      .select("id")
-      .single();
-
-    if (insertError || !inserted) {
-      throw new Error(insertError?.message ?? "Failed to create customer profile.");
+      });
+    assertSourceRead(
+      identityError,
+      "Customer profile identity mutation failed",
+    );
+    if (typeof resolvedProfileId !== "string" || !resolvedProfileId) {
+      throw new CustomerDnaStoreError(
+        "Customer profile identity mutation returned no profile.",
+      );
     }
-
-    profileId = inserted.id as string;
-    if (contact?.id) {
-      await adminClient
-        .from("crm_contacts")
-        .update({ dge_customer_profile_id: profileId })
-        .eq("id", contact.id);
-    }
+    profileId = resolvedProfileId;
+  } else if (!profileId) {
+    // Creating a tenantless global profile is never allowed. New records need
+    // an active CRM contact that the atomic RPC can lock and link.
+    throw new CustomerDnaTargetNotFoundError();
   }
 
   const { data: profileData, error: profileError } = await adminClient
@@ -85,7 +104,7 @@ export async function refreshCustomerProfileSnapshot(
   }
 
   const profileRow = profileData as CustomerProfileRow;
-  const { data: historyData } = await adminClient
+  const { data: historyData, error: historyError } = await adminClient
     .from("customer_deal_history")
     .select(
       "outcome, sold_price, discount_pct, financing_used, attachments_sold, service_contract_sold, days_to_close, deal_date",
@@ -93,6 +112,7 @@ export async function refreshCustomerProfileSnapshot(
     .eq("customer_profile_id", profileId)
     .order("deal_date", { ascending: false })
     .limit(250);
+  assertSourceRead(historyError, "Customer deal history read failed");
 
   // N4.1: the company anchor drives deal + stream signals. Prefer the stored
   // profile anchor, fall back to the resolved contact's primary company, and
@@ -110,7 +130,8 @@ export async function refreshCustomerProfileSnapshot(
     dealsQuery = companyId
       ? dealsQuery.eq("company_id", companyId)
       : dealsQuery.eq("primary_contact_id", contact!.id);
-    const { data: crmDealsData } = await dealsQuery;
+    const { data: crmDealsData, error: crmDealsError } = await dealsQuery;
+    assertSourceRead(crmDealsError, "Customer CRM deal read failed");
 
     for (const row of crmDealsData ?? []) {
       const record = row as Record<string, unknown>;
@@ -144,6 +165,8 @@ export async function refreshCustomerProfileSnapshot(
         .select("id")
         .eq("crm_company_id", companyId),
     ]);
+    assertSourceRead(directParts.error, "Customer direct parts read failed");
+    assertSourceRead(portalIds.error, "Customer portal identity read failed");
     const portalIdList = (portalIds.data ?? []).map((r) => r.id as string);
     const portalParts = portalIdList.length > 0
       ? await adminClient
@@ -151,7 +174,11 @@ export async function refreshCustomerProfileSnapshot(
         .select("total, created_at")
         .in("portal_customer_id", portalIdList)
         .limit(1000)
-      : { data: [] as Array<{ total: number | null; created_at: string }> };
+      : {
+        data: [] as Array<{ total: number | null; created_at: string }>,
+        error: null,
+      };
+    assertSourceRead(portalParts.error, "Customer portal parts read failed");
 
     const [serviceInvoices, rentalContracts] = await Promise.all([
       adminClient
@@ -167,6 +194,14 @@ export async function refreshCustomerProfileSnapshot(
         .select("id")
         .eq("qrm_company_id", companyId),
     ]);
+    assertSourceRead(
+      serviceInvoices.error,
+      "Customer service invoice read failed",
+    );
+    assertSourceRead(
+      rentalContracts.error,
+      "Customer rental contract read failed",
+    );
     const contractIds = (rentalContracts.data ?? []).map((r) => r.id as string);
     const rentalInvoices = contractIds.length > 0
       ? await adminClient
@@ -176,9 +211,21 @@ export async function refreshCustomerProfileSnapshot(
         .neq("status", "void")
         .is("deleted_at", null)
         .limit(1000)
-      : { data: [] as Array<{ total_cents: number | null; period_start: string; status: string }> };
+      : {
+        data: [] as Array<
+          { total_cents: number | null; period_start: string; status: string }
+        >,
+        error: null,
+      };
+    assertSourceRead(
+      rentalInvoices.error,
+      "Customer rental invoice read failed",
+    );
 
-    const partsRows = [...(directParts.data ?? []), ...(portalParts.data ?? [])];
+    const partsRows = [
+      ...(directParts.data ?? []),
+      ...(portalParts.data ?? []),
+    ];
     const serviceRows = (serviceInvoices.data ?? []).filter((r) =>
       r.invoice_type === "service" || r.service_job_id != null
     );
@@ -193,7 +240,8 @@ export async function refreshCustomerProfileSnapshot(
     streams = {
       partsLifetimeTotal: partsRows.reduce((s, r) => s + (r.total ?? 0), 0),
       serviceLifetimeTotal: serviceRows.reduce((s, r) => s + (r.total ?? 0), 0),
-      rentalLifetimeTotal: rentalRows.reduce((s, r) => s + (r.total_cents ?? 0), 0) / 100,
+      rentalLifetimeTotal: rentalRows.reduce((s, r) =>
+        s + (r.total_cents ?? 0), 0) / 100,
       lastActivityAt: activityDates.length > 0
         ? activityDates.sort((a, b) => Date.parse(b) - Date.parse(a))[0]
         : null,
@@ -206,7 +254,7 @@ export async function refreshCustomerProfileSnapshot(
     streams,
   );
   const persona = classifyPersona(metrics);
-  const { data: modelRow } = await adminClient
+  const { data: modelRow, error: modelError } = await adminClient
     .from("pricing_persona_models")
     .select("model_version")
     .eq("model_name", "persona_classifier")
@@ -214,6 +262,7 @@ export async function refreshCustomerProfileSnapshot(
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  assertSourceRead(modelError, "Customer persona model read failed");
 
   const dataBadges = collectCustomerDnaBadges(
     metrics.totalDeals,
@@ -258,7 +307,9 @@ export async function refreshCustomerProfileSnapshot(
     .single();
 
   if (updateError || !updated) {
-    throw new Error(updateError?.message ?? "Failed to update customer profile.");
+    throw new Error(
+      updateError?.message ?? "Failed to update customer profile.",
+    );
   }
 
   return mapCustomerProfileDto({

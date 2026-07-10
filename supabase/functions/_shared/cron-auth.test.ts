@@ -193,6 +193,26 @@ Deno.test("isServiceRoleCaller: accepts DGE_INTERNAL_SERVICE_SECRET fallback", (
   );
 });
 
+Deno.test("isServiceRoleCaller: accepts either internal secret when both are configured", () => {
+  withEnv(
+    {
+      SUPABASE_SERVICE_ROLE_KEY: undefined,
+      INTERNAL_SERVICE_SECRET: TEST_INTERNAL_SECRET,
+      DGE_INTERNAL_SERVICE_SECRET: TEST_DGE_INTERNAL_SECRET,
+    },
+    () => {
+      const internalReq = new Request("https://example.test", {
+        headers: { "x-internal-service-secret": TEST_INTERNAL_SECRET },
+      });
+      const dgeReq = new Request("https://example.test", {
+        headers: { "x-internal-service-secret": TEST_DGE_INTERNAL_SECRET },
+      });
+      assertEquals(isServiceRoleCaller(internalReq), true);
+      assertEquals(isServiceRoleCaller(dgeReq), true);
+    },
+  );
+});
+
 Deno.test("isServiceRoleCaller: rejects wrong x-internal-service-secret", () => {
   withEnv(
     {

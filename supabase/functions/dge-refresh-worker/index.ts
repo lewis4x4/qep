@@ -1,8 +1,7 @@
 import { createAdminClient } from "../_shared/dge-auth.ts";
+import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 import { fail, ok, optionsResponse } from "../_shared/dge-http.ts";
 import { runNextDgeRefreshJob } from "../_shared/dge-refresh-worker.ts";
-
-const INTERNAL_SECRET = Deno.env.get("DGE_INTERNAL_SERVICE_SECRET");
 
 Deno.serve(async (req): Promise<Response> => {
   const origin = req.headers.get("origin");
@@ -17,13 +16,12 @@ Deno.serve(async (req): Promise<Response> => {
     });
   }
 
-  const secret = req.headers.get("x-internal-service-secret");
-  if (!INTERNAL_SECRET || secret !== INTERNAL_SECRET) {
+  if (!isServiceRoleCaller(req)) {
     return fail({
       origin,
       status: 401,
       code: "UNAUTHORIZED",
-      message: "Worker requires the internal service secret.",
+      message: "Worker requires valid service credentials.",
     });
   }
 
@@ -36,7 +34,9 @@ Deno.serve(async (req): Promise<Response> => {
       status: 500,
       code: "WORKER_FAILED",
       message: "DGE refresh worker execution failed.",
-      details: { reason: error instanceof Error ? error.message : String(error) },
+      details: {
+        reason: error instanceof Error ? error.message : String(error),
+      },
     });
   }
 });
