@@ -56,6 +56,8 @@ type CounterContractPayload = {
   monthly_rate?: number | string | null;
   delivery_mode?: string | null;
   dealer_notes?: string | null;
+  /** counter | voice | iron — defaults counter. */
+  origination_channel?: string | null;
   /** RPO terms — required when contract_type = rpo. purchase price in dollars. */
   rpo_purchase_price?: number | string | null;
   /** Fraction 0–1 (e.g. 0.8) of rental charge accrued toward buyout. */
@@ -126,6 +128,15 @@ type CloseContractPayload = {
   contract_id?: string;
   hard_close?: boolean;
   hard_close_reason?: string | null;
+};
+
+type UpsertJobsiteGeofencePayload = {
+  action: "upsert_jobsite_geofence";
+  company_id?: string;
+  name?: string | null;
+  lat?: number | string | null;
+  lng?: number | string | null;
+  radius_meters?: number | string | null;
 };
 
 type StartCheckoutInspectionPayload = {
@@ -270,6 +281,7 @@ type RentalOpsPayload =
   | ConvertRpoToDealPayload
   | IssueRentalQuotePayload
   | CloseContractPayload
+  | UpsertJobsiteGeofencePayload
   | CheckOutContractPayload;
 
 const RENTAL_CHECKOUT_TEMPLATE = {
@@ -593,7 +605,12 @@ Deno.serve(async (req) => {
           qrm_contact_id: typeof body.qrm_contact_id === "string" && body.qrm_contact_id.trim()
             ? body.qrm_contact_id.trim()
             : null,
-          origination_channel: "counter",
+          origination_channel: (() => {
+            const ch = typeof body.origination_channel === "string"
+              ? body.origination_channel.trim().toLowerCase()
+              : "counter";
+            return ["counter", "voice", "iron"].includes(ch) ? ch : "counter";
+          })(),
           originated_by: auth.userId,
           contract_type: contractType,
           status: "draft",
@@ -669,6 +686,18 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Wave 3: seed default commission for the originating rep (also
+      // re-asserted by the on_rent trigger when checkout happens).
+      try {
+        await admin.rpc("rental_ensure_default_commission", {
+          p_workspace_id: workspaceId,
+          p_contract_id: contract.id,
+          p_salesperson_id: auth.userId,
+        });
+      } catch {
+        /* non-blocking: commission can seed at on_rent */
+      }
+
       return safeJsonOk({
         contract,
         rate_book_source: rateBookSource,
@@ -676,6 +705,34 @@ Deno.serve(async (req) => {
         estimate_weekly_rate: weeklyRate > 0 ? weeklyRate : null,
         estimate_monthly_rate: monthlyRate > 0 ? monthlyRate : null,
       }, origin);
+    }
+
+    if (body.action === "upsert_jobsite_geofence") {
+      if (!body.company_id) return safeJsonError("company_id required", 400, origin);
+      const lat = typeof body.lat === "number" ? body.lat : Number(body.lat);
+      const lng = typeof body.lng === "number" ? body.lng : Number(body.lng);
+      const radius = typeof body.radius_meters === "number"
+        ? body.radius_meters
+        : Number(body.radius_meters ?? 250);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return safeJsonError("lat and lng required", 400, origin);
+      }
+      const { data: fenceId, error: fenceError } = await admin.rpc(
+        "rental_upsert_jobsite_geofence",
+        {
+          p_workspace_id: workspaceId,
+          p_company_id: body.company_id,
+          p_name: typeof body.name === "string" ? body.name : "Jobsite",
+          p_lat: lat,
+          p_lng: lng,
+          p_radius_meters: Number.isFinite(radius) ? radius : 250,
+          p_actor_id: auth.userId,
+        },
+      );
+      if (fenceError || !fenceId) {
+        return safeJsonError(fenceError?.message ?? "Failed to save jobsite geofence", 400, origin);
+      }
+      return safeJsonOk({ geofence_id: fenceId }, origin);
     }
 
     if (body.action === "exchange_line") {
@@ -1224,6 +1281,17 @@ Deno.serve(async (req) => {
           );
         }
         return safeJsonError(message, 400, origin);
+      }
+
+      // Wave 3: commission attribution for the originator (idempotent).
+      try {
+        await admin.rpc("rental_ensure_default_commission", {
+          p_workspace_id: workspaceId,
+          p_contract_id: contract.id,
+          p_salesperson_id: auth.userId,
+        });
+      } catch {
+        /* non-blocking */
       }
 
       // Activate lines (or create line 1 for a single-unit counter contract).

@@ -171,6 +171,59 @@ export const RENTAL_FLOW_DEFINITIONS: FlowWorkflowDefinition[] = [
     affects_modules: ["rental", "logistics"],
   },
   {
+    slug: "rental-availability-low",
+    name: "Low fleet availability → re-source task",
+    description:
+      "Category fleet headroom is ≤1 unit over the next 14 days. Task rentals ops to re-source, re-rent, or rebalance.",
+    owner_role: "rental",
+    trigger_event_pattern: "rental.availability.low",
+    conditions: [{ op: "exists", field: "payload.category" }],
+    actions: [
+      {
+        action_key: "create_task",
+        params: {
+          activity_type: "follow_up",
+          subject: "Low availability: ${payload.category} (headroom ${payload.headroom})",
+          body:
+            "Fleet category ${payload.category} has only ${payload.headroom} unit(s) free against ${payload.overlapping_demand} overlapping demand over the next ${payload.window_days} days (fleet ${payload.fleet_count}). Re-source a re-rent, pull from another branch, or push reservation windows.",
+        },
+      },
+      {
+        action_key: "create_exception",
+        params: {
+          source: "rental_availability_low",
+          title: "Low rental availability: ${payload.category}",
+          severity: "warn",
+          detail:
+            "headroom=${payload.headroom} demand=${payload.overlapping_demand} fleet=${payload.fleet_count}",
+        },
+        on_failure: "continue",
+      },
+    ],
+    affects_modules: ["rental", "ops"],
+  },
+  {
+    slug: "rental-cycle-due",
+    name: "Billing cycle due → confirm nightly run",
+    description:
+      "An on-rent contract is approaching or past a cycle invoice boundary. Ops should confirm the billing runner will pick it up.",
+    owner_role: "rental",
+    trigger_event_pattern: "rental.cycle.due",
+    conditions: [{ op: "exists", field: "payload.rental_id" }],
+    actions: [
+      {
+        action_key: "create_task",
+        params: {
+          activity_type: "follow_up",
+          subject: "Cycle bill due: ${payload.contract_number}",
+          body:
+            "Contract ${payload.contract_number} has a cycle boundary near ${payload.last_period_end}. Confirm the rental-billing-runner includes it tonight.",
+        },
+      },
+    ],
+    affects_modules: ["rental", "finance"],
+  },
+  {
     slug: "rental-geofence-exit",
     name: "Geofence exit on rented iron → inspection prompt",
     description:

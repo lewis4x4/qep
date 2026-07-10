@@ -96,6 +96,7 @@ export const rentalOpsApi = {
     rpo_exercise_deadline?: string | null;
     sub_rental_vendor_id?: string | null;
     sub_rental_cost?: number | null;
+    origination_channel?: "counter" | "voice" | "iron" | null;
   }) =>
     rentalOpsFetch({
       action: "create_contract",
@@ -159,6 +160,16 @@ export const rentalOpsApi = {
     rentalOpsFetch({ action: "close_contract", ...data }).then((payload) => ({
       contract: requireRentalOpsObjectPayload(payload, "contract"),
     })),
+  upsertJobsiteGeofence: (data: {
+    company_id: string;
+    name?: string | null;
+    lat: number;
+    lng: number;
+    radius_meters?: number | null;
+  }) =>
+    rentalOpsFetch({ action: "upsert_jobsite_geofence", ...data }) as Promise<{
+      geofence_id: string;
+    }>,
   /** L9.3: RPO conversion — creates (or returns) the deal for this contract. */
   convertRpoToDeal: (data: { contract_id: string }) =>
     rentalOpsFetch({ action: "convert_rpo_to_deal", ...data }) as Promise<{

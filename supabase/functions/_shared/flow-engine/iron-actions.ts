@@ -977,12 +977,18 @@ const iron_open_rental_contract: FlowAction = {
     }
 
     const dailyRate = num(s.daily_rate);
+    const eventProps = (ctx.event.properties ?? {}) as Record<string, unknown>;
+    const actorId = str(eventProps.user_id ?? eventProps.actor_id ?? s.actor_id, 64);
+    const channel = String(s.origination_channel ?? "").toLowerCase() === "voice"
+      ? "voice"
+      : "iron";
     const { data, error } = await deps.admin
       .from("rental_contracts")
       .insert({
         workspace_id: deps.workspace_id,
         qrm_company_id: companyId,
-        origination_channel: "iron",
+        origination_channel: channel,
+        originated_by: actorId || null,
         contract_type: contractType,
         status: "draft",
         lifecycle_state: "draft",
@@ -1010,6 +1016,19 @@ const iron_open_rental_contract: FlowAction = {
       .single();
     if (error || !data?.id) {
       return { status: "failed", error: `iron_open_rental_contract: ${error?.message ?? "unknown"}`, retryable: true };
+    }
+
+    // Wave 3: seed default commission attribution for the speaking rep.
+    if (actorId) {
+      try {
+        await deps.admin.rpc("rental_ensure_default_commission", {
+          p_workspace_id: deps.workspace_id,
+          p_contract_id: data.id,
+          p_salesperson_id: actorId,
+        });
+      } catch {
+        /* non-blocking: on_rent trigger re-seeds */
+      }
     }
 
     return {

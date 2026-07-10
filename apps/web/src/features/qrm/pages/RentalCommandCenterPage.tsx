@@ -306,8 +306,15 @@ export function RentalCommandCenterPage() {
   const [counterRpoDeadline, setCounterRpoDeadline] = useState("");
   const [counterSubVendorId, setCounterSubVendorId] = useState("");
   const [counterSubCost, setCounterSubCost] = useState("");
+  const [counterChannel, setCounterChannel] = useState<"counter" | "voice">("counter");
   const [counterResult, setCounterResult] = useState<string | null>(null);
   const [quoteShareUrl, setQuoteShareUrl] = useState<string | null>(null);
+  const [fenceCompanyId, setFenceCompanyId] = useState("");
+  const [fenceName, setFenceName] = useState("Jobsite");
+  const [fenceLat, setFenceLat] = useState("");
+  const [fenceLng, setFenceLng] = useState("");
+  const [fenceRadius, setFenceRadius] = useState("250");
+  const [fenceResult, setFenceResult] = useState<string | null>(null);
   const [exchangeUnits, setExchangeUnits] = useState<Record<string, string>>({});
   const [exchangeContinuity, setExchangeContinuity] = useState<Record<string, boolean>>({});
   const [checkoutHours, setCheckoutHours] = useState<Record<string, string>>({});
@@ -520,6 +527,7 @@ export function RentalCommandCenterPage() {
         sub_rental_cost: counterContractType === "rerent"
           ? Number(counterSubCost) || null
           : null,
+        origination_channel: counterChannel,
       }),
     onSuccess: async ({ contract }) => {
       const number = typeof contract.contract_number === "string" ? contract.contract_number : "created";
@@ -603,6 +611,24 @@ export function RentalCommandCenterPage() {
     },
     onError: (error) => {
       setOpsError(error instanceof Error ? error.message : "Failed to close contract.");
+    },
+  });
+
+  const jobsiteFenceMutation = useMutation({
+    mutationFn: () =>
+      rentalOpsApi.upsertJobsiteGeofence({
+        company_id: fenceCompanyId || counterCompanyId,
+        name: fenceName || "Jobsite",
+        lat: Number(fenceLat),
+        lng: Number(fenceLng),
+        radius_meters: Number(fenceRadius) || 250,
+      }),
+    onSuccess: (result) => {
+      setFenceResult(`Jobsite geofence saved (${String(result.geofence_id).slice(0, 8)}…). Exit detection will use it.`);
+      setOpsError(null);
+    },
+    onError: (error) => {
+      setFenceResult(error instanceof Error ? error.message : "Failed to save geofence.");
     },
   });
 
@@ -1234,6 +1260,15 @@ export function RentalCommandCenterPage() {
               </div>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-3">
+              <select
+                value={counterChannel}
+                onChange={(event) => setCounterChannel(event.target.value as "counter" | "voice")}
+                className="rounded border border-input bg-card px-2 py-1.5 text-xs"
+                title="Origination channel"
+              >
+                <option value="counter">Counter</option>
+                <option value="voice">Voice field capture</option>
+              </select>
               <Button
                 size="sm"
                 onClick={() => {
@@ -1246,6 +1281,60 @@ export function RentalCommandCenterPage() {
               </Button>
               {counterResult ? <p className="text-xs text-muted-foreground">{counterResult}</p> : null}
             </div>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Iron/voice drafts also seed a 100% commission split for the originating rep when they go on rent.
+            </p>
+          </DeckSurface>
+
+          <DeckSurface className="p-4">
+            <h2 className="text-sm font-semibold text-foreground">Jobsite geofence</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Drop a circular customer jobsite fence (lat/lng + radius meters). On-rent units with
+              telematics GPS will fire exit events when they leave.
+            </p>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              <Input
+                value={fenceCompanyId || counterCompanyId}
+                onChange={(event) => setFenceCompanyId(event.target.value)}
+                placeholder="Company id (defaults to counter selection)"
+              />
+              <Input
+                value={fenceName}
+                onChange={(event) => setFenceName(event.target.value)}
+                placeholder="Fence name"
+              />
+              <Input
+                value={fenceLat}
+                onChange={(event) => setFenceLat(event.target.value)}
+                placeholder="Latitude"
+                inputMode="decimal"
+              />
+              <Input
+                value={fenceLng}
+                onChange={(event) => setFenceLng(event.target.value)}
+                placeholder="Longitude"
+                inputMode="decimal"
+              />
+              <Input
+                value={fenceRadius}
+                onChange={(event) => setFenceRadius(event.target.value)}
+                placeholder="Radius meters (default 250)"
+                inputMode="numeric"
+              />
+              <Button
+                size="sm"
+                disabled={
+                  jobsiteFenceMutation.isPending ||
+                  !(fenceCompanyId || counterCompanyId) ||
+                  !fenceLat ||
+                  !fenceLng
+                }
+                onClick={() => jobsiteFenceMutation.mutate()}
+              >
+                {jobsiteFenceMutation.isPending ? "Saving…" : "Save jobsite fence"}
+              </Button>
+            </div>
+            {fenceResult ? <p className="mt-2 text-xs text-muted-foreground">{fenceResult}</p> : null}
           </DeckSurface>
 
           <DeckSurface className="p-4">
