@@ -555,39 +555,9 @@ async function processContract(
     throw new Error(detail);
   }
 
-  // Final invoice consumes a paid deposit into amount_paid. Leave an honest
-  // deposit_status (applied / refund_due) so close and AR do not treat
-  // forever-paid deposits as still held cash.
-  if (plan.kind === "final" && depositCents > 0) {
-    const refundDueCents = Math.max(0, depositCents - depositApplied);
-    const nextDepositStatus = refundDueCents > 0 ? "refund_due" : "applied";
-    await admin
-      .from("rental_contracts")
-      .update({ deposit_status: nextDepositStatus })
-      .eq("id", contract.id)
-      .eq("workspace_id", contract.workspace_id)
-      .eq("deposit_status", "paid");
-    if (refundDueCents > 0) {
-      await admin.rpc("enqueue_exception", {
-        p_source: "rental_deposit_refund",
-        p_title:
-          `Deposit refund due on ${contract.contract_number ?? contract.id}`,
-        p_severity: "info",
-        p_detail:
-          `Final invoice applied ${(depositApplied / 100).toFixed(2)}; refund remaining ${(refundDueCents / 100).toFixed(2)} via original tender.`,
-        p_payload: {
-          rental_contract_id: contract.id,
-          rental_invoice_id: invoice.id,
-          deposit_cents: depositCents,
-          applied_cents: depositApplied,
-          refund_due_cents: refundDueCents,
-          run_id: runId,
-        },
-        p_entity_table: "rental_contracts",
-        p_entity_id: contract.id,
-      }).catch(() => undefined);
-    }
-  }
+  // Final-deposit liability settlement occurs inside the database transaction
+  // that mirrors rental_invoices.customer_invoice_id. Migration 828's trigger
+  // records the receipt/application and updates applied/refund_due atomically.
 
   if (tax.warning) {
     await admin.rpc("enqueue_exception", {

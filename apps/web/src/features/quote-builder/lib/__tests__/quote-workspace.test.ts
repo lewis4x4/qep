@@ -69,11 +69,8 @@ describe("computeCommercialDiscountTotal", () => {
 });
 
 describe("hasQuoteCustomerIdentity", () => {
-  // Decision Q7 (do_not_allow): a typed customer name alone no longer
-  // satisfies the identity check — a CRM contact_id or company_id is
-  // required before the quote can be saved or advanced past step 1.
-  test("rejects a typed-only name without CRM linkage", () => {
-    expect(hasQuoteCustomerIdentity(makeDraft({ customerName: "Walk-in prospect" }))).toBe(false);
+  test("accepts a typed prospect without creating a CRM row at draft time", () => {
+    expect(hasQuoteCustomerIdentity(makeDraft({ customerName: "Walk-in prospect" }))).toBe(true);
   });
 
   test("accepts a CRM company id", () => {

@@ -76,11 +76,7 @@ const computedQuoteTotals = {
 };
 
 describe("buildQuoteSavePayload", () => {
-  // Decision Q7 (do_not_allow): the client-side payload builder no longer
-  // produces prospect quotes. Every save reports is_prospect_quote=false
-  // and omits prospect_conversion_source — server-side validation rejects
-  // saves without a CRM contact_id / company_id.
-  test("never marks new quotes as prospect, even without CRM ids", () => {
+  test("marks typed-only SA6 quotes as prospects without creating CRM rows", () => {
     const payload = buildQuoteSavePayload(
       makeQuoteDraft({
         customerName: "Walk-in prospect",
@@ -93,8 +89,14 @@ describe("buildQuoteSavePayload", () => {
       [],
     );
 
-    expect(payload.is_prospect_quote).toBe(false);
-    expect(payload.prospect_conversion_source).toBeNull();
+    expect(payload.is_prospect_quote).toBe(true);
+    expect(payload.prospect_conversion_source).toEqual({
+      original_customer_name: "Walk-in prospect",
+      original_customer_company: "Walk-in prospect",
+      original_customer_phone: null,
+      original_customer_email: "buyer@example.com",
+      conversion_status: "awaiting_quote_send",
+    });
     expect(payload.customer_warmth).toBe("new");
     expect(payload.contact_id).toBeUndefined();
     expect(payload.company_id).toBeUndefined();

@@ -484,6 +484,11 @@ export async function mirrorRentalInvoiceToAR(
       description: input.description,
       quantity: 1,
       unit_price: input.amountDollars,
+      finance_department: "rental",
+      finance_segment: "customer",
+      finance_category: "rental",
+      finance_classification_source: "rental_invoice_mirror",
+      finance_classified_at: new Date().toISOString(),
     });
   if (lineError)
     warnings.push(`line_items_insert_failed: ${lineError.message}`);

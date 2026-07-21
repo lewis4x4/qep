@@ -292,6 +292,11 @@ export async function generateInvoiceForPartsOrder(
     description: line.description,
     quantity: line.quantity,
     unit_price: line.unitPrice,
+    finance_department: "parts",
+    finance_segment: "customer",
+    finance_category: "part",
+    finance_classification_source: "parts_order_line",
+    finance_classified_at: new Date().toISOString(),
   }));
   if (shipping > 0) {
     genericLines.push({
@@ -301,6 +306,11 @@ export async function generateInvoiceForPartsOrder(
       description: "Freight",
       quantity: 1,
       unit_price: shipping,
+      finance_department: "parts",
+      finance_segment: "customer",
+      finance_category: "freight",
+      finance_classification_source: "parts_order_shipping",
+      finance_classified_at: new Date().toISOString(),
     });
   }
   const { error: genericLinesError } = await admin
@@ -327,6 +337,10 @@ export async function generateInvoiceForPartsOrder(
       discount_pct: line.discountPct,
       tax_applies: true,
       extended_price_cents: toCents(line.lineTotal),
+      finance_department: "parts",
+      finance_segment: "customer",
+      finance_category: "part",
+      finance_classification_source: "parts_order_line",
     })));
   if (partsLinesError) {
     warnings.push(`parts_invoice_lines_insert_failed: ${partsLinesError.message}`);

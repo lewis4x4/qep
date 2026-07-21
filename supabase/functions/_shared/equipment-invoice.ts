@@ -19,20 +19,27 @@
  */
 
 import {
-  planEquipmentInvoice,
-  equipmentEntriesFromQuote,
   type DepositSnapshot,
+  equipmentEntriesFromQuote,
   type EquipmentQuotePackageSnapshot,
+  planEquipmentInvoice,
   type TaxJurisdictionSnapshot,
 } from "../../../shared/equipment-invoice-core.ts";
-import { computeQuoteTax, type QuoteTaxProfile } from "../tax-calculator/tax-logic.ts";
+import {
+  computeQuoteTax,
+  type QuoteTaxProfile,
+} from "../tax-calculator/tax-logic.ts";
 import { publishFlowEvent } from "./flow-bus/publish.ts";
 
 // deno-lint-ignore no-explicit-any
 type AdminClient = any;
 
 export type EquipmentInvoiceResult =
-  | { status: "skipped"; reason: "deal_not_found" | "already_invoiced" | "no_accepted_quote"; invoiceId?: string }
+  | {
+    status: "skipped";
+    reason: "deal_not_found" | "already_invoiced" | "no_accepted_quote";
+    invoiceId?: string;
+  }
   | {
     status: "created";
     invoiceId: string;
@@ -107,7 +114,11 @@ export async function generateInvoiceForEquipmentDeal(
     .limit(1)
     .maybeSingle();
   if (existing) {
-    return { status: "skipped", reason: "already_invoiced", invoiceId: existing.id as string };
+    return {
+      status: "skipped",
+      reason: "already_invoiced",
+      invoiceId: existing.id as string,
+    };
   }
 
   const { data: quote, error: quoteError } = await admin
@@ -120,7 +131,9 @@ export async function generateInvoiceForEquipmentDeal(
     .order("accepted_at", { ascending: false, nullsFirst: false })
     .limit(1)
     .maybeSingle();
-  if (quoteError) throw new Error(`quote package load failed: ${quoteError.message}`);
+  if (quoteError) {
+    throw new Error(`quote package load failed: ${quoteError.message}`);
+  }
   if (!quote) return { status: "skipped", reason: "no_accepted_quote" };
 
   const warnings: string[] = [];
@@ -130,9 +143,13 @@ export async function generateInvoiceForEquipmentDeal(
     .select("equipment_id")
     .eq("deal_id", dealId)
     .eq("role", "subject");
-  const subjectIds = (junction ?? []).map((row: { equipment_id: string }) => row.equipment_id);
+  const subjectIds = (junction ?? []).map((row: { equipment_id: string }) =>
+    row.equipment_id
+  );
 
-  let subjectEquipment: Array<{ id: string; stock_number: string | null; home_branch_id: string | null }> = [];
+  let subjectEquipment: Array<
+    { id: string; stock_number: string | null; home_branch_id: string | null }
+  > = [];
   if (subjectIds.length > 0) {
     const { data: units } = await admin
       .from("qrm_equipment")
@@ -145,6 +162,7 @@ export async function generateInvoiceForEquipmentDeal(
   const { data: deposits } = await admin
     .from("deposits")
     .select("id, status, required_amount")
+    .eq("workspace_id", workspaceId)
     .eq("deal_id", dealId)
     .in("status", ["verified", "received"]);
 
@@ -159,7 +177,9 @@ export async function generateInvoiceForEquipmentDeal(
     portalCustomerId = (portal?.id as string | undefined) ?? null;
   }
 
-  let shipTo: { id: string; county_name: string | null; state: string | null } | null = null;
+  let shipTo:
+    | { id: string; county_name: string | null; state: string | null }
+    | null = null;
   if (deal.company_id) {
     const { data: shipToRow } = await admin
       .from("qrm_company_ship_to_addresses")
@@ -172,9 +192,15 @@ export async function generateInvoiceForEquipmentDeal(
     shipTo = shipToRow ?? null;
   }
 
-  let branch: { id: string; slug: string | null; legacy_code: string | null; state_province: string | null } | null =
-    null;
-  const homeBranchId = subjectEquipment.find((unit) => unit.home_branch_id)?.home_branch_id ?? null;
+  let branch: {
+    id: string;
+    slug: string | null;
+    legacy_code: string | null;
+    state_province: string | null;
+  } | null = null;
+  const homeBranchId =
+    subjectEquipment.find((unit) => unit.home_branch_id)?.home_branch_id ??
+      null;
   if (homeBranchId) {
     const { data: branchRow } = await admin
       .from("branches")
@@ -212,8 +238,12 @@ export async function generateInvoiceForEquipmentDeal(
     if (jurisdictionError) {
       warnings.push(`jurisdiction_lookup_failed: ${jurisdictionError.message}`);
     } else {
-      const row = Array.isArray(jurisdictionRow) ? jurisdictionRow[0] : jurisdictionRow;
-      if (row && (row as { id?: string }).id) jurisdiction = row as TaxJurisdictionSnapshot;
+      const row = Array.isArray(jurisdictionRow)
+        ? jurisdictionRow[0]
+        : jurisdictionRow;
+      if (row && (row as { id?: string }).id) {
+        jurisdiction = row as TaxJurisdictionSnapshot;
+      }
     }
   }
 
@@ -224,9 +254,12 @@ export async function generateInvoiceForEquipmentDeal(
   const entries = equipmentEntriesFromQuote(quoteSnapshot.equipment);
   const tradeAllowanceNumber = Number(quoteSnapshot.trade_allowance ?? 0);
   const tradeCreditNumber = Number(quoteSnapshot.trade_credit ?? 0);
-  const tradeForTax = tradeAllowanceNumber > 0 ? tradeAllowanceNumber : tradeCreditNumber;
+  const tradeForTax = tradeAllowanceNumber > 0
+    ? tradeAllowanceNumber
+    : tradeCreditNumber;
   const subtotalForTax = Number(quoteSnapshot.subtotal ?? 0) ||
-    Number(quoteSnapshot.equipment_total ?? 0) + Number(quoteSnapshot.attachment_total ?? 0);
+    Number(quoteSnapshot.equipment_total ?? 0) +
+      Number(quoteSnapshot.attachment_total ?? 0);
 
   let salesTax = null;
   let taxFailureReason: string | null = null;
@@ -263,13 +296,20 @@ export async function generateInvoiceForEquipmentDeal(
     invoiceDate,
   });
 
-  const { data: invoiceNumber, error: numberError } = await admin.rpc("next_invoice_number", {
-    p_workspace_id: workspaceId,
-    p_branch_legacy_code: branch?.legacy_code ?? "00",
-    p_invoice_type: "equipment",
-  });
+  const { data: invoiceNumber, error: numberError } = await admin.rpc(
+    "next_invoice_number",
+    {
+      p_workspace_id: workspaceId,
+      p_branch_legacy_code: branch?.legacy_code ?? "00",
+      p_invoice_type: "equipment",
+    },
+  );
   if (numberError || typeof invoiceNumber !== "string") {
-    throw new Error(`invoice numbering failed: ${numberError?.message ?? "no number returned"}`);
+    throw new Error(
+      `invoice numbering failed: ${
+        numberError?.message ?? "no number returned"
+      }`,
+    );
   }
 
   const primaryEquipmentId = subjectEquipment[0]?.id ?? null;
@@ -283,12 +323,17 @@ export async function generateInvoiceForEquipmentDeal(
       invoice_number: invoiceNumber,
       invoice_date: invoiceDate,
       due_date: plan.dueDate,
-      description: `Equipment sale — quote ${String(quoteSnapshot.id).slice(0, 8)}`,
+      description: `Equipment sale — quote ${
+        String(quoteSnapshot.id).slice(0, 8)
+      }`,
       amount: plan.amount,
       tax: plan.tax,
       total: plan.total,
-      amount_paid: plan.amountPaid,
-      status: plan.status,
+      // Deposit cash is applied only by the atomic liability-ledger RPC below.
+      // Starting at zero keeps a posted invoice honest if that RPC rejects its
+      // evidence or otherwise fails after the AR header has been created.
+      amount_paid: 0,
+      status: "pending",
       deal_id: dealId,
       invoice_type: "equipment",
       invoice_source_code: "EQUIPMENT",
@@ -301,7 +346,9 @@ export async function generateInvoiceForEquipmentDeal(
       tax_code_2: plan.taxCode2,
       dr15_county_name: shipToCounty,
       fet_amount: plan.fetAmount,
-      fet_rate: quoteSnapshot.fet_rate == null ? null : Number(quoteSnapshot.fet_rate),
+      fet_rate: quoteSnapshot.fet_rate == null
+        ? null
+        : Number(quoteSnapshot.fet_rate),
       fet_taxable_amount: quoteSnapshot.fet_taxable_amount == null
         ? null
         : Number(quoteSnapshot.fet_taxable_amount),
@@ -311,7 +358,9 @@ export async function generateInvoiceForEquipmentDeal(
     .select("id")
     .single();
   if (insertError || !inserted) {
-    throw new Error(`invoice insert failed: ${insertError?.message ?? "no row returned"}`);
+    throw new Error(
+      `invoice insert failed: ${insertError?.message ?? "no row returned"}`,
+    );
   }
   const invoiceId = inserted.id as string;
 
@@ -324,6 +373,11 @@ export async function generateInvoiceForEquipmentDeal(
       description: line.description,
       quantity: line.quantity,
       unit_price: line.unit_price,
+      finance_department: "equipment",
+      finance_segment: "customer",
+      finance_category: "equipment",
+      finance_classification_source: "accepted_equipment_quote",
+      finance_classified_at: new Date().toISOString(),
     })));
   if (linesError) {
     warnings.push(`line_items_insert_failed: ${linesError.message}`);
@@ -338,7 +392,10 @@ export async function generateInvoiceForEquipmentDeal(
     });
   }
 
-  if (plan.taxFailed || (!plan.taxFailed && stateCode?.toUpperCase() === "FL" && !shipToCounty)) {
+  if (
+    plan.taxFailed ||
+    (!plan.taxFailed && stateCode?.toUpperCase() === "FL" && !shipToCounty)
+  ) {
     await enqueueException(admin, {
       source: "tax_failed",
       title: plan.taxFailed
@@ -348,22 +405,29 @@ export async function generateInvoiceForEquipmentDeal(
       detail: plan.taxFailed
         ? (taxFailureReason ?? "tax computation failed")
         : "No ship-to county on file for the customer; FL county surtax was not applied. Fix the ship-to address and re-issue or adjust.",
-      payload: { invoice_id: invoiceId, deal_id: dealId, state_code: stateCode, ship_to_county: shipToCounty },
+      payload: {
+        invoice_id: invoiceId,
+        deal_id: dealId,
+        state_code: stateCode,
+        ship_to_county: shipToCounty,
+      },
       entityTable: "customer_invoices",
       entityId: invoiceId,
     });
     if (!plan.taxFailed) warnings.push("state_only_tax_no_county");
   }
 
+  let appliedDepositCents = 0;
+  let appliedInvoiceStatus: "pending" | "partial" | "paid" = "pending";
   if (plan.appliedDepositIds.length > 0) {
-    const { error: depositError } = await admin
-      .from("deposits")
-      .update({
-        status: "applied",
-        applied_to_final_invoice: true,
-        invoice_reference: invoiceNumber,
-      })
-      .in("id", plan.appliedDepositIds);
+    const { data: depositResult, error: depositError } = await admin.rpc(
+      "apply_sale_deposits_to_invoice",
+      {
+        p_workspace_id: workspaceId,
+        p_customer_invoice_id: invoiceId,
+        p_deposit_ids: plan.appliedDepositIds,
+      },
+    );
     if (depositError) {
       warnings.push(`deposit_application_failed: ${depositError.message}`);
       await enqueueException(admin, {
@@ -371,10 +435,30 @@ export async function generateInvoiceForEquipmentDeal(
         title: `Deposit application failed for invoice ${invoiceNumber}`,
         severity: "warn",
         detail: depositError.message,
-        payload: { invoice_id: invoiceId, deal_id: dealId, deposit_ids: plan.appliedDepositIds },
+        payload: {
+          invoice_id: invoiceId,
+          deal_id: dealId,
+          deposit_ids: plan.appliedDepositIds,
+        },
         entityTable: "customer_invoices",
         entityId: invoiceId,
       });
+    } else {
+      const result = Array.isArray(depositResult)
+        ? depositResult[0]
+        : depositResult;
+      const paidCents = Number(
+        (result as { invoice_amount_paid_cents?: unknown } | null)
+          ?.invoice_amount_paid_cents ?? 0,
+      );
+      const status = (result as { invoice_status?: unknown } | null)
+        ?.invoice_status;
+      appliedDepositCents = Number.isFinite(paidCents)
+        ? Math.max(0, paidCents)
+        : 0;
+      if (status === "partial" || status === "paid") {
+        appliedInvoiceStatus = status;
+      }
     }
   }
 
@@ -393,8 +477,13 @@ export async function generateInvoiceForEquipmentDeal(
         source: "equipment_billing_failed",
         title: `Sold-state write failed for invoice ${invoiceNumber}`,
         severity: "error",
-        detail: `${equipmentError.message} — reversal foundation requires in_out_state='sold'`,
-        payload: { invoice_id: invoiceId, deal_id: dealId, equipment_ids: subjectEquipment.map((u) => u.id) },
+        detail:
+          `${equipmentError.message} — reversal foundation requires in_out_state='sold'`,
+        payload: {
+          invoice_id: invoiceId,
+          deal_id: dealId,
+          equipment_ids: subjectEquipment.map((u) => u.id),
+        },
         entityTable: "customer_invoices",
         entityId: invoiceId,
       });
@@ -405,7 +494,8 @@ export async function generateInvoiceForEquipmentDeal(
       source: "data_quality",
       title: `Equipment invoice ${invoiceNumber} has no subject equipment link`,
       severity: "warn",
-      detail: "Deal has no crm_deal_equipment role='subject' row; invoice posted without qrm_equipment_id, so the sale reversal path cannot find it by stock number.",
+      detail:
+        "Deal has no crm_deal_equipment role='subject' row; invoice posted without qrm_equipment_id, so the sale reversal path cannot find it by stock number.",
       payload: { invoice_id: invoiceId, deal_id: dealId },
       entityTable: "customer_invoices",
       entityId: invoiceId,
@@ -425,7 +515,10 @@ export async function generateInvoiceForEquipmentDeal(
     if (glError) throw new Error(glError.message);
     await admin
       .from("customer_invoices")
-      .update({ quickbooks_gl_status: "queued", quickbooks_gl_last_error: null })
+      .update({
+        quickbooks_gl_status: "queued",
+        quickbooks_gl_last_error: null,
+      })
       .eq("id", invoiceId);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -454,13 +547,16 @@ export async function generateInvoiceForEquipmentDeal(
         invoice_number: invoiceNumber,
         total: plan.total,
         tax: plan.tax,
-        amount_paid: plan.amountPaid,
+        amount_paid: appliedDepositCents / 100,
+        invoice_status: appliedInvoiceStatus,
         invoice_type: "equipment",
       },
       idempotencyKey: `deal.invoiced:${dealId}`,
     });
   } catch (err) {
-    warnings.push(`flow_event_failed: ${err instanceof Error ? err.message : String(err)}`);
+    warnings.push(
+      `flow_event_failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   return {

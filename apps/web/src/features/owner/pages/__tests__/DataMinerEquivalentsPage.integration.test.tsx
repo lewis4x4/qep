@@ -53,7 +53,7 @@ mock.module("@/lib/supabase", () => ({
           return {
             data: [
               {
-                labor_date: "2026-04-20",
+                labor_date: new Date().toISOString().slice(0, 10),
                 branch_id: "01",
                 shop_or_field: "field",
                 technician_id: "tech-1",

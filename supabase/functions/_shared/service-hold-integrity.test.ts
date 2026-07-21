@@ -11,30 +11,30 @@ import {
 
 Deno.test("H4 exposes exactly five named service hold states", () => {
   assertEquals(SERVICE_HOLD_STATES, [
-    "waiting_on_parts_sublet",
-    "waiting_on_approval",
-    "waiting_on_customer",
+    "waiting_on_parts",
+    "waiting_on_customer_approval",
     "waiting_on_warranty_authorization",
-    "waiting_on_payment",
+    "waiting_on_sublet",
+    "waiting_on_payment_deposit",
   ]);
 });
 
 Deno.test("H4 normalizes legacy blocker text into named hold states", () => {
   assertEquals(
     normalizeServiceHoldState("parts_shortage"),
-    "waiting_on_parts_sublet",
+    "waiting_on_parts",
   );
   assertEquals(
     normalizeServiceHoldState("waiting vendor PO"),
-    "waiting_on_parts_sublet",
+    "waiting_on_sublet",
   );
   assertEquals(
     normalizeServiceHoldState("customer approval"),
-    "waiting_on_approval",
+    "waiting_on_customer_approval",
   );
   assertEquals(
     normalizeServiceHoldState("waiting_customer"),
-    "waiting_on_customer",
+    "waiting_on_customer_approval",
   );
   assertEquals(
     normalizeServiceHoldState("OEM warranty auth"),
@@ -62,7 +62,7 @@ Deno.test("H4 normalizes legacy blocker text into named hold states", () => {
   );
   assertEquals(
     normalizeServiceHoldState("invoice payment"),
-    "waiting_on_payment",
+    "waiting_on_payment_deposit",
   );
 });
 

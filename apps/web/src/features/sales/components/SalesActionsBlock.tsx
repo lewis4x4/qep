@@ -13,7 +13,7 @@ import { pickSalesPrimaryAction } from "../lib/sales-primary-action";
 export interface SalesActionsBlockProps {
   pipeline: RepPipelineDeal[];
   liveStats: PipelineStats;
-  /** Drives the voice secondary action — opens the LogVisit sheet. */
+  /** Opens the single Iron voice surface. */
   onVoiceQuote: () => void;
 }
 
@@ -81,12 +81,91 @@ export function SalesActionsBlock({
         : "Caught up — no touchpoints due";
 
   return (
-    <section data-testid="sales-actions-block" className="space-y-3">
-      <div className="flex items-center gap-2">
+    <section data-testid="sales-actions-block" className="flex flex-col gap-3">
+      <div className="order-0 flex items-center gap-2">
         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-qep-orange-accessible">
-          02 Actions
+          01 Advisor priorities
         </p>
         <div className="flex-1 h-px bg-white/[0.06]" />
+      </div>
+
+      {/* Secondary tiles */}
+      <div
+        className="grid grid-cols-2 gap-3"
+        data-testid="advisor-owner-priorities"
+        aria-label="Open deals and follow-ups"
+      >
+        <Link
+          to="/sales/pipeline"
+          aria-label="Open deals"
+          className="group flex min-h-[160px] flex-col gap-1.5 overflow-hidden rounded-2xl border border-white/[0.08] bg-[hsl(var(--card))] p-4 transition-all hover:border-white/[0.18]"
+        >
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-black/30 text-foreground/80">
+                <Activity className="h-3.5 w-3.5" />
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                Open deals
+              </span>
+            </span>
+            <ArrowRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-qep-orange-accessible" />
+          </div>
+          <div className="mt-1 flex items-end gap-2">
+            <span className="text-3xl font-extrabold leading-none tabular-nums text-foreground">
+              {liveStats.deals_in_pipeline}
+            </span>
+            <span className="pb-0.5 text-[10px] font-semibold text-muted-foreground">
+              deals
+            </span>
+          </div>
+          <p className="text-sm font-extrabold text-qep-orange-accessible">
+            {formatCompactUsd(liveStats.total_pipeline_value)}{" "}
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              open
+            </span>
+          </p>
+          <p className="mt-auto text-[10px] text-amber-400">
+            {decisionCount > 0
+              ? `${decisionCount} at decision stage`
+              : "No decision-stage pressure"}
+          </p>
+        </Link>
+
+        <Link
+          to="/sales/pipeline?filter=follow_ups"
+          aria-label="Today's follow-ups"
+          className="group relative flex min-h-[160px] flex-col gap-1.5 overflow-hidden rounded-2xl border border-qep-orange/30 bg-qep-orange/[0.08] p-4 transition-all hover:border-qep-orange/55 hover:bg-qep-orange/[0.12]"
+        >
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-qep-orange text-[#1b0e04]">
+                <Target className="h-3.5 w-3.5" />
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-qep-orange-accessible">
+                Follow-ups
+              </span>
+            </span>
+            <ArrowRight className="h-3.5 w-3.5 text-qep-orange-accessible transition-transform group-hover:translate-x-0.5" />
+          </div>
+          <div className="mt-1 flex items-end gap-2">
+            <span className="text-3xl font-extrabold leading-none tabular-nums text-foreground">
+              {followUpHero}
+            </span>
+            {followUps.tiedUp > 0 && (
+              <span className="pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-qep-orange-accessible">
+                {formatCompactUsd(followUps.tiedUp)} tied up
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-foreground/80">{followUpUrgency}</p>
+          {followUps.stalest && (
+            <p className="mt-auto inline-flex items-center gap-1 text-[10px] text-amber-400">
+              <AlertTriangle className="h-3 w-3" />
+              {followUps.stalest.customer} · {followUps.stalest.days}d stale
+            </p>
+          )}
+        </Link>
       </div>
 
       {/* Primary — context-aware hero. Card is a div (not a button) so the
@@ -136,88 +215,14 @@ export function SalesActionsBlock({
             <button
               type="button"
               onClick={onVoiceQuote}
+              aria-label="Use Iron voice"
               className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/45 bg-black/40 px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-white active:scale-95"
             >
               <Mic className="h-3.5 w-3.5" />
-              Voice quote
+              Use Iron
             </button>
           </div>
         </div>
-      </div>
-
-      {/* Secondary tiles */}
-      <div className="grid grid-cols-2 gap-3">
-        <Link
-          to="/sales/pipeline?filter=follow_ups"
-          aria-label="Today's follow-ups"
-          className="group relative flex min-h-[160px] flex-col gap-1.5 overflow-hidden rounded-2xl border border-qep-orange/30 bg-qep-orange/[0.08] p-4 transition-all hover:border-qep-orange/55 hover:bg-qep-orange/[0.12]"
-        >
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-qep-orange text-[#1b0e04]">
-                <Target className="h-3.5 w-3.5" />
-              </span>
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-qep-orange-accessible">
-                Follow-ups
-              </span>
-            </span>
-            <ArrowRight className="h-3.5 w-3.5 text-qep-orange-accessible transition-transform group-hover:translate-x-0.5" />
-          </div>
-          <div className="mt-1 flex items-end gap-2">
-            <span className="text-3xl font-extrabold leading-none tabular-nums text-foreground">
-              {followUpHero}
-            </span>
-            {followUps.tiedUp > 0 && (
-              <span className="pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-qep-orange-accessible">
-                {formatCompactUsd(followUps.tiedUp)} tied up
-              </span>
-            )}
-          </div>
-          <p className="text-[11px] text-foreground/80">{followUpUrgency}</p>
-          {followUps.stalest && (
-            <p className="mt-auto inline-flex items-center gap-1 text-[10px] text-amber-400">
-              <AlertTriangle className="h-3 w-3" />
-              {followUps.stalest.customer} · {followUps.stalest.days}d stale
-            </p>
-          )}
-        </Link>
-
-        <Link
-          to="/sales/pipeline"
-          aria-label="My pipeline"
-          className="group flex min-h-[160px] flex-col gap-1.5 overflow-hidden rounded-2xl border border-white/[0.08] bg-[hsl(var(--card))] p-4 transition-all hover:border-white/[0.18]"
-        >
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-black/30 text-foreground/80">
-                <Activity className="h-3.5 w-3.5" />
-              </span>
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
-                Pipeline
-              </span>
-            </span>
-            <ArrowRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-qep-orange-accessible" />
-          </div>
-          <div className="mt-1 flex items-end gap-2">
-            <span className="text-3xl font-extrabold leading-none tabular-nums text-foreground">
-              {liveStats.deals_in_pipeline}
-            </span>
-            <span className="pb-0.5 text-[10px] font-semibold text-muted-foreground">
-              deals
-            </span>
-          </div>
-          <p className="text-sm font-extrabold text-qep-orange-accessible">
-            {formatCompactUsd(liveStats.total_pipeline_value)}{" "}
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              open
-            </span>
-          </p>
-          <p className="mt-auto text-[10px] text-amber-400">
-            {decisionCount > 0
-              ? `${decisionCount} at decision stage`
-              : "No decision-stage pressure"}
-          </p>
-        </Link>
       </div>
     </section>
   );

@@ -30,38 +30,60 @@ function ensureElevatedRole(role: string, origin: string | null): Response | nul
 async function loadInvoice(
   admin: unknown,
   invoiceId: string,
+  workspaceId: string,
 ): Promise<QuickBooksInvoiceContext> {
   const { data: invoice, error } = await (admin as unknown as {
     from: (table: string) => {
-      select: (columns: string) => { eq: (column: string, value: string) => { single: () => Promise<{ data: Record<string, unknown> | null; error: unknown }> } };
+      select: (columns: string) => {
+        eq: (column: string, value: string) => {
+          eq: (column: string, value: string) => {
+            single: () => Promise<{ data: Record<string, unknown> | null; error: unknown }>;
+          };
+        };
+      };
     };
   })
     .from("customer_invoices")
     .select("id, invoice_number, invoice_date, total, tax, description, service_job_id, crm_company_id, invoice_type")
     .eq("id", invoiceId)
+    .eq("workspace_id", workspaceId)
     .single();
   if (error || !invoice) throw new Error("Invoice not found");
 
   const { data: lineItems } = await (admin as unknown as {
     from: (table: string) => {
-      select: (columns: string) => { eq: (column: string, value: string) => { order: (column: string) => Promise<{ data: Record<string, unknown>[] | null; error: unknown }> } };
+      select: (columns: string) => {
+        eq: (column: string, value: string) => {
+          eq: (column: string, value: string) => {
+            order: (column: string) => Promise<{ data: Record<string, unknown>[] | null; error: unknown }>;
+          };
+        };
+      };
     };
   })
     .from("customer_invoice_line_items")
-    .select("id, description, quantity, unit_price, line_total")
+    .select("id, description, quantity, unit_price, line_total, finance_department, finance_segment, finance_category")
     .eq("invoice_id", invoiceId)
+    .eq("workspace_id", workspaceId)
     .order("line_number");
 
   let companyName: string | null = null;
   if (invoice.crm_company_id) {
     const { data: company } = await (admin as unknown as {
       from: (table: string) => {
-        select: (columns: string) => { eq: (column: string, value: string) => { maybeSingle: () => Promise<{ data: Record<string, unknown> | null; error: unknown }> } };
+        select: (columns: string) => {
+          eq: (column: string, value: string) => {
+            eq: (column: string, value: string) => {
+              maybeSingle: () => Promise<{ data: Record<string, unknown> | null; error: unknown }>;
+            };
+          };
+        };
       };
     })
       .from("qrm_companies")
       .select("name")
       .eq("id", invoice.crm_company_id as string)
+      .eq("workspace_id", workspaceId)
       .maybeSingle();
     companyName = (company?.name as string | undefined) ?? null;
   }
@@ -83,6 +105,9 @@ async function loadInvoice(
       quantity: Number(row.quantity ?? 1),
       unit_price: Number(row.unit_price ?? 0),
       line_total: row.line_total == null ? null : Number(row.line_total),
+      finance_department: (row.finance_department as QuickBooksInvoiceContext["line_items"][number]["finance_department"]) ?? null,
+      finance_segment: (row.finance_segment as QuickBooksInvoiceContext["line_items"][number]["finance_segment"]) ?? null,
+      finance_category: (row.finance_category as string | null) ?? null,
     })),
   };
 }
@@ -93,7 +118,7 @@ async function syncInvoice(
   workspaceId: string,
   actorId: string,
 ) {
-  const invoice = await loadInvoice(admin, invoiceId);
+  const invoice = await loadInvoice(admin, invoiceId, workspaceId);
 
   await (admin as unknown as {
     from: (table: string) => {

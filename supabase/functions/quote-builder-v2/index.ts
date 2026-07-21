@@ -74,13 +74,6 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const QUOTE_APPROVAL_WORKFLOW_SLUG = quoteManagerApproval.slug;
 const PUBLIC_ACCEPT_TERMS_VERSION = "a3.5-deposit-checkout-v1";
-const PUBLIC_ACCEPT_READY_STATUSES = [
-  "sent",
-  "viewed",
-  "countered",
-  "approved",
-  "approved_with_conditions",
-];
 const CUSTOMER_BLOCKED_QUOTE_STATUSES = new Set([
   "draft",
   "draft_low_margin",
@@ -2913,58 +2906,40 @@ async function handlePublicAccept(
   const sigIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
   const sigUa = req.headers.get("user-agent") ?? null;
 
-  const { data: sigRow, error: sigErr } = await admin
-    .from("quote_signatures")
-    .insert({
-      workspace_id: typeof quote.workspace_id === "string" ? quote.workspace_id : "default",
-      quote_package_id: quote.id,
-      deal_id: quote.deal_id ?? null,
-      signer_name: signerName,
-      signer_email: signerEmail || null,
-      signer_ip: sigIp,
-      signer_user_agent: sigUa,
-      signature_image_url: signatureDataUrl.value,
-      signed_snapshot: configuration,
-      signed_via: "deal_room",
-      document_hash: documentHash,
-      is_valid: true,
-    })
-    .select("id, signed_at")
-    .single();
-  if (sigErr) {
-    console.error("public accept signature insert error:", sigErr);
-    return safeJsonError(sigErr.message || "Failed to record signature", 500, origin);
+  // Signature persistence, accepted status, and SA6 prospect conversion share
+  // one PostgreSQL transaction. A failure cannot leave a valid signature with
+  // an unaccepted package (or vice versa).
+  const { data: acceptResult, error: acceptErr } = await admin.rpc(
+    "accept_quote_package_with_signature",
+    {
+      p_workspace_id: typeof quote.workspace_id === "string" ? quote.workspace_id : "default",
+      p_quote_package_id: quote.id,
+      p_signer_name: signerName,
+      p_signer_email: signerEmail || null,
+      p_signer_ip: sigIp,
+      p_signer_user_agent: sigUa,
+      p_signature_image_url: signatureDataUrl.value,
+      p_signed_snapshot: configuration,
+      p_signed_via: "deal_room",
+      p_document_hash: documentHash,
+    },
+  );
+  if (acceptErr || !acceptResult || typeof acceptResult !== "object") {
+    console.error("public atomic quote acceptance error:", acceptErr);
+    const status = acceptErr?.code === "55000" ? 409 : 500;
+    return safeJsonError(
+      acceptErr?.message || "Failed to record quote acceptance",
+      status,
+      origin,
+    );
   }
 
-  // Flip only from accept-ready statuses and verify the changed row before
-  // reporting accepted. If another request won the race, re-read the
-  // package and return accepted only when the durable status proves it.
-  const { data: updatedQuote, error: updateErr } = await admin
-    .from("quote_packages")
-    .update({ status: "accepted", accepted_at: sigRow?.signed_at ?? new Date().toISOString() })
-    .eq("id", quote.id)
-    .in("status", PUBLIC_ACCEPT_READY_STATUSES)
-    .select("id, status, accepted_at")
-    .maybeSingle();
-  if (updateErr) {
-    console.error("public accept quote status update error:", updateErr);
-    return safeJsonError("Failed to mark quote accepted", 500, origin);
-  }
-
-  let verifiedPackageStatus = String(updatedQuote?.status ?? "");
-  if (!updatedQuote) {
-    const { data: racedQuote, error: racedQuoteErr } = await admin
-      .from("quote_packages")
-      .select("id, status, accepted_at")
-      .eq("id", quote.id)
-      .maybeSingle();
-    if (racedQuoteErr || !racedQuote) {
-      return safeJsonError("Failed to verify quote acceptance", 500, origin);
-    }
-    if (!["accepted", "converted_to_deal"].includes(String(racedQuote.status))) {
-      return safeJsonError("Quote acceptance could not be completed. Please refresh and try again.", 409, origin);
-    }
-    verifiedPackageStatus = String(racedQuote.status);
+  const accepted = acceptResult as Record<string, unknown>;
+  const signatureId = typeof accepted.signature_id === "string" ? accepted.signature_id : null;
+  const signedAt = typeof accepted.signed_at === "string" ? accepted.signed_at : null;
+  const verifiedPackageStatus = String(accepted.status ?? "");
+  if (!["accepted", "converted_to_deal"].includes(verifiedPackageStatus) || !signatureId) {
+    return safeJsonError("Failed to verify atomic quote acceptance", 500, origin);
   }
 
   await advanceQuoteDealStage({
@@ -2984,8 +2959,8 @@ async function handlePublicAccept(
     quotePackageId: quote.id,
     quoteNumber: typeof quote.quote_number === "string" ? quote.quote_number : null,
     dealId: typeof quote.deal_id === "string" ? quote.deal_id : null,
-    signatureId: sigRow?.id ?? null,
-    signedAt: sigRow?.signed_at ?? null,
+    signatureId,
+    signedAt,
     documentHash,
     repUserId: resolvedRepUserId,
   });
@@ -3003,8 +2978,8 @@ async function handlePublicAccept(
   }
 
   return safeJsonOk({
-    signature_id: sigRow?.id ?? null,
-    signed_at: sigRow?.signed_at ?? null,
+    signature_id: signatureId,
+    signed_at: signedAt,
     status: verifiedPackageStatus,
     document_hash: documentHash,
   }, origin, 201);
@@ -6447,31 +6422,52 @@ Deno.serve(async (req) => {
       if (pkgErr) return safeJsonError(pkgErr.message, 500, origin);
       if (!pkg) return safeJsonError("Quote package not found or not accessible", 404, origin);
 
-      const nowIso = new Date().toISOString();
-
       if (requestedAction === "mark_sent") {
         const contentGate = assertQuoteCustomerContentReady(pkg as Record<string, unknown>);
         if (!contentGate.ok) {
           return safeJsonErrorWithFields(contentGate.message, 409, origin, { blockers: contentGate.blockers });
         }
+        const admin = createAdminClient();
+        const workspaceId = typeof (pkg as Record<string, unknown>).workspace_id === "string"
+          ? String((pkg as Record<string, unknown>).workspace_id)
+          : userWorkspaceId;
         const availabilityGate = await assertQuoteAvailabilitySendable({
-          admin: createAdminClient(),
-          workspaceId: typeof (pkg as Record<string, unknown>).workspace_id === "string" ? String((pkg as Record<string, unknown>).workspace_id) : userWorkspaceId,
+          admin,
+          workspaceId,
           quotePackageId,
         });
         if (!availabilityGate.ok) {
           return safeJsonErrorWithFields(availabilityGate.message, 409, origin, { blockers: availabilityGate.blockers });
         }
+        const { error: sentErr } = await admin.rpc("mark_quote_package_sent_with_evidence", {
+          p_workspace_id: workspaceId,
+          p_quote_package_id: quotePackageId,
+          p_channel: "link",
+          p_recipient: typeof (pkg as Record<string, unknown>).customer_email === "string"
+            ? String((pkg as Record<string, unknown>).customer_email)
+            : null,
+          p_created_by: user.id,
+          p_metadata: {
+            source: "quote_list_mark_sent",
+            attested_by: user.id,
+          },
+        });
+        if (sentErr) {
+          return safeJsonError(
+            sentErr.message,
+            sentErr.code === "55000" ? 409 : 500,
+            origin,
+          );
+        }
         const { data: updated, error: updateErr } = await supabase
           .from("quote_packages")
-          .update({ status: "sent", sent_at: nowIso, sent_via: "manual" })
-          .eq("id", quotePackageId)
           .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at, updated_at, accepted_at, win_probability_score, is_prospect_quote")
+          .eq("id", quotePackageId)
           .single();
         if (updateErr) return safeJsonError(updateErr.message, 500, origin);
         await advanceQuoteDealStage({
-          admin: createAdminClient(),
-          workspaceId: typeof (pkg as Record<string, unknown>).workspace_id === "string" ? String((pkg as Record<string, unknown>).workspace_id) : userWorkspaceId,
+          admin,
+          workspaceId,
           dealId: typeof (pkg as Record<string, unknown>).deal_id === "string" ? String((pkg as Record<string, unknown>).deal_id) : null,
           target: QUOTE_PIPELINE_STAGE_TARGETS.quoteSent,
           source: "quote_list_mark_sent",
@@ -7044,11 +7040,6 @@ Deno.serve(async (req) => {
       const voiceTranscript = typeof body.voice_transcript === "string"
         ? body.voice_transcript.trim().slice(0, 12000)
         : null;
-      const prospectConversionSource = body.prospect_conversion_source &&
-        typeof body.prospect_conversion_source === "object" &&
-        !Array.isArray(body.prospect_conversion_source)
-        ? body.prospect_conversion_source as Record<string, unknown>
-        : null;
       const bodyMetadata = body.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata)
         ? body.metadata as Record<string, unknown>
         : null;
@@ -7059,16 +7050,11 @@ Deno.serve(async (req) => {
       if (equipment.length === 0) {
         return safeJsonError("At least one equipment line is required", 400, origin);
       }
-      // Decision Q7 (do_not_allow): quotes must be tied to a real CRM
-      // contact or company. Prospect quotes — typed name only, no CRM
-      // linkage — are no longer accepted. Reps are routed to create the
-      // customer in QRM before they can save the quote.
-      if (!contactId && !companyId) {
-        return safeJsonError(
-          "Quotes require a linked CRM customer. Pick an existing contact or company, or create one in QRM first.",
-          400,
-          origin,
-        );
+      // Owner answer SA6: typed prospects can be quoted without pre-creating
+      // a CRM company/contact. The database creates qrm_prospects at send and
+      // converts at acceptance; an entirely blank identity is still invalid.
+      if (!customerName && !customerCompany && !contactId && !companyId) {
+        return safeJsonError("Customer or prospect identity is required", 400, origin);
       }
 
       // Slice 09 CP2: accept optional originating_log_id so the AI Request
@@ -7178,12 +7164,18 @@ Deno.serve(async (req) => {
         return safeJsonError(existingQuoteErr.message, 500, origin);
       }
       const existingQuote = existingQuoteById?.id ? existingQuoteById : existingQuoteByDealId;
-      // Decision Q7 (do_not_allow): prospect_conversion_source is no
-      // longer accepted from the client. We also scrub any leftover key
-      // from existing metadata so legacy quotes don't keep advertising a
-      // prospect lineage after they've been re-saved with a CRM link.
-      void normalizeProspectConversionSourcePayload;
-      void prospectConversionSource;
+      // Derive prospect state server-side. A client cannot falsely suppress the
+      // send-time lifecycle or mark a CRM-linked quote as a prospect.
+      const isProspectQuote = !contactId && !companyId;
+      const prospectNorm = isProspectQuote
+        ? normalizeProspectConversionSourcePayload({
+            original_customer_name: customerName,
+            original_customer_company: customerCompany,
+            original_customer_phone: customerPhone,
+            original_customer_email: customerEmail,
+            conversion_status: "awaiting_quote_send",
+          })
+        : null;
       const existingRowMeta = asPlainMetadataObject(existingQuote?.metadata);
       const mergedMetadata: Record<string, unknown> = {
         ...(existingRowMeta ?? {}),
@@ -7195,13 +7187,15 @@ Deno.serve(async (req) => {
         mergedMetadata.show_finance_comparison_on_customer_copy = false;
       }
       delete mergedMetadata.prospect_conversion_source;
-      const metadataPatch = Object.keys(mergedMetadata).length > 0 ? { metadata: mergedMetadata } : {};
-      // Decision Q7 (do_not_allow): is_prospect_quote can never be set
-      // true on save. Existing legacy rows get downgraded to false the
-      // next time they're touched so the dataset converges on the new
-      // policy. The column itself stays in schema for historical reads.
+      if (prospectNorm !== null) {
+        mergedMetadata.prospect_conversion_source = prospectNorm;
+      }
+      const hadProspectMetadata = existingRowMeta !== null && "prospect_conversion_source" in existingRowMeta;
+      const metadataPatch = Object.keys(mergedMetadata).length > 0 || hadProspectMetadata
+        ? { metadata: mergedMetadata }
+        : {};
       const prospectQuoteCols: Record<string, unknown> = {
-        is_prospect_quote: false,
+        is_prospect_quote: isProspectQuote,
       };
       if ("customer_warmth" in body) {
         const rawW = body.customer_warmth;
@@ -8508,33 +8502,52 @@ Deno.serve(async (req) => {
         net_total: pkgRow.net_total,
       });
 
-      const { data, error } = await supabase
-        .from("quote_signatures")
-        .insert({
-          quote_package_id: body.quote_package_id,
-          deal_id: body.deal_id ?? null,
-          signer_name: signerName,
-          signer_email: body.signer_email ?? null,
-          signer_ip: signerIp,
-          signer_user_agent: signerUserAgent,
-          signature_image_url: signatureImageUrl,
-          document_hash: documentHash,
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error("quote signature save error:", error);
-        return safeJsonError("Failed to save signature", 500, origin);
+      const signedSnapshot = {
+        quote_package_id: pkgRow.id,
+        pdf_url: pkgRow.pdf_url,
+        equipment: pkgRow.equipment,
+        equipment_total: pkgRow.equipment_total,
+        attachment_total: pkgRow.attachment_total,
+        subtotal: pkgRow.subtotal,
+        trade_credit: pkgRow.trade_credit,
+        net_total: pkgRow.net_total,
+        signed_via: "rep",
+        accepted_at_client: new Date().toISOString(),
+      };
+      const admin = createAdminClient();
+      const { data: acceptResult, error: acceptError } = await admin.rpc(
+        "accept_quote_package_with_signature",
+        {
+          p_workspace_id: pkgRow.workspace_id || userWorkspaceId,
+          p_quote_package_id: body.quote_package_id,
+          p_signer_name: signerName,
+          p_signer_email: typeof body.signer_email === "string" ? body.signer_email : null,
+          p_signer_ip: signerIp,
+          p_signer_user_agent: signerUserAgent,
+          p_signature_image_url: signatureImageUrl,
+          p_signed_snapshot: signedSnapshot,
+          p_signed_via: "rep",
+          p_document_hash: documentHash,
+        },
+      );
+      if (acceptError || !acceptResult || typeof acceptResult !== "object") {
+        console.error("quote atomic staff acceptance failed:", acceptError);
+        return safeJsonError(
+          acceptError?.message || "Quote acceptance could not be completed.",
+          acceptError?.code === "55000" ? 409 : 500,
+          origin,
+        );
+      }
+      const accepted = acceptResult as Record<string, unknown>;
+      if (
+        !["accepted", "converted_to_deal"].includes(String(accepted.status ?? ""))
+        || typeof accepted.signature_id !== "string"
+      ) {
+        return safeJsonError("Failed to verify atomic quote acceptance", 500, origin);
       }
 
-      await supabase
-        .from("quote_packages")
-        .update({ status: "accepted", accepted_at: new Date().toISOString() })
-        .eq("id", body.quote_package_id);
-
       await advanceQuoteDealStage({
-        admin: createAdminClient(),
+        admin,
         workspaceId: pkgRow.workspace_id || userWorkspaceId,
         dealId: pkgRow.deal_id ?? (typeof body.deal_id === "string" ? body.deal_id : null),
         target: QUOTE_PIPELINE_STAGE_TARGETS.salesOrderSigned,
@@ -8543,12 +8556,19 @@ Deno.serve(async (req) => {
 
       // N2.1: staff-signed acceptance stages the counter order too.
       try {
-        await materializePartsOrderFromQuote(createAdminClient(), String(body.quote_package_id));
+        await materializePartsOrderFromQuote(admin, String(body.quote_package_id));
       } catch (err) {
         console.error("quote parts materialization (staff sign):", err);
       }
 
-      return safeJsonOk({ signature: data, document_hash: documentHash }, origin, 201);
+      return safeJsonOk({
+        signature: {
+          id: accepted.signature_id,
+          signed_at: accepted.signed_at ?? null,
+          status: accepted.status,
+        },
+        document_hash: documentHash,
+      }, origin, 201);
     }
 
     // ── POST /ensure-share-token: Stable token/public URL issuance ─────
@@ -8661,7 +8681,7 @@ Deno.serve(async (req) => {
         // customer_total was never a quote_packages column (never in any
         // migration) — selecting it 42703s and every staff send 404ed
         // "Quote package not found". net_total is the real total.
-        .select("id, workspace_id, deal_id, contact_id, quote_number, share_token, branch_slug, amount_financed, selected_finance_scenario, equipment, equipment_total, net_total, trade_allowance, sent_at, status, margin_pct, requires_requote, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason, special_terms, expires_at, delivery_eta, delivery_state, delivery_county, crm_contacts(first_name, last_name, email)")
+        .select("id, workspace_id, deal_id, contact_id, quote_number, share_token, branch_slug, customer_name, customer_company, customer_email, customer_phone, is_prospect_quote, amount_financed, selected_finance_scenario, equipment, equipment_total, net_total, trade_allowance, sent_at, status, margin_pct, requires_requote, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason, special_terms, expires_at, delivery_eta, delivery_state, delivery_county, crm_contacts(first_name, last_name, email)")
         .eq("id", body.quote_package_id)
         .single();
 
@@ -8671,9 +8691,10 @@ Deno.serve(async (req) => {
 
       // Resolve contact email
       const contact = Array.isArray(pkg.crm_contacts) ? pkg.crm_contacts[0] : pkg.crm_contacts;
-      const toEmail = contact?.email;
+      const toEmail = contact?.email
+        || (typeof pkg.customer_email === "string" ? pkg.customer_email.trim() : "");
       if (!toEmail) {
-        return safeJsonError("No email address found for this contact. Update the contact record and try again.", 422, origin);
+        return safeJsonError("No email address found for this customer or prospect. Add one and try again.", 422, origin);
       }
 
       const quoteStatus = String(pkg.status ?? "draft");
@@ -8846,7 +8867,10 @@ Deno.serve(async (req) => {
       // Compose a customer-safe notification. Full proposal details stay behind
       // the tokenized deal-room link; this email intentionally avoids raw line
       // items, dealer cost, margin, approval state, and unconfirmed AI output.
-      const contactName = [contact?.first_name, contact?.last_name].filter(Boolean).join(" ") || "Valued Customer";
+      const contactName = [contact?.first_name, contact?.last_name].filter(Boolean).join(" ")
+        || (typeof pkg.customer_name === "string" ? pkg.customer_name.trim() : "")
+        || (typeof pkg.customer_company === "string" ? pkg.customer_company.trim() : "")
+        || "Valued Customer";
       const publicUrl = buildDealRoomUrl(shareToken, origin);
       const pkgRecord = pkg as Record<string, unknown>;
       const deliveryState = typeof pkgRecord.delivery_state === "string"

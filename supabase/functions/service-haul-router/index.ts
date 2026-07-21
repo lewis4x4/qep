@@ -254,6 +254,25 @@ async function handleCreateHaul(
   const ticketStatus = body.driver_id || body.scheduled_start_at
     ? "scheduled"
     : "haul_pending";
+  let serviceDriverProfileId: string | null = null;
+  if (body.driver_id) {
+    const { data: driverProfile, error: driverProfileError } = await supabase
+      .from("service_driver_profiles")
+      .select("id")
+      .eq("workspace_id", job.workspace_id)
+      .eq("profile_id", body.driver_id)
+      .eq("is_dispatchable", true)
+      .not("roster_verified_at", "is", null)
+      .maybeSingle();
+    if (driverProfileError || !driverProfile?.id) {
+      return safeJsonError(
+        "Driver must have a verified, dispatchable Service Driver profile before assignment",
+        400,
+        origin,
+      );
+    }
+    serviceDriverProfileId = driverProfile.id as string;
+  }
 
   const { data: ticket, error } = await supabase
     .from("traffic_tickets")
@@ -283,6 +302,7 @@ async function handleCreateHaul(
       status: ticketStatus,
       requested_by: actorId,
       driver_id: body.driver_id ?? null,
+      service_driver_profile_id: serviceDriverProfileId,
       coordinator_id: body.coordinator_id ?? job.service_manager_id ?? null,
       service_advisor_id: body.service_advisor_id ?? job.advisor_id ?? actorId,
       truck_class: pricing.truck_class,

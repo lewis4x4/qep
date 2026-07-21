@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 const navigate = mock((_href: string) => undefined);
 const refetchPriceImpacts = mock(async () => ({ data: undefined }));
+const openBar = mock(() => undefined);
 
 let todayFeed = {
   briefing: null,
@@ -45,6 +46,9 @@ mock.module("@/hooks/useAuth", () => ({
     profile: { full_name: "Riley Rep", email: "riley@example.test", role: "rep" },
   }),
 }));
+mock.module("@/lib/iron/store", () => ({
+  useIronStore: () => ({ openBar }),
+}));
 mock.module("@/components/ui/sheet", () => ({
   Sheet: ({ children }: { children: ReactNode }) => <>{children}</>,
   SheetContent: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -73,6 +77,7 @@ const { TodayFeedPage } = await import("./TodayFeedPage");
 beforeEach(() => {
   navigate.mockClear();
   refetchPriceImpacts.mockClear();
+  openBar.mockClear();
   todayFeed = {
     ...todayFeed,
     priceImpacts: null,

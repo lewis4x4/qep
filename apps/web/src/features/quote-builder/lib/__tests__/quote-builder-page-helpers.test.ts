@@ -49,13 +49,13 @@ describe("quote-builder-page-helpers", () => {
     expect(metadata.spec_source).toBe("manufacturer_ingested");
   });
 
-  test("draftHasCustomer requires CRM customer identity for Q7 prospect-quote denial", () => {
+  test("draftHasCustomer accepts an SA6 typed prospect or CRM identity", () => {
     expect(draftHasCustomer({
       customerName: "Walk-in prospect",
       customerCompany: "Typed-only LLC",
       contactId: null,
       companyId: null,
-    })).toBe(false);
+    })).toBe(true);
     expect(draftHasCustomer({
       customerName: "Walk-in prospect",
       customerCompany: "Typed-only LLC",

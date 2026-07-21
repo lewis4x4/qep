@@ -1,9 +1,9 @@
 export const SERVICE_HOLD_STATES = [
-  "waiting_on_parts_sublet",
-  "waiting_on_approval",
-  "waiting_on_customer",
+  "waiting_on_parts",
+  "waiting_on_customer_approval",
   "waiting_on_warranty_authorization",
-  "waiting_on_payment",
+  "waiting_on_sublet",
+  "waiting_on_payment_deposit",
 ] as const;
 
 export type ServiceHoldState = typeof SERVICE_HOLD_STATES[number];
@@ -43,10 +43,16 @@ export function normalizeServiceHoldState(
 
   if (
     [
+      "waiting_on_parts_sublet",
       "waiting_on_parts",
       "waiting_parts",
       "parts_shortage",
       "parts_pending",
+    ].includes(key) || key.includes("part")
+  ) return "waiting_on_parts";
+
+  if (
+    [
       "waiting_on_sublet",
       "waiting_sublet",
       "sublet",
@@ -55,15 +61,9 @@ export function normalizeServiceHoldState(
       "vendor",
       "po_wait",
       "waiting_po",
-    ].includes(key) ||
-    key.includes("part") ||
-    key.includes("sublet") ||
-    key.includes("vendor") ||
-    key.includes("purchase_order") ||
-    key.startsWith("po_")
-  ) {
-    return "waiting_on_parts_sublet";
-  }
+    ].includes(key) || key.includes("sublet") || key.includes("vendor") ||
+    key.includes("purchase_order") || key.startsWith("po_")
+  ) return "waiting_on_sublet";
 
   if (
     [
@@ -80,7 +80,7 @@ export function normalizeServiceHoldState(
     key.includes("authorisation") ||
     key.includes("estimate")
   ) {
-    return "waiting_on_approval";
+    return "waiting_on_customer_approval";
   }
 
   if (
@@ -95,7 +95,7 @@ export function normalizeServiceHoldState(
     key.includes("customer") ||
     key.includes("client")
   ) {
-    return "waiting_on_customer";
+    return "waiting_on_customer_approval";
   }
 
   if (
@@ -113,7 +113,7 @@ export function normalizeServiceHoldState(
     key.includes("receivable") ||
     key.includes("billing")
   ) {
-    return "waiting_on_payment";
+    return "waiting_on_payment_deposit";
   }
 
   return null;

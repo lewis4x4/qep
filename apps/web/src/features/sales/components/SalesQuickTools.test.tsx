@@ -12,7 +12,7 @@ describe("SalesQuickTools", () => {
         <SalesQuickTools />
       </MemoryRouter>,
     );
-    expect(screen.getByText("Voice note")).toBeTruthy();
+    expect(screen.getByText("Quick log")).toBeTruthy();
     expect(screen.getByText("Prospecting map")).toBeTruthy();
     expect(screen.getByText("Service request")).toBeTruthy();
     expect(screen.getByText("Add customer")).toBeTruthy();

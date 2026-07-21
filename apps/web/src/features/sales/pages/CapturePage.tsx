@@ -10,29 +10,23 @@ import {
   Wrench,
   AlertCircle,
   Truck,
-  Search,
-  Check,
   UserRound,
-  Sparkles,
   Clock,
   ChevronRight,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
 import { LogVisitFlow } from "../components/LogVisitFlow";
-import { SmartVoiceCapture } from "../components/SmartVoiceCapture";
 import { ScheduleFollowUp } from "../components/ScheduleFollowUp";
 import { QuickNote, type QuickNoteTag } from "../components/QuickNote";
-import { fetchRepCustomers } from "../lib/sales-api";
 import {
   useRecentCaptures,
   type RecentCapture,
 } from "../hooks/useRecentCaptures";
 import { cn } from "@/lib/utils";
+import { useIronStore } from "@/lib/iron/store";
 
 type CaptureMode =
   | null
   | "log_visit"
-  | "voice_note"
   | "schedule"
   | "quick_note";
 
@@ -103,24 +97,6 @@ const TYPE_ACTIONS: Array<{
 
 const QUICK_DESTINATIONS = [
   {
-    key: "field_note",
-    icon: Mic,
-    label: "Field Note",
-    desc: "Record a voice note",
-    href: "/sales/field-note",
-    iconBg: "bg-red-500/10",
-    iconColor: "text-red-400",
-  },
-  {
-    key: "voice_quote",
-    icon: Sparkles,
-    label: "Voice Quote",
-    desc: "Speak a quote into existence",
-    href: "/sales/voice-quote",
-    iconBg: "bg-qep-orange/10",
-    iconColor: "text-qep-orange-accessible",
-  },
-  {
     key: "my_mirror",
     icon: UserRound,
     label: "My Mirror",
@@ -167,37 +143,11 @@ const IN_PAGE_ACTIONS = [
   },
 ] as const;
 
-function MiniAvatar({ name, size = 24 }: { name: string; size?: number }) {
-  const initials = name
-    .split(" ")
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
-  return (
-    <div
-      className="rounded-full bg-gradient-to-br from-qep-orange/80 to-qep-orange flex items-center justify-center shrink-0"
-      style={{ width: size, height: size }}
-    >
-      <span className="text-white font-bold" style={{ fontSize: size * 0.38 }}>
-        {initials}
-      </span>
-    </div>
-  );
-}
-
 export function CapturePage() {
   const navigate = useNavigate();
+  const { openBar: openIron } = useIronStore();
   const [mode, setMode] = useState<CaptureMode>(null);
-  const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
   const [noteTag, setNoteTag] = useState<QuickNoteTag | null>(null);
-
-  const { data: customers } = useQuery({
-    queryKey: ["sales", "customers"],
-    queryFn: fetchRepCustomers,
-    staleTime: 5 * 60 * 1000,
-  });
-  const quickCustomers = (customers ?? []).slice(0, 5);
 
   const { data: recentCaptures = [] } = useRecentCaptures();
 
@@ -222,13 +172,6 @@ export function CapturePage() {
           Cancel
         </button>
         {mode === "log_visit" && <LogVisitFlow onComplete={resetAll} />}
-        {mode === "voice_note" && (
-          <SmartVoiceCapture
-            onComplete={resetAll}
-            onCancel={resetAll}
-            presetCustomerId={selectedCustomer ?? undefined}
-          />
-        )}
         {mode === "schedule" && <ScheduleFollowUp onComplete={resetAll} />}
         {mode === "quick_note" && (
           <QuickNote onComplete={resetAll} tag={noteTag ?? undefined} />
@@ -252,7 +195,7 @@ export function CapturePage() {
         <button
           type="button"
           data-testid="capture-tap-to-record"
-          onClick={() => setMode("voice_note")}
+          onClick={openIron}
           className="w-full rounded-[18px] border-none cursor-pointer flex items-center gap-4 text-left transition-all duration-200 active:scale-[0.99]"
           style={{
             padding: "20px 18px",
@@ -268,7 +211,7 @@ export function CapturePage() {
               Tap to record
             </p>
             <p className="text-xs text-white mt-0.5 font-medium">
-              Recording starts instantly · IRON finds the customer
+              IRON classifies, confirms, then takes action
             </p>
           </div>
           <span className="px-2.5 py-1 rounded-[20px] bg-white/20 text-[10px] font-extrabold text-white uppercase tracking-[0.06em]">
@@ -276,53 +219,6 @@ export function CapturePage() {
           </span>
         </button>
       </div>
-
-      {quickCustomers.length > 0 && (
-        <div className="px-5 pb-5">
-          <p className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-[0.1em] mb-2">
-            Attach to Customer
-          </p>
-          <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1 -mx-1 px-1">
-            {quickCustomers.map((c) => {
-              const active = selectedCustomer === c.customer_id;
-              return (
-                <button
-                  key={c.customer_id}
-                  onClick={() =>
-                    setSelectedCustomer(active ? null : c.customer_id)
-                  }
-                  className={cn(
-                    "shrink-0 flex items-center gap-2 py-2 pl-2 pr-3 rounded-full border transition-all duration-150",
-                    active
-                      ? "border-qep-orange bg-qep-orange/10"
-                      : "border-white/[0.06] bg-[hsl(var(--card))]",
-                  )}
-                >
-                  <MiniAvatar name={c.company_name} />
-                  <span
-                    className={cn(
-                      "text-xs font-bold whitespace-nowrap",
-                      active ? "text-qep-orange-accessible" : "text-foreground",
-                    )}
-                  >
-                    {c.company_name.split(" ").slice(0, 2).join(" ")}
-                  </span>
-                  {active && (
-                    <Check className="w-[13px] h-[13px] text-qep-orange-accessible" />
-                  )}
-                </button>
-              );
-            })}
-            <button
-              onClick={() => navigate("/sales/customers")}
-              className="shrink-0 flex items-center gap-1.5 py-2 px-3 rounded-full border border-dashed border-white/[0.12] text-muted-foreground text-xs font-semibold hover:border-white/[0.25] hover:text-foreground transition-colors"
-            >
-              <Search className="w-3 h-3" />
-              Find customer
-            </button>
-          </div>
-        </div>
-      )}
 
       <div className="px-5 pb-5">
         <p className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-[0.1em] mb-2">

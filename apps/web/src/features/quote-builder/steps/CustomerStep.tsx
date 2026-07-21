@@ -226,7 +226,7 @@ export function CustomerStep({
                 data-testid="customer-step-open-manual"
               >
                 <UserPlus className="h-4 w-4" aria-hidden />
-                Add new customer
+                Enter a prospect
               </Button>
             </div>
           )}
@@ -351,7 +351,7 @@ export function CustomerStep({
 
       {!hasCustomer ? (
         <p className="text-[11px] text-muted-foreground">
-          Select an existing CRM customer (or add one to CRM first) — quotes require a real customer record.
+          Select an existing CRM customer or type a prospect name. The prospect is added to QRM only when the quote is sent.
         </p>
       ) : null}
     </div>

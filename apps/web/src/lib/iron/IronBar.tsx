@@ -76,6 +76,12 @@ import {
   mergeIronQuoteIntakeIntent,
   type IronQuoteIntakeIntent,
 } from "./quote-intake";
+import {
+  buildConfirmedIronVoiceRequest,
+  inferIronVoiceIntent,
+  type IronVoiceIntent,
+} from "./voice-intent-confirmation";
+import { IronVoiceConfirmation } from "./IronVoiceConfirmation";
 
 interface SendOptions {
   /** "voice" auto-narrates the response. */
@@ -88,6 +94,10 @@ interface QuoteIntakeCustomerResolution {
   identity: QuoteBuilderCustomerIdentity | null;
   query: string | null;
   failed: boolean;
+}
+
+interface PendingVoiceConfirmation {
+  intent: IronVoiceIntent;
 }
 
 async function resolveQuoteIntakeCustomer(
@@ -209,6 +219,7 @@ export function IronBar() {
   const [classifying, setClassifying] = useState(false);
   const [quoteIntakeSession, setQuoteIntakeSession] = useState<IronQuoteIntakeIntent | null>(null);
   const [voicePending, setVoicePending] = useState(false);
+  const [pendingVoiceConfirmation, setPendingVoiceConfirmation] = useState<PendingVoiceConfirmation | null>(null);
   const [userRole, setUserRole] = useState<string>("rep");
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -257,6 +268,7 @@ export function IronBar() {
       setInput("");
       setClassifying(false);
       setQuoteIntakeSession(null);
+      setPendingVoiceConfirmation(null);
     }
   }, [state.barOpen]);
 
@@ -550,13 +562,27 @@ export function IronBar() {
     ],
   );
 
+  const confirmPendingVoice = useCallback(async () => {
+    if (!pendingVoiceConfirmation) return;
+    const request = buildConfirmedIronVoiceRequest(pendingVoiceConfirmation.intent, input);
+    if (!request) return;
+    setPendingVoiceConfirmation(null);
+    await send(request, { mode: "voice" });
+  }, [pendingVoiceConfirmation, input, send]);
+
+  const cancelPendingVoice = useCallback(() => {
+    setPendingVoiceConfirmation(null);
+    setInput("");
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  }, []);
+
   // ── Voice flow ────────────────────────────────────────────────────────
   const startVoice = useCallback(async () => {
-    if (recorder.state === "recording" || classifying || voicePending) return;
+    if (recorder.state === "recording" || classifying || voicePending || pendingVoiceConfirmation) return;
     cancelIronSpeech();
     pushPresence("iron-mic", "listening", { ttlMs: 30_000 });
     await recorder.start();
-  }, [recorder, classifying, voicePending]);
+  }, [recorder, classifying, voicePending, pendingVoiceConfirmation]);
 
   const stopAndTranscribe = useCallback(async () => {
     if (recorder.state !== "recording") return;
@@ -592,7 +618,11 @@ export function IronBar() {
         });
         return;
       }
-      await send(transcribed.transcript, { mode: "voice" });
+      const transcript = transcribed.transcript.trim();
+      setInput(transcript);
+      setPendingVoiceConfirmation({
+        intent: inferIronVoiceIntent(transcript),
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Voice transcription failed";
       chatAppend({
@@ -604,7 +634,7 @@ export function IronBar() {
     } finally {
       setVoicePending(false);
     }
-  }, [recorder, send, state.canonicalFingerprint, setCanonicalFingerprint, setMultiVoiceWarning, chatAppend]);
+  }, [recorder, state.canonicalFingerprint, setCanonicalFingerprint, setMultiVoiceWarning, chatAppend]);
 
   const handleMicClick = useCallback(() => {
     if (recorder.state === "recording") {
@@ -686,6 +716,7 @@ export function IronBar() {
   const startNewConversation = useCallback(() => {
     knowledge.cancel();
     cancelIronSpeech();
+    setPendingVoiceConfirmation(null);
     chatReset();
   }, [knowledge, chatReset]);
 
@@ -751,6 +782,20 @@ export function IronBar() {
           )}
         </div>
 
+        {pendingVoiceConfirmation && (
+          <IronVoiceConfirmation
+            intent={pendingVoiceConfirmation.intent}
+            canConfirm={input.trim().length > 0}
+            onIntentChange={(intent) =>
+              setPendingVoiceConfirmation((pending) =>
+                pending ? { ...pending, intent } : pending,
+              )
+            }
+            onCancel={cancelPendingVoice}
+            onConfirm={() => void confirmPendingVoice()}
+          />
+        )}
+
         {/* Input row */}
         <div className="border-t border-border">
           <div className="flex items-center gap-2 px-3 py-2">
@@ -762,7 +807,11 @@ export function IronBar() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  void send();
+                  if (pendingVoiceConfirmation) {
+                    void confirmPendingVoice();
+                  } else {
+                    void send();
+                  }
                 }
               }}
               disabled={classifying || voicePending || knowledgeStatus === "streaming"}
@@ -801,7 +850,7 @@ export function IronBar() {
             <button
               type="button"
               onClick={handleMicClick}
-              disabled={classifying || voicePending || knowledgeStatus === "streaming"}
+              disabled={classifying || voicePending || pendingVoiceConfirmation !== null || knowledgeStatus === "streaming"}
               className={`rounded-md p-1.5 transition-colors disabled:opacity-30 ${
                 recorder.state === "recording"
                   ? "bg-red-500/15 text-red-400 animate-pulse"
@@ -818,7 +867,7 @@ export function IronBar() {
             <button
               type="button"
               onClick={() => void send()}
-              disabled={classifying || voicePending || input.trim().length === 0 || knowledge.status === "streaming"}
+              disabled={classifying || voicePending || pendingVoiceConfirmation !== null || input.trim().length === 0 || knowledge.status === "streaming"}
               className="rounded-md bg-qep-orange/10 p-1.5 text-qep-orange hover:bg-qep-orange/20 disabled:opacity-30"
               aria-label="Send to Iron"
             >

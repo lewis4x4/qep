@@ -11,7 +11,7 @@ Deno.test("public accept route stays token-authorized before staff auth gate", (
   assert(publicAcceptIndex < authGateIndex, "public-accept must run before staff JWT auth gate");
 });
 
-Deno.test("public accept records existing quote signature and verifies accepted package status", () => {
+Deno.test("public accept atomically records signature, package status, and prospect lifecycle", () => {
   const handlerStart = source.indexOf("async function handlePublicAccept");
   const handlerEnd = source.indexOf("// Public social-proof", handlerStart);
   const handler = source.slice(handlerStart, handlerEnd);
@@ -20,16 +20,14 @@ Deno.test("public accept records existing quote signature and verifies accepted 
   assertStringIncludes(handler, "termsVersion !== PUBLIC_ACCEPT_TERMS_VERSION");
   assertStringIncludes(handler, "terms_accepted: true");
   assertStringIncludes(handler, "terms_version: termsVersion");
-  assertStringIncludes(handler, '.from("quote_signatures")');
-  assertStringIncludes(handler, "signed_via: \"deal_room\"");
-  assertStringIncludes(handler, 'document_hash: documentHash');
+  assertStringIncludes(handler, '"accept_quote_package_with_signature"');
+  assertStringIncludes(handler, "p_signed_via: \"deal_room\"");
+  assertStringIncludes(handler, "p_document_hash: documentHash");
+  assertStringIncludes(handler, "p_signed_snapshot: configuration");
   assertStringIncludes(handler, '.from("quote_packages")');
-  assertStringIncludes(handler, '.in("status", PUBLIC_ACCEPT_READY_STATUSES)');
-  assertStringIncludes(handler, '.select("id, status, accepted_at")');
-  assertStringIncludes(handler, "if (!updatedQuote)");
-  assertStringIncludes(handler, "racedQuote.status");
+  assertStringIncludes(handler, "typeof accepted.signature_id === \"string\"");
   assertStringIncludes(handler, 'status: verifiedPackageStatus');
-  assertStringIncludes(handler, "Quote acceptance could not be completed. Please refresh and try again.");
+  assertStringIncludes(handler, "Failed to verify atomic quote acceptance");
   assertStringIncludes(handler, "QUOTE_PIPELINE_STAGE_TARGETS.salesOrderSigned");
   assertStringIncludes(handler, "resolveLatestSentQuoteRepUserId");
   assertStringIncludes(handler, "recordPublicAcceptRepEvidence");
@@ -46,17 +44,17 @@ Deno.test("public accept records existing quote signature and verifies accepted 
   assertStringIncludes(source, "created_by: input.repUserId");
 });
 
-Deno.test("public accept handles idempotent already-accepted retries before inserting another signature", () => {
+Deno.test("public accept handles idempotent already-accepted retries before invoking atomic acceptance", () => {
   const handlerStart = source.indexOf("async function handlePublicAccept");
   const handlerEnd = source.indexOf("// Public social-proof", handlerStart);
   const handler = source.slice(handlerStart, handlerEnd);
   const idempotentCheckIndex = handler.indexOf('["accepted", "converted_to_deal"].includes(String(quote.status))');
-  const signatureInsertIndex = handler.indexOf('.from("quote_signatures")\n    .insert');
+  const atomicAcceptIndex = handler.indexOf('"accept_quote_package_with_signature"');
 
   assert(idempotentCheckIndex > 0, "already-accepted idempotency check should exist");
-  assert(signatureInsertIndex > 0, "signature insert should exist");
-  assert(idempotentCheckIndex < signatureInsertIndex, "idempotent retry should return before inserting a duplicate signature");
-  const idempotentBlock = handler.slice(idempotentCheckIndex, signatureInsertIndex);
+  assert(atomicAcceptIndex > 0, "atomic acceptance RPC should exist");
+  assert(idempotentCheckIndex < atomicAcceptIndex, "idempotent retry should return before invoking another acceptance");
+  const idempotentBlock = handler.slice(idempotentCheckIndex, atomicAcceptIndex);
   assertStringIncludes(idempotentBlock, '.select("id, signed_at, document_hash")');
   assertStringIncludes(idempotentBlock, "sentRepUserId");
   assertStringIncludes(idempotentBlock, "recordPublicAcceptRepEvidence");

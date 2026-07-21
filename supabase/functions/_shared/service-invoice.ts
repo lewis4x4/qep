@@ -74,7 +74,7 @@ export async function generateInvoiceForServiceJob(
     const { data: quoteLines } = await supabase
       .from("service_quote_lines")
       .select(
-        "description, quantity, unit_price, extended_price, sort_order, payer_type",
+        "description, quantity, unit_price, extended_price, sort_order, line_type, payer_type",
       )
       .eq("quote_id", approvedQuote.id)
       .order("sort_order", { ascending: true });
@@ -156,6 +156,13 @@ export async function generateInvoiceForServiceJob(
       const qty = Number(line.quantity ?? 1);
       const unit = Number(line.unit_price ?? 0);
       const ext = Number(line.extended_price ?? qty * unit);
+      const lineType = String(line.line_type ?? "optional");
+      const payerType = String(line.payer_type ?? "customer");
+      const financeSegment = ["warranty_claim", "oem_policy"].includes(payerType)
+        ? "warranty"
+        : ["qep_internal", "goodwill"].includes(payerType)
+        ? "internal"
+        : "customer";
       rows.push({
         workspace_id: ws,
         invoice_id: invoiceId,
@@ -163,6 +170,11 @@ export async function generateInvoiceForServiceJob(
         description: String(line.description ?? "Line").slice(0, 500),
         quantity: qty,
         unit_price: unit || (qty > 0 ? ext / qty : ext),
+        finance_department: lineType === "part" ? "parts" : "service",
+        finance_segment: financeSegment,
+        finance_category: lineType === "optional" ? "misc" : lineType,
+        finance_classification_source: "service_quote_line_type",
+        finance_classified_at: new Date().toISOString(),
       });
     }
     if (rows.length === 0) {
@@ -173,6 +185,11 @@ export async function generateInvoiceForServiceJob(
         description: "Service total",
         quantity: 1,
         unit_price: total,
+        finance_department: "service",
+        finance_segment: "customer",
+        finance_category: "labor",
+        finance_classification_source: "service_total_fallback",
+        finance_classified_at: new Date().toISOString(),
       });
     }
     const { error: liErr } = await supabase.from("customer_invoice_line_items")
@@ -187,6 +204,11 @@ export async function generateInvoiceForServiceJob(
         description: "Service total",
         quantity: 1,
         unit_price: total,
+        finance_department: "service",
+        finance_segment: "customer",
+        finance_category: "labor",
+        finance_classification_source: "service_total_fallback",
+        finance_classified_at: new Date().toISOString(),
       });
     if (liErr) console.warn("customer_invoice_line_items:", liErr.message);
   }
