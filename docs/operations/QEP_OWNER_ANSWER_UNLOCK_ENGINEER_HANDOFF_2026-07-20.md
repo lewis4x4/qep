@@ -38,11 +38,13 @@ The detailed answer-to-system map and remaining owner inputs are in `docs/operat
 
 ## Verification evidence
 
-- Repository tests: 3,133 unit tests passed; all 26 integration files passed.
+- Repository tests: 3,134 unit tests passed; all 26 integration files passed.
 - Owner migration contracts: 69 static tests passed; scratch-PostgreSQL behavior covers AR, PM, rental, sales, and service concurrency/replay paths.
 - Migration 833 focused verification: 6 tests passed with 43 assertions. Apply-twice testing preserved function identity/security metadata and removed every temporary-copy sentinel.
 - Production build: 4,577 modules; bundle budget passed.
-- Post-833 authoritative segment orchestrator: 15/15 checks passed at `test-results/agent-gates/20260721T021756Z-owner-answer-unlocks-2026-07-20.json`.
+- Post-Lighthouse-fix authoritative segment orchestrator: 15/15 checks passed at `test-results/agent-gates/20260721T023733Z-owner-answer-unlocks-2026-07-20.json`.
+- Mobile quote-builder CLS remediation reserves the measured 114px asynchronous margin-status slot; its focused shell suite passes 8/8 and prevents the existing `Draft save paused` banner from expanding a zero-height slot after first paint.
+- Combined QA, Chief Design Officer, and Performance CLS delta review passed 9/9 report checks at `test-results/agent-gates/20260721T023837Z-owner-answer-unlocks-2026-07-20-lighthouse-cls-delta.json`; production-CSS Chromium probes measured zero following-content shift at 375px, 390px, and 768px.
 - Security/RLS delta report passed at `test-results/agent-gates/20260721T021459Z-owner-answer-unlocks-2026-07-20-security-833.json`; Migration Integrity delta report passed at `test-results/agent-gates/20260721T021719Z-owner-answer-unlocks-2026-07-20-migration-833-integrity.json`.
 - Live post-commit verification confirms the dunning function has the required copy, remains `SECURITY DEFINER` with `search_path=""` and owner `postgres`, and has zero temporary-copy rows in dunning events, invoices, or invoice lines.
 - Required specialist reports are stored in `test-results/agent-gates/` for QA, Chief Design Officer, Testing/Simulation, Security/RLS, Migration Integrity, and Performance. The final post-833 Release Gate is `GO` with 12/12 release checks passed, 70 upstream checks passed, one optional skip, zero failures, zero required non-pass checks, and no blockers or waivers at `test-results/agent-gates/20260721T022217Z-owner-answer-unlocks-2026-07-20-final-release-gate.json`.
