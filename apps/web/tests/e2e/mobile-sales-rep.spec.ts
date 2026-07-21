@@ -135,7 +135,7 @@ test.describe("mobile sales rep surface", () => {
       await assertNoHorizontalOverflow(page);
     });
 
-    test("Capture surface exposes Field Note + Voice Quote + My Mirror quick actions", async ({
+    test("Capture surface exposes confirmed voice capture and current action destinations", async ({
       page,
     }) => {
       if (!credentials) test.skip();
@@ -146,17 +146,29 @@ test.describe("mobile sales rep surface", () => {
       await expect(page).toHaveURL(/\/sales\/capture/);
       await expect(page.getByTestId("capture-tap-to-record")).toBeVisible();
       await expect(
-        page.locator("[data-capture-action=\"field_note\"]"),
+        page.locator("[data-capture-action=\"log_visit\"]"),
       ).toBeVisible();
       await expect(
-        page.locator("[data-capture-action=\"voice_quote\"]"),
+        page.locator("[data-capture-action=\"schedule\"]"),
+      ).toBeVisible();
+      await expect(
+        page.locator("[data-capture-action=\"quick_note\"]"),
       ).toBeVisible();
       await expect(
         page.locator("[data-capture-action=\"my_mirror\"]"),
       ).toBeVisible();
       await expect(
-        page.locator("[data-capture-action=\"quick_note\"]"),
+        page.locator("[data-capture-action=\"field_note_history\"]"),
       ).toBeVisible();
+
+      // Owner-approved SA10 consolidation removes duplicate Field Note and
+      // Voice Quote destinations; the Iron entry point above owns classification.
+      await expect(
+        page.locator("[data-capture-action=\"field_note\"]"),
+      ).toHaveCount(0);
+      await expect(
+        page.locator("[data-capture-action=\"voice_quote\"]"),
+      ).toHaveCount(0);
     });
   });
 });
