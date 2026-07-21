@@ -98,10 +98,10 @@ test.describe("mobile sales rep surface", () => {
       await assertNoHorizontalOverflow(page);
       await assertBottomTabPersistsAfterShellScroll(page, "sales-shell-scroll-root");
 
-      // BottomTabBar present and clickable on Pipeline.
-      const pipelineTab = page.getByRole("tab", { name: /Pipeline/i });
-      await expect(pipelineTab).toBeVisible();
-      await pipelineTab.click();
+      // BottomTabBar navigation links remain present and clickable.
+      const pipelineLink = page.getByRole("link", { name: /Pipeline/i });
+      await expect(pipelineLink).toBeVisible();
+      await pipelineLink.click();
       await expect(page).toHaveURL(/\/sales\/pipeline/);
       await assertNoHorizontalOverflow(page);
 
@@ -142,7 +142,7 @@ test.describe("mobile sales rep surface", () => {
       await signInWithPassword(page, credentials.email, credentials.password);
       await page.goto("/sales/today");
 
-      await page.getByRole("tab", { name: /Capture/i }).click();
+      await page.getByRole("link", { name: /Capture/i }).click();
       await expect(page).toHaveURL(/\/sales\/capture/);
       await expect(page.getByTestId("capture-tap-to-record")).toBeVisible();
       await expect(
