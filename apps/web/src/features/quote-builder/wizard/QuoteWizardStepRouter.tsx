@@ -3,7 +3,7 @@
  * `QuoteBuilderV2Page.tsx`. Mechanical move — behavior unchanged.
  */
 
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, type ComponentType } from "react";
 import type { CustomerStepProps } from "../steps/CustomerStep";
 import type { EquipmentStepProps } from "../steps/EquipmentStep";
 import type { ConfigureStepProps } from "../steps/ConfigureStep";
@@ -22,9 +22,6 @@ import {
 import type { QuoteLineItemDraft } from "../../../../../../shared/qep-moonshot-contracts";
 import { useWizard } from "./useWizard";
 
-const CustomerStep = lazy(() =>
-  import("../steps/CustomerStep").then((module) => ({ default: module.CustomerStep })),
-);
 const EquipmentStep = lazy(() =>
   import("../steps/EquipmentStep").then((module) => ({ default: module.EquipmentStep })),
 );
@@ -82,8 +79,15 @@ export type QuoteWizardStepRouterProps =
   & DocumentStepProps
   & SendStepProps;
 
-export function QuoteWizardStepRouter(props: QuoteWizardStepRouterProps) {
+export interface QuoteWizardStepRouterRuntimeProps {
+  customerStepComponent: ComponentType<CustomerStepProps>;
+}
+
+export function QuoteWizardStepRouter(
+  props: QuoteWizardStepRouterProps & QuoteWizardStepRouterRuntimeProps,
+) {
   const { step, setDraft } = useWizard();
+  const CustomerStep = props.customerStepComponent;
 
   const onEquipmentCatalogSelect = (entry: CatalogEntryMatch) => {
     props.setAvailableOptions(entry.attachments ?? []);

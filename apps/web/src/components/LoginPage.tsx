@@ -248,7 +248,7 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
               <Card className="border-white/10 bg-white/[0.04] shadow-[0_30px_80px_rgba(0,0,0,0.28)] backdrop-blur">
                 <CardContent className="p-5 sm:p-6">
                   <Tabs defaultValue="password">
-                    <TabsList className="mb-6 grid w-full grid-cols-2 border border-white/10 bg-[#0A121E] p-1">
+                    <TabsList className="mb-6 grid w-full grid-cols-2 border border-white/10 bg-[#0A121E] p-1 text-slate-300">
                       {/*
                         WAVE CI/Quality (Slice 2 a11y fix): the active
                         tab and login button previously rendered white

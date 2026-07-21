@@ -17,18 +17,23 @@ describe("Quote Builder route decomposition contract", () => {
     ).toBe(false);
   });
 
-  test("keeps device shells and wizard steps behind interaction boundaries", () => {
+  test("loads the first step with the device host and keeps later steps behind interaction boundaries", () => {
     const pageView = readRepoFile(
       "apps/web/src/features/quote-builder/components/QuoteBuilderV2PageView.tsx",
     );
     const stepRouter = readRepoFile(
       "apps/web/src/features/quote-builder/wizard/QuoteWizardStepRouter.tsx",
     );
+    const viteConfig = readRepoFile("apps/web/vite.config.ts");
 
     expect(pageView).toContain('import("./QuoteBuilderDesktopViewHost")');
     expect(pageView).toContain('import("./QuoteBuilderMobileViewHost")');
-    expect(stepRouter).toContain('import("../steps/CustomerStep")');
+    expect(pageView.match(/import\("\.\.\/steps\/CustomerStep"\)/g)).toHaveLength(2);
+    expect(pageView.match(/Promise\.all\(/g)).toHaveLength(2);
+    expect(stepRouter).toContain('import type { CustomerStepProps } from "../steps/CustomerStep"');
+    expect(stepRouter).not.toContain('import("../steps/CustomerStep")');
     expect(stepRouter).toContain('import("../steps/ReviewStep")');
+    expect(viteConfig).not.toContain("quote-builder-customer-step");
   });
 
   test("loads the printable proposal renderer only after PDF fallback", () => {

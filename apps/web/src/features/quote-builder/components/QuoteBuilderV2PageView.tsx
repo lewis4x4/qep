@@ -3,14 +3,38 @@ import { useIsHandheldViewport } from "@/features/sales/hooks/useIsHandheldViewp
 import type { QuoteBuilderV2PageViewProps } from "./QuoteBuilderV2PageView.types";
 
 const QuoteBuilderDesktopViewHost = lazy(() =>
-  import("./QuoteBuilderDesktopViewHost").then((module) => ({
-    default: module.QuoteBuilderDesktopViewHost,
+  Promise.all([
+    import("./QuoteBuilderDesktopViewHost"),
+    import("../steps/CustomerStep"),
+  ]).then(([hostModule, customerStepModule]) => ({
+    default: function QuoteBuilderDesktopViewHostWithInitialStep(
+      props: QuoteBuilderV2PageViewProps,
+    ) {
+      return (
+        <hostModule.QuoteBuilderDesktopViewHost
+          {...props}
+          customerStepComponent={customerStepModule.CustomerStep}
+        />
+      );
+    },
   })),
 );
 
 const QuoteBuilderMobileViewHost = lazy(() =>
-  import("./QuoteBuilderMobileViewHost").then((module) => ({
-    default: module.QuoteBuilderMobileViewHost,
+  Promise.all([
+    import("./QuoteBuilderMobileViewHost"),
+    import("../steps/CustomerStep"),
+  ]).then(([hostModule, customerStepModule]) => ({
+    default: function QuoteBuilderMobileViewHostWithInitialStep(
+      props: QuoteBuilderV2PageViewProps,
+    ) {
+      return (
+        <hostModule.QuoteBuilderMobileViewHost
+          {...props}
+          customerStepComponent={customerStepModule.CustomerStep}
+        />
+      );
+    },
   })),
 );
 
