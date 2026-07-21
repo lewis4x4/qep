@@ -160,10 +160,10 @@ export async function notifyAfterStageChange(
         await queueCustomerOutbound("job_started");
         break;
       case "blocked_waiting":
-        if (context.blockerType === "waiting_on_parts_sublet") {
+        if (context.blockerType === "waiting_on_parts") {
           await queueCustomerOutbound(
             "on_hold_parts",
-            `${stageEventSuffix(job, toStage)}:waiting_on_parts_sublet`,
+            `${stageEventSuffix(job, toStage)}:waiting_on_parts`,
             {
               blocker_type: context.blockerType,
               blocker_description: context.blockerDescription ?? null,

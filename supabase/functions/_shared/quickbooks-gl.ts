@@ -85,6 +85,9 @@ export type QuickBooksInvoiceContext = {
     quantity: number;
     unit_price: number;
     line_total: number | null;
+    finance_department?: "equipment" | "parts" | "service" | "rental" | null;
+    finance_segment?: "customer" | "warranty" | "internal" | "sublet" | null;
+    finance_category?: string | null;
   }>;
 };
 
@@ -478,28 +481,31 @@ export async function refreshQuickBooksAccessToken(
   return { accessToken: payload.access_token, credentials };
 }
 
-function inferRevenueAccount(
-  description: string,
+function resolveRevenueAccount(
+  financeDepartment: string | null | undefined,
+  financeCategory: string | null | undefined,
   credentials: QuickBooksCredentials,
   invoiceType?: string | null,
 ): string {
-  const lower = description.toLowerCase();
-  if (lower.includes("labor")) return credentials.service_revenue_account_id;
-  if (lower.includes("haul") || lower.includes("transport")) return credentials.haul_revenue_account_id;
-  if (lower.includes("shop supplies")) return credentials.shop_supplies_account_id;
-  if (lower.includes("service total")) return credentials.service_revenue_account_id;
-  // Stream-typed routing beats the parts-shaped-description fallback
-  // (blueprint §5): equipment lines would otherwise regex-match as parts.
-  if (invoiceType === "equipment") {
+  if (financeCategory === "haul") return credentials.haul_revenue_account_id;
+  if (financeCategory === "shop_supply") return credentials.shop_supplies_account_id;
+  if (financeDepartment === "equipment") {
     return credentials.equipment_revenue_account_id ?? credentials.misc_revenue_account_id;
   }
-  if (invoiceType === "parts") return credentials.parts_revenue_account_id;
-  if (invoiceType === "rental") {
+  if (financeDepartment === "parts") return credentials.parts_revenue_account_id;
+  if (financeDepartment === "rental") {
     return credentials.rental_revenue_account_id ?? credentials.misc_revenue_account_id;
   }
-  if (/^[a-z0-9-]+\s+—/i.test(description) || /^[a-z0-9-]+$/i.test(description.split(" ")[0] ?? "")) {
-    return credentials.parts_revenue_account_id;
-  }
+  if (financeDepartment === "service") return credentials.service_revenue_account_id;
+
+  // Header fallback is allowed only where the whole stream is structurally
+  // unambiguous. Service invoices may mix Parts and Service and therefore must
+  // carry per-line dimensions; they never fall back to description matching.
+  if (invoiceType === "equipment")
+    return credentials.equipment_revenue_account_id ?? credentials.misc_revenue_account_id;
+  if (invoiceType === "parts") return credentials.parts_revenue_account_id;
+  if (invoiceType === "rental")
+    return credentials.rental_revenue_account_id ?? credentials.misc_revenue_account_id;
   return credentials.misc_revenue_account_id;
 }
 
@@ -514,7 +520,12 @@ export function buildQuickBooksJournalEntry(
     return {
       description: line.description,
       amount: Math.abs(rawAmount),
-      accountId: inferRevenueAccount(line.description, credentials, invoice.invoice_type),
+      accountId: resolveRevenueAccount(
+        line.finance_department,
+        line.finance_category,
+        credentials,
+        invoice.invoice_type,
+      ),
       postingType: rawAmount < 0 ? "Debit" : "Credit",
     };
   });

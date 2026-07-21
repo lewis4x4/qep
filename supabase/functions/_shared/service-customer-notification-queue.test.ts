@@ -116,7 +116,7 @@ Deno.test("queueServiceCustomerNotification records email row with dedupe key an
   );
 });
 
-Deno.test("notifyAfterStageChange queues parts-hold notification only for waiting_on_parts_sublet", async () => {
+Deno.test("notifyAfterStageChange queues parts-hold notification only for waiting_on_parts", async () => {
   const fake = makeFakeSupabase({ contactEmail: "parts@example.com" });
 
   await notifyAfterStageChange(
@@ -124,7 +124,7 @@ Deno.test("notifyAfterStageChange queues parts-hold notification only for waitin
     fake.serviceJob,
     "blocked_waiting",
     {
-      blockerType: "waiting_on_parts_sublet",
+      blockerType: "waiting_on_parts",
       blockerDescription: "Cylinder seal kit backordered",
     },
   );
@@ -135,7 +135,7 @@ Deno.test("notifyAfterStageChange queues parts-hold notification only for waitin
   assertEquals(row?.notification_type, "on_hold_parts");
   assertEquals(
     (row?.metadata as Record<string, unknown>).blocker_type,
-    "waiting_on_parts_sublet",
+    "waiting_on_parts",
   );
 });
 

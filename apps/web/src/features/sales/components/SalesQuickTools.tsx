@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
-  Radio,
   MapPinned,
   Wrench,
   PlusCircle,
@@ -18,9 +17,9 @@ interface Tool {
 const TOOLS: Tool[] = [
   {
     to: "/sales/capture",
-    label: "Voice note",
-    subLabel: "Capture field context fast",
-    icon: Radio,
+    label: "Quick log",
+    subLabel: "Capture activity in one tap",
+    icon: PlusCircle,
   },
   {
     to: "/qrm/opportunity-map",

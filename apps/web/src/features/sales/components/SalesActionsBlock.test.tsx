@@ -36,13 +36,13 @@ const emptyStats: PipelineStats = {
 };
 
 describe("SalesActionsBlock", () => {
-  test("renders the 02 Actions section label", () => {
+  test("renders the owner-prioritized advisor section label", () => {
     render(
       <MemoryRouter>
         <SalesActionsBlock pipeline={[]} liveStats={emptyStats} onVoiceQuote={() => {}} />
       </MemoryRouter>,
     );
-    expect(screen.getByText("02 Actions")).toBeTruthy();
+    expect(screen.getByText("01 Advisor priorities")).toBeTruthy();
   });
 
   test("primary action adapts to empty pipeline", () => {
@@ -82,11 +82,11 @@ describe("SalesActionsBlock", () => {
         />
       </MemoryRouter>,
     );
-    fireEvent.click(screen.getByRole("button", { name: /voice quote/i }));
+    fireEvent.click(screen.getByRole("button", { name: /use iron voice/i }));
     expect(voicePressed).toBe(true);
   });
 
-  test("renders Follow-ups and Pipeline secondary tiles", () => {
+  test("renders Open deals and Follow-ups before the quote action", () => {
     render(
       <MemoryRouter>
         <SalesActionsBlock
@@ -99,7 +99,18 @@ describe("SalesActionsBlock", () => {
       </MemoryRouter>,
     );
     expect(screen.getByText("Follow-ups")).toBeTruthy();
-    expect(screen.getByText("Pipeline")).toBeTruthy();
+    expect(screen.getByText("Open deals")).toBeTruthy();
     expect(screen.getByText("$50K")).toBeTruthy();
+
+    const actionNames = Array.from(
+      screen.getByTestId("sales-actions-block").querySelectorAll("a, button"),
+    ).map((element) => element.getAttribute("aria-label") ?? element.textContent?.trim());
+
+    expect(actionNames).toEqual([
+      "Open deals",
+      "Today's follow-ups",
+      "Start a new quote",
+      "Use Iron voice",
+    ]);
   });
 });

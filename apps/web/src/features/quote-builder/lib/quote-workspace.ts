@@ -131,14 +131,19 @@ function sumDealerCost(items: QuoteLineItemDraft[]): number {
   }, 0);
 }
 
-// Decision Q7 (do_not_allow): quotes require a CRM-linked customer.
-// Typed name/company alone no longer satisfies the identity check —
-// reps must pick (or create) a real crm_contacts / crm_companies row.
+// Owner answer SA6: reps may build a quote for a typed prospect. A CRM link is
+// still preferred, but a real typed name/company is enough to save the draft;
+// the server creates qrm_prospects only when the quote is actually sent.
 export function hasQuoteCustomerIdentity(draft: Pick<
   QuoteWorkspaceDraft,
   "customerName" | "customerCompany" | "contactId" | "companyId"
 >): boolean {
-  return Boolean(draft.contactId || draft.companyId);
+  return Boolean(
+    draft.contactId
+    || draft.companyId
+    || draft.customerName?.trim()
+    || draft.customerCompany?.trim(),
+  );
 }
 
 function clampMoney(value: number): number {
@@ -281,7 +286,7 @@ export function computeQuoteWorkspace(
   else if (customerEquipmentLines.length === 0) {
     draftMissing.push("customer-facing equipment (at least one machine line must not be internal-only)");
   }
-  if (!hasQuoteCustomerIdentity(draft)) draftMissing.push("linked CRM customer");
+  if (!hasQuoteCustomerIdentity(draft)) draftMissing.push("customer or prospect");
 
   const sendMissing = [...draftMissing];
   if (!draft.branchSlug) sendMissing.push("quoting branch");

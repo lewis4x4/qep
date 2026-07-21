@@ -8,9 +8,10 @@
  *   • One conversion deal per contract — enforced by the m807 partial
  *     unique index on qrm_deals.rental_contract_id; this helper is
  *     find-or-create on that key.
- *   • Seeded amount = (rpo_purchase_price_cents − rpo_credit_accrued_cents)
- *     ÷ 100 — qrm_deals.amount is DOLLARS numeric(14,2), RPO columns are
- *     cents.
+ *   • Seeded amount = rpo_purchase_price_cents ÷ 100. Accrued rent is only the
+ *     maximum credit evidence; RN9 requires the actual credit to be negotiated
+ *     per deal, so this helper must never auto-apply the full accrued amount.
+ *     qrm_deals.amount is DOLLARS numeric(14,2), RPO columns are cents.
  *   • The unit links via qrm_deal_equipment role='subject' (the primary-
  *     unit convention flow_emit_from_deal / link_customer_fleet key on).
  *   • Stage = the workspace's 'Lead Received' stage, falling back to the
@@ -83,7 +84,7 @@ export async function createRentalConversionDeal(
 
   const purchaseCents = Number(contract.rpo_purchase_price_cents ?? 0);
   const accruedCents = Number(contract.rpo_credit_accrued_cents ?? 0);
-  const amountDollars = Math.max(0, purchaseCents - accruedCents) / 100;
+  const amountDollars = Math.max(0, purchaseCents) / 100;
 
   const { data: deal, error: dealError } = await admin
     .from("qrm_deals")
@@ -98,7 +99,9 @@ export async function createRentalConversionDeal(
       metadata: {
         source: "rpo_conversion",
         rpo_purchase_price_cents: purchaseCents,
-        rpo_credit_accrued_cents: accruedCents,
+        rpo_credit_available_cents: accruedCents,
+        negotiated_rent_credit_cents: null,
+        negotiated_rent_credit_required: true,
         rental_contract_number: contract.contract_number ?? null,
       },
     })

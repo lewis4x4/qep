@@ -22,6 +22,7 @@ import { LogVisitFlow } from "../components/LogVisitFlow";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Flame, Calendar, Plus, ClipboardCheck, ChevronRight, Clock } from "lucide-react";
 import { formatRepFirstName } from "../lib/format-rep-name";
+import { useIronStore } from "@/lib/iron/store";
 import type {
   ManagerPendingApproval,
   RepStuckApproval,
@@ -122,6 +123,7 @@ export function TodayFeedPage() {
   const streaks = useRepStreaks();
   const { profile } = useAuth();
   const navigate = useNavigate();
+  const { openBar } = useIronStore();
   const [logVisitOpen, setLogVisitOpen] = useState(false);
 
   const firstName = useMemo(
@@ -178,7 +180,7 @@ export function TodayFeedPage() {
     quotesThisWeek: liveStats.quotes_sent_this_week,
   });
 
-  const handleVoiceDictate = () => setLogVisitOpen(true);
+  const handleVoiceDictate = () => openBar();
   const showPriceImpactCard =
     priceImpacts != null && priceImpacts.summary.visibleImpactCount > 0;
 
@@ -215,6 +217,12 @@ export function TodayFeedPage() {
         storageKey="today-hero"
       />
 
+      <SalesActionsBlock
+        pipeline={pipeline}
+        liveStats={liveStats}
+        onVoiceQuote={handleVoiceDictate}
+      />
+
       <SalesNarrativeBlock firstName={firstName} />
 
       {pipeline.length > 0 ? (
@@ -246,12 +254,6 @@ export function TodayFeedPage() {
         longestStreak={streaks.longestStreak}
         lastActiveAt={streaks.lastActiveAt}
         isLoading={streaks.isLoading}
-      />
-
-      <SalesActionsBlock
-        pipeline={pipeline}
-        liveStats={liveStats}
-        onVoiceQuote={handleVoiceDictate}
       />
 
       {pipeline.length > 0 ? (

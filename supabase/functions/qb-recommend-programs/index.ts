@@ -166,7 +166,12 @@ Deno.serve(async (req: Request) => {
     .map((r) => r.programId);
 
   const stackingResult = await validateStackingFromDB(
-    { programIds: eligibleIds, customerType: context.customerType },
+    {
+      programIds: eligibleIds,
+      customerType: context.customerType,
+      brandId: context.brandId,
+      dealDate: context.dealDate,
+    },
     supabase,
   );
 

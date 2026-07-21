@@ -98,10 +98,10 @@ test.describe("mobile sales rep surface", () => {
       await assertNoHorizontalOverflow(page);
       await assertBottomTabPersistsAfterShellScroll(page, "sales-shell-scroll-root");
 
-      // BottomTabBar present and clickable on Pipeline.
-      const pipelineTab = page.getByRole("tab", { name: /Pipeline/i });
-      await expect(pipelineTab).toBeVisible();
-      await pipelineTab.click();
+      // BottomTabBar navigation links remain present and clickable.
+      const pipelineLink = page.getByRole("link", { name: /Pipeline/i });
+      await expect(pipelineLink).toBeVisible();
+      await pipelineLink.click();
       await expect(page).toHaveURL(/\/sales\/pipeline/);
       await assertNoHorizontalOverflow(page);
 
@@ -135,28 +135,40 @@ test.describe("mobile sales rep surface", () => {
       await assertNoHorizontalOverflow(page);
     });
 
-    test("Capture surface exposes Field Note + Voice Quote + My Mirror quick actions", async ({
+    test("Capture surface exposes confirmed voice capture and current action destinations", async ({
       page,
     }) => {
       if (!credentials) test.skip();
       await signInWithPassword(page, credentials.email, credentials.password);
       await page.goto("/sales/today");
 
-      await page.getByRole("tab", { name: /Capture/i }).click();
+      await page.getByRole("link", { name: /Capture/i }).click();
       await expect(page).toHaveURL(/\/sales\/capture/);
       await expect(page.getByTestId("capture-tap-to-record")).toBeVisible();
       await expect(
-        page.locator("[data-capture-action=\"field_note\"]"),
+        page.locator("[data-capture-action=\"log_visit\"]"),
       ).toBeVisible();
       await expect(
-        page.locator("[data-capture-action=\"voice_quote\"]"),
+        page.locator("[data-capture-action=\"schedule\"]"),
+      ).toBeVisible();
+      await expect(
+        page.locator("[data-capture-action=\"quick_note\"]"),
       ).toBeVisible();
       await expect(
         page.locator("[data-capture-action=\"my_mirror\"]"),
       ).toBeVisible();
       await expect(
-        page.locator("[data-capture-action=\"quick_note\"]"),
+        page.locator("[data-capture-action=\"field_note_history\"]"),
       ).toBeVisible();
+
+      // Owner-approved SA10 consolidation removes duplicate Field Note and
+      // Voice Quote destinations; the Iron entry point above owns classification.
+      await expect(
+        page.locator("[data-capture-action=\"field_note\"]"),
+      ).toHaveCount(0);
+      await expect(
+        page.locator("[data-capture-action=\"voice_quote\"]"),
+      ).toHaveCount(0);
     });
   });
 });

@@ -152,7 +152,7 @@ describe("CustomerStep — mobile picker surface", () => {
       </Harness>,
     );
     const manual = screen.getByTestId("customer-step-open-manual") as HTMLButtonElement;
-    expect(manual.textContent).toMatch(/add new customer/i);
+    expect(manual.textContent).toMatch(/enter a prospect/i);
     expect(manual.className).toContain("min-h-[44px]");
   });
 

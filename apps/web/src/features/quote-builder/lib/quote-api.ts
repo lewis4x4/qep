@@ -2266,13 +2266,21 @@ export function buildQuoteSavePayload(
   },
 ): Record<string, unknown> {
   const pricingLines = draft.pricingLines ?? [];
-  // Decision Q7 (do_not_allow): new quotes can no longer be saved as
-  // prospects — the server requires contact_id or company_id. The
-  // legacy column stays in the schema for historical reads, but every
-  // newly-built save payload reports is_prospect_quote=false and skips
-  // the prospect_conversion_source payload.
-  const isProspectQuote = false;
-  const prospectConversionSource = null;
+  // Owner answer SA6: a typed identity without a CRM link is a prospect
+  // quote. Persist only bounded lineage here; qrm_prospects is created by the
+  // database on the first durable send transition, not on every draft save.
+  const isProspectQuote = !draft.contactId && !draft.companyId && Boolean(
+    draft.customerName?.trim() || draft.customerCompany?.trim(),
+  );
+  const prospectConversionSource = isProspectQuote
+    ? {
+        original_customer_name: draft.customerName?.trim() || null,
+        original_customer_company: draft.customerCompany?.trim() || null,
+        original_customer_phone: draft.customerPhone?.trim() || null,
+        original_customer_email: draft.customerEmail?.trim() || null,
+        conversion_status: "awaiting_quote_send",
+      }
+    : null;
   const financeScenarioSource = draft.savedFinanceScenarios?.length
     ? draft.savedFinanceScenarios
     : financeScenarios;

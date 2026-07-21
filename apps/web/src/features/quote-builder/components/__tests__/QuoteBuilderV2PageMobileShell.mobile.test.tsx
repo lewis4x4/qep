@@ -215,6 +215,13 @@ describe("QuoteBuilderV2PageMobileShell mobile section framing", () => {
     expect(stickyBar.className).toContain("bottom-[var(--sales-shell-bottom-offset)]");
   });
 
+  test("reserves the measured draft-status slot before async margin policy settles", () => {
+    renderShell("customer");
+
+    const slot = screen.getByTestId("quote-mobile-draft-status-slot");
+    expect(slot.className).toContain("min-h-[114px]");
+  });
+
   test("keeps Save Draft as persistent secondary action and removes back collision", () => {
     const onSaveDraft = mock(() => undefined);
     const props = buildProps("pricing");
@@ -237,9 +244,9 @@ describe("QuoteBuilderV2PageMobileShell mobile section framing", () => {
     expect(onSaveDraft).toHaveBeenCalledTimes(1);
   });
 
-  // Decision Q7 (do_not_allow): the prospect-quote CTA has been removed.
-  // The mobile action bar no longer wraps; it always renders the assistant
-  // launcher + primary action inline alongside the Save Draft secondary.
+  // Owner answer SA6 keeps prospect entry inside the customer step, so the
+  // persistent mobile action bar does not need a second prospect CTA. It stays
+  // inline with the assistant launcher and primary action beside Save Draft.
   test("keeps the customer-step action bar inline without a prospect CTA", () => {
     const props = buildProps("customer");
 

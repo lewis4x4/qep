@@ -308,7 +308,10 @@ export function QuoteBuilderV2PageMobileShell({
           }}
         />
 
-        <div className="px-4 pt-4">
+        <div
+          className="min-h-[114px] px-4 pt-4"
+          data-testid="quote-mobile-draft-status-slot"
+        >
           <QuoteBuilderStatusBanners
             draftSavePausedMessage={draftSavePausedMessage}
             pdfError={pdfError}

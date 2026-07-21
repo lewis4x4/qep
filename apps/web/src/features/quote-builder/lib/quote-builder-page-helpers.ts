@@ -238,10 +238,14 @@ export function normalizeMachineMatchLabel(value: string): string {
 export function draftHasCustomer(
   draft: Pick<QuoteWorkspaceDraft, "customerName" | "customerCompany" | "contactId" | "companyId">,
 ): boolean {
-  // Decision Q7 (do_not_allow): a typed name/company is not a quoteable
-  // customer identity. Step gates and AI auto-advance require a CRM-backed
-  // crm_contacts/crm_companies row, matching the save-path policy.
-  return Boolean(draft.contactId || draft.companyId);
+  // Owner answer SA6: typed prospects may advance through the quote flow.
+  // They remain prospect-only until a send transition creates qrm_prospects.
+  return Boolean(
+    draft.contactId
+    || draft.companyId
+    || draft.customerName?.trim()
+    || draft.customerCompany?.trim(),
+  );
 }
 
 export function addDaysIso(days: number): string {
