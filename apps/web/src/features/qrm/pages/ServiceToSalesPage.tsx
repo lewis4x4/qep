@@ -266,6 +266,9 @@ export function ServiceToSalesPage() {
               <p className="mt-1 text-xs text-muted-foreground">
                 Customer-owned machines only. Ranked by recurring service pain, downtime exposure, and replacement confidence.
               </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Signals: {board.dataQuality.sourceCounts.serviceJobs} jobs · {board.dataQuality.sourceCounts.customerOwnedMachines} customer machines · {board.dataQuality.sourceCounts.fleetSignals} fleet signals · {board.dataQuality.customerOwnedMachinesWithFleetSignal} matched.
+              </p>
             </div>
             <Button asChild size="sm" variant="outline" className="h-7 px-2 font-mono text-[10.5px] uppercase tracking-[0.1em]">
               <Link to="/service">

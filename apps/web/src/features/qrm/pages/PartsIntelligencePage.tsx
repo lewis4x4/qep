@@ -99,6 +99,9 @@ export function PartsIntelligencePage() {
                 <p className="mt-1 text-xs text-muted-foreground">
                   Accounts whose purchase patterns and predicted kits are most useful for commercial action.
                 </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Signals: {board.dataQuality.sourceCounts.topCustomers} accounts · {board.dataQuality.linkedKitRows}/{board.dataQuality.sourceCounts.predictiveKits} kits linked · {board.dataQuality.forecastRowsWithInventoryRisk} forecast rows with inventory risk.
+                </p>
               </div>
               <Button asChild size="sm" variant="outline" className="h-8 px-2 font-mono text-[11px] uppercase tracking-[0.1em]">
                 <Link to="/parts/analytics">

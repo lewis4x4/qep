@@ -186,6 +186,7 @@ const REQUIRED_FINANCE_CONFIGS: Array<{
   source_migration: string | null;
   authorizing_question: string;
   note: string;
+  ownerReviewedWhenConfigured?: boolean;
 }> = [
   {
     config_key: "invoice_pad_width",
@@ -228,6 +229,21 @@ const REQUIRED_FINANCE_CONFIGS: Array<{
     source_migration: "766",
     authorizing_question: "Round 3 open item: material recon change threshold",
     note: "The stale/reapproval path is shipped, but the trigger threshold remains config-required until owner-reviewed.",
+  },
+  {
+    config_key: "trade_nonrepresented_discount_band",
+    label: "Non-represented trade valuation discount band",
+    source_migration: "766",
+    authorizing_question: "Ryan 2026-07-03: non-represented trade valuation band",
+    note: "Owner-reviewed Ryan policy: non-represented trades use an 8-10% auction discount band, stored as config instead of literals.",
+    ownerReviewedWhenConfigured: true,
+  },
+  {
+    config_key: "trade_valuation_guardrail",
+    label: "Trade valuation true-cost guardrail",
+    source_migration: "766",
+    authorizing_question: "Ryan 2026-07-03: bring trades in at auction value or less",
+    note: "The approval gate is shipped, but the seeded auction-value ceiling remains a safe default until owner-reviewed.",
   },
   {
     config_key: "corporate_allocation_basis",
@@ -332,7 +348,10 @@ export function buildFinanceFoundationStatus(
   const byKey = new Map(configRows.filter((row) => row.is_active).map((row) => [row.config_key, row]));
   const requiredConfig = REQUIRED_FINANCE_CONFIGS.map((item): FinanceConfigReadinessRow => {
     const row = byKey.get(item.config_key);
-    const configRequired = isParkedSafeDefault(row);
+    const ownerReviewedByNamedEvidence = Boolean(
+      row && item.ownerReviewedWhenConfigured && !hasNullLeaf(row.config_value),
+    );
+    const configRequired = !ownerReviewedByNamedEvidence && isParkedSafeDefault(row);
     return {
       config_key: item.config_key,
       label: item.label,

@@ -87,6 +87,13 @@ describe("buildServiceToSalesBoard", () => {
     expect(board.summary.highPressureCases).toBe(1);
     expect(board.summary.overdueCases).toBe(1);
     expect(board.summary.openRevenueCandidates).toBe(1);
+    expect(board.dataQuality.sourceCounts).toEqual({
+      serviceJobs: 3,
+      customerOwnedMachines: 1,
+      fleetSignals: 1,
+    });
+    expect(board.dataQuality.recentJobsMatchedToCustomerOwnedMachine).toBe(3);
+    expect(board.dataQuality.customerOwnedMachinesWithFleetSignal).toBe(1);
     expect(board.cases[0]?.machineId).toBe("eq-1");
     expect(board.cases[0]?.tradePressure).toBe("high");
     expect(board.cases[0]?.reasons.join(" | ")).toContain("3 service jobs");
@@ -110,5 +117,36 @@ describe("buildServiceToSalesBoard", () => {
 
     expect(board.summary.totalCases).toBe(0);
     expect(board.cases).toHaveLength(0);
+  });
+
+  it("tracks feeder gaps without promoting them into cases", () => {
+    const board = buildServiceToSalesBoard([
+      {
+        id: "job-without-machine",
+        customerId: "company-1",
+        machineId: null,
+        currentStage: "in_progress",
+        scheduledEndAt: null,
+        createdAt: "2026-04-01T12:00:00.000Z",
+        customerProblemSummary: "Missing machine link",
+        invoiceTotal: 1000,
+      },
+      {
+        id: "old-job",
+        customerId: "company-1",
+        machineId: "eq-1",
+        currentStage: "closed",
+        scheduledEndAt: null,
+        createdAt: "2025-01-01T12:00:00.000Z",
+        customerProblemSummary: "Old repair",
+        invoiceTotal: 12000,
+      },
+    ], machines, [], Date.parse("2026-04-10T12:00:00.000Z"));
+
+    expect(board.summary.totalCases).toBe(0);
+    expect(board.dataQuality.jobsWithoutMachineId).toBe(1);
+    expect(board.dataQuality.jobsOutsideHorizon).toBe(1);
+    expect(board.dataQuality.recentJobsMatchedToCustomerOwnedMachine).toBe(0);
+    expect(board.dataQuality.customerOwnedMachinesWithFleetSignal).toBe(0);
   });
 });

@@ -30,7 +30,15 @@ mock.module("../QuoteBuilderStatusBanners", () => ({
 }));
 
 mock.module("@/features/sales/components/MobileBottomSheet", () => ({
-  MobileBottomSheet: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  MobileBottomSheet: ({ children, open }: { children: ReactNode; open?: boolean }) =>
+    (
+      <div
+        data-mobile-sheet={open ? "true" : undefined}
+        data-testid={open ? "mobile-bottom-sheet-panel" : "mobile-bottom-sheet-root"}
+      >
+        {children}
+      </div>
+    ),
 }));
 
 function buildWizardValue(step: WizardStateValue["step"]): WizardStateValue {

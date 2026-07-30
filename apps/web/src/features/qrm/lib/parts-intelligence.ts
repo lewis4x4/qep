@@ -55,8 +55,21 @@ export interface PartsIntelligenceSummary {
   inventoryRisks: number;
 }
 
+export interface PartsIntelligenceDataQuality {
+  sourceCounts: {
+    topCustomers: number;
+    predictiveKits: number;
+    forecastRows: number;
+    inventoryRiskRows: number;
+  };
+  linkedKitRows: number;
+  unlinkedKitRows: number;
+  forecastRowsWithInventoryRisk: number;
+}
+
 export interface PartsIntelligenceBoard {
   summary: PartsIntelligenceSummary;
+  dataQuality: PartsIntelligenceDataQuality;
   accountSignals: PartsIntelligenceAccountSignal[];
   demandSignals: PartsIntelligenceDemandSignal[];
 }
@@ -67,6 +80,10 @@ export function buildPartsIntelligenceBoard(input: {
   forecastRows: PartsIntelForecastRow[];
   inventoryRisks: PartsIntelInventoryRisk[];
 }): PartsIntelligenceBoard {
+  const linkedKitRows = input.kits.filter((kit) => kit.crm_company_id != null).length;
+  const inventoryRiskKeys = new Set(
+    input.inventoryRisks.map((risk) => `${risk.part_number}:${risk.branch_id}`),
+  );
   const kitGroups = new Map<string, PartsIntelKit[]>();
   for (const kit of input.kits) {
     if (!kit.crm_company_id) continue;
@@ -113,6 +130,19 @@ export function buildPartsIntelligenceBoard(input: {
       predictiveKits: input.kits.length,
       criticalForecasts: input.forecastRows.filter((row) => row.stockout_risk === "critical").length,
       inventoryRisks: input.inventoryRisks.length,
+    },
+    dataQuality: {
+      sourceCounts: {
+        topCustomers: input.topCustomers.length,
+        predictiveKits: input.kits.length,
+        forecastRows: input.forecastRows.length,
+        inventoryRiskRows: input.inventoryRisks.length,
+      },
+      linkedKitRows,
+      unlinkedKitRows: input.kits.length - linkedKitRows,
+      forecastRowsWithInventoryRisk: input.forecastRows.filter((row) =>
+        inventoryRiskKeys.has(`${row.part_number}:${row.branch_id}`),
+      ).length,
     },
     accountSignals,
     demandSignals,

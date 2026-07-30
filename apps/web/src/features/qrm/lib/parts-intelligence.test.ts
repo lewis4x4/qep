@@ -26,10 +26,38 @@ describe("buildPartsIntelligenceBoard", () => {
     expect(board.summary.predictiveKits).toBe(3);
     expect(board.summary.criticalForecasts).toBe(1);
     expect(board.summary.inventoryRisks).toBe(1);
+    expect(board.dataQuality.sourceCounts).toEqual({
+      topCustomers: 2,
+      predictiveKits: 3,
+      forecastRows: 2,
+      inventoryRiskRows: 1,
+    });
+    expect(board.dataQuality.linkedKitRows).toBe(3);
+    expect(board.dataQuality.unlinkedKitRows).toBe(0);
+    expect(board.dataQuality.forecastRowsWithInventoryRisk).toBe(1);
     expect(board.accountSignals[0]?.companyId).toBe("c-1");
     expect(board.accountSignals[0]?.predictiveKitCount).toBe(2);
     expect(board.accountSignals[0]?.readyKitCount).toBe(1);
     expect(board.accountSignals[0]?.totalKitValue).toBe(4000);
     expect(board.demandSignals[0]?.partNumber).toBe("FLT-100");
+  });
+
+  it("keeps unlinked predictive kits visible in quality signals", () => {
+    const board = buildPartsIntelligenceBoard({
+      topCustomers: [
+        { company_id: "c-1", company_name: "Acme Paving", revenue: 120000, order_count: 18 },
+      ],
+      kits: [
+        { id: "kit-1", crm_company_id: "c-1", company_name: "Acme Paving", confidence: 0.91, kit_value: 2200, stock_status: "all_in_stock", predicted_failure_type: "hydraulic" },
+        { id: "kit-2", crm_company_id: null, company_name: undefined, confidence: 0.75, kit_value: 600, stock_status: "partial", predicted_failure_type: "pm_interval" },
+      ],
+      forecastRows: [],
+      inventoryRisks: [],
+    });
+
+    expect(board.summary.predictiveKits).toBe(2);
+    expect(board.dataQuality.linkedKitRows).toBe(1);
+    expect(board.dataQuality.unlinkedKitRows).toBe(1);
+    expect(board.accountSignals[0]?.predictiveKitCount).toBe(1);
   });
 });

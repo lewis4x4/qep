@@ -134,6 +134,14 @@ describe("buildRentalConversionBoard", () => {
     expect(board.summary.repeatRentalCandidates).toBe(1);
     expect(board.summary.rentalIntentSignals).toBe(3);
     expect(board.summary.purchaseReadySignals).toBe(1);
+    expect(board.dataQuality.sourceCounts).toEqual({
+      deals: 2,
+      rentalLinks: 2,
+      voiceSignals: 2,
+    });
+    expect(board.dataQuality.uniqueRentalEquipment).toBe(2);
+    expect(board.dataQuality.voiceSignalsWithExtractedData).toBe(2);
+    expect(board.dataQuality.candidatesWithPurchaseValue).toBe(1);
     expect(board.candidates[0]?.confidence).toBe("high");
     expect(board.candidates[0]?.estimatedPurchaseValue).toBe(78000);
     expect(board.candidates[0]?.reasons.join(" ")).toContain("2 rental-linked deals");
@@ -148,6 +156,11 @@ describe("buildRentalConversionBoard", () => {
     });
 
     expect(board.summary.candidates).toBe(0);
+    expect(board.dataQuality.sourceCounts).toEqual({
+      deals: 0,
+      rentalLinks: 0,
+      voiceSignals: 0,
+    });
     expect(board.candidates).toHaveLength(0);
   });
 });

@@ -53,8 +53,23 @@ export interface RentalCommandSummary {
   chargeExposure: number;
 }
 
+export interface RentalCommandDataQuality {
+  sourceCounts: {
+    rentalFleetUnits: number;
+    returnCases: number;
+    trafficTickets: number;
+  };
+  pricedOnRentCount: number;
+  unpricedOnRentCount: number;
+  linkedReturnCases: number;
+  unlinkedReturnCases: number;
+  linkedMotionTickets: number;
+  unlinkedMotionTickets: number;
+}
+
 export interface RentalCommandCenter {
   summary: RentalCommandSummary;
+  dataQuality: RentalCommandDataQuality;
   onRentUnits: RentalFleetUnit[];
   readyUnits: RentalFleetUnit[];
   recoveryUnits: RentalFleetUnit[];
@@ -160,8 +175,23 @@ export function buildRentalCommandCenter(
     chargeExposure: openReturns.reduce((sum, item) => sum + (item.hasCharges ? (item.chargeAmount ?? 0) : 0), 0),
   };
 
+  const dataQuality: RentalCommandDataQuality = {
+    sourceCounts: {
+      rentalFleetUnits: units.length,
+      returnCases: returns.length,
+      trafficTickets: tickets.length,
+    },
+    pricedOnRentCount: onRentUnits.filter((unit) => unit.dailyRentalRate != null).length,
+    unpricedOnRentCount: onRentUnits.filter((unit) => unit.dailyRentalRate == null).length,
+    linkedReturnCases: openReturns.filter((item) => item.unit != null).length,
+    unlinkedReturnCases: openReturns.filter((item) => item.unit == null).length,
+    linkedMotionTickets: motionQueue.filter((item) => item.unit != null).length,
+    unlinkedMotionTickets: motionQueue.filter((item) => item.unit == null).length,
+  };
+
   return {
     summary,
+    dataQuality,
     onRentUnits,
     readyUnits,
     recoveryUnits,

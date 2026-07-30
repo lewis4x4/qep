@@ -89,6 +89,15 @@ describe("buildRentalCommandCenter", () => {
     expect(center.summary.motionRiskCount).toBe(2);
     expect(center.summary.dailyRevenueInPlay).toBe(450);
     expect(center.summary.chargeExposure).toBe(1800);
+    expect(center.dataQuality.sourceCounts).toEqual({
+      rentalFleetUnits: 3,
+      returnCases: 1,
+      trafficTickets: 2,
+    });
+    expect(center.dataQuality.pricedOnRentCount).toBe(1);
+    expect(center.dataQuality.unpricedOnRentCount).toBe(0);
+    expect(center.dataQuality.linkedReturnCases).toBe(1);
+    expect(center.dataQuality.linkedMotionTickets).toBe(2);
   });
 
   it("sorts return queue by aging and tags motion risk", () => {
@@ -125,5 +134,42 @@ describe("buildRentalCommandCenter", () => {
     expect(center.returnQueue[0]?.id).toBe("rr-2");
     expect(center.motionQueue[0]?.id).toBe("tt-3");
     expect(center.motionQueue[0]?.riskLevel).toBe("high");
+  });
+
+  it("flags live return and movement rows that no longer match active rental units", () => {
+    const center = buildRentalCommandCenter(
+      units,
+      [
+        ...returns,
+        {
+          id: "rr-orphan",
+          equipmentId: "missing-unit",
+          status: "decision_pending",
+          chargeAmount: null,
+          hasCharges: false,
+          agingBucket: "0-3d",
+          workOrderNumber: null,
+          createdAt: "2026-04-02T00:00:00.000Z",
+        },
+      ],
+      [
+        ...tickets,
+        {
+          id: "tt-orphan",
+          equipmentId: "missing-unit",
+          status: "scheduled",
+          ticketType: "rental",
+          toLocation: "Remote jobsite",
+          promisedDeliveryAt: null,
+          createdAt: "2026-04-09T00:00:00.000Z",
+        },
+      ],
+      Date.parse("2026-04-10T12:00:00.000Z"),
+    );
+
+    expect(center.dataQuality.unlinkedReturnCases).toBe(1);
+    expect(center.dataQuality.unlinkedMotionTickets).toBe(1);
+    expect(center.returnQueue.find((item) => item.id === "rr-orphan")?.unit).toBeNull();
+    expect(center.motionQueue.find((item) => item.id === "tt-orphan")?.unit).toBeNull();
   });
 });

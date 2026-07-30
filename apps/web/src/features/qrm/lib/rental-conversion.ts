@@ -47,6 +47,16 @@ export interface RentalConversionBoard {
     purchaseReadySignals: number;
     openQuotes: number;
   };
+  dataQuality: {
+    sourceCounts: {
+      deals: number;
+      rentalLinks: number;
+      voiceSignals: number;
+    };
+    uniqueRentalEquipment: number;
+    voiceSignalsWithExtractedData: number;
+    candidatesWithPurchaseValue: number;
+  };
   candidates: RentalConversionCandidate[];
 }
 
@@ -318,6 +328,16 @@ export function buildRentalConversionBoard(input: {
       rentalIntentSignals: candidates.reduce((sum, candidate) => sum + candidate.rentalFirstSignals + candidate.rentToOwnSignals, 0),
       purchaseReadySignals: candidates.reduce((sum, candidate) => sum + candidate.purchaseReadySignals, 0),
       openQuotes: input.openQuoteCount,
+    },
+    dataQuality: {
+      sourceCounts: {
+        deals: input.deals.length,
+        rentalLinks: input.rentalLinks.length,
+        voiceSignals: input.voiceSignals.length,
+      },
+      uniqueRentalEquipment: new Set(input.rentalLinks.map((link) => link.equipmentId)).size,
+      voiceSignalsWithExtractedData: input.voiceSignals.filter((signal) => signal.extractedData != null).length,
+      candidatesWithPurchaseValue: candidates.filter((candidate) => candidate.estimatedPurchaseValue != null).length,
     },
     candidates,
   };

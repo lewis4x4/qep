@@ -4,6 +4,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import type { PropsWithChildren } from "react";
 
+const today = new Date().toISOString();
+const currentMonth = `${today.slice(0, 7)}-01`;
+
 mock.module("@/lib/supabase", () => ({
   supabase: {
     from: (table: string) => ({
@@ -15,12 +18,12 @@ mock.module("@/lib/supabase", () => ({
                 {
                   company_id: "company-1",
                   customer_name: "Cooper Timber",
-                  closed_month: "2026-04-01",
+                  closed_month: currentMonth,
                   won_deal_count: 2,
                   sales_amount: 100000,
                   gross_margin_amount: 24000,
                   gross_margin_pct: 24,
-                  last_closed_at: "2026-04-20T00:00:00.000Z",
+                  last_closed_at: today,
                 },
               ],
               error: null,
@@ -53,7 +56,7 @@ mock.module("@/lib/supabase", () => ({
           return {
             data: [
               {
-                labor_date: new Date().toISOString().slice(0, 10),
+                labor_date: today.slice(0, 10),
                 branch_id: "01",
                 shop_or_field: "field",
                 technician_id: "tech-1",

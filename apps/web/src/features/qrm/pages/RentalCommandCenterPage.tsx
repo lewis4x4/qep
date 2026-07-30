@@ -1088,6 +1088,21 @@ export function RentalCommandCenterPage() {
             <SummaryCard icon={Truck} label="Motion risk" value={String(center.summary.motionRiskCount)} detail={`${center.summary.motionCount} rental moves open`} tone={center.summary.motionRiskCount > 0 ? "warn" : "default"} />
           </div>
 
+          <DeckSurface className="p-3">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+              <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-foreground">Signal quality</span>
+              <span>
+                Sources: {center.dataQuality.sourceCounts.rentalFleetUnits} fleet · {center.dataQuality.sourceCounts.returnCases} returns · {center.dataQuality.sourceCounts.trafficTickets} moves
+              </span>
+              <span>
+                Priced on-rent: {center.dataQuality.pricedOnRentCount}/{center.summary.onRentCount}
+              </span>
+              <span>
+                Unlinked ops rows: {center.dataQuality.unlinkedReturnCases + center.dataQuality.unlinkedMotionTickets}
+              </span>
+            </div>
+          </DeckSurface>
+
           <DeckSurface className="p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -1938,7 +1953,6 @@ export function RentalCommandCenterPage() {
               })}
             </div>
           </DeckSurface>
-
           <div className="grid gap-4 xl:grid-cols-2">
             <DeckSurface className="p-4">
               <h2 className="text-sm font-semibold text-foreground">Pending booking approvals</h2>

@@ -260,14 +260,14 @@ Deno.serve(async (req) => {
   }
   const transcript = rawTranscript.slice(0, MAX_TRANSCRIPT_LENGTH);
 
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const adminClient = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
   const workspaceId = await resolveProfileActiveWorkspaceId(adminClient, userId);
 
   // 1. AI extraction
   const extraction = await extractFromTranscript(transcript);
 
   // 2. Fuzzy match + inventory check
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const adminClient = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
   const matchResults = await fuzzyMatchCatalog(adminClient, workspaceId, extraction.parts);
 
   // 3. Build line items from matches

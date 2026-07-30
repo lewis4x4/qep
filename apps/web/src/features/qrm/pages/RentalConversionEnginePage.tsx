@@ -278,6 +278,9 @@ export function RentalConversionEnginePage() {
                 <p className="mt-1 text-xs text-muted-foreground">
                   Candidates rank higher when repeated rental behavior overlaps with rental-first or rent-to-own signals and active purchase motion.
                 </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Signals: {board.dataQuality.sourceCounts.deals} deals · {board.dataQuality.sourceCounts.rentalLinks} rental links · {board.dataQuality.voiceSignalsWithExtractedData}/{board.dataQuality.sourceCounts.voiceSignals} usable voice signals.
+                </p>
               </div>
               <Button asChild size="sm" variant="outline">
                 <Link to={buildAccountRentalConversionHref(accountId)}>

@@ -58,8 +58,21 @@ export interface ServiceToSalesSummary {
   overdueCases: number;
 }
 
+export interface ServiceToSalesDataQuality {
+  sourceCounts: {
+    serviceJobs: number;
+    customerOwnedMachines: number;
+    fleetSignals: number;
+  };
+  jobsWithoutMachineId: number;
+  recentJobsMatchedToCustomerOwnedMachine: number;
+  jobsOutsideHorizon: number;
+  customerOwnedMachinesWithFleetSignal: number;
+}
+
 export interface ServiceToSalesBoard {
   summary: ServiceToSalesSummary;
+  dataQuality: ServiceToSalesDataQuality;
   cases: ServiceToSalesCase[];
 }
 
@@ -91,19 +104,28 @@ export function buildServiceToSalesBoard(
   nowTime = Date.now(),
 ): ServiceToSalesBoard {
   const horizon = nowTime - 180 * 86_400_000;
+  const customerOwnedMachines = machines.filter((machine) => machine.ownership === "customer_owned");
   const machineById = new Map(
-    machines
-      .filter((machine) => machine.ownership === "customer_owned")
-      .map((machine) => [machine.id, machine]),
+    customerOwnedMachines.map((machine) => [machine.id, machine]),
   );
 
   const jobGroups = new Map<string, ServiceToSalesJob[]>();
+  let jobsWithoutMachineId = 0;
+  let jobsOutsideHorizon = 0;
+  let recentJobsMatchedToCustomerOwnedMachine = 0;
   for (const job of jobs) {
-    if (!job.machineId) continue;
+    if (!job.machineId) {
+      jobsWithoutMachineId += 1;
+      continue;
+    }
     const machine = machineById.get(job.machineId);
     if (!machine) continue;
     const createdAt = parseTime(job.createdAt);
-    if (createdAt == null || createdAt < horizon) continue;
+    if (createdAt == null || createdAt < horizon) {
+      jobsOutsideHorizon += 1;
+      continue;
+    }
+    recentJobsMatchedToCustomerOwnedMachine += 1;
     const list = jobGroups.get(job.machineId) ?? [];
     list.push(job);
     jobGroups.set(job.machineId, list);
@@ -192,6 +214,17 @@ export function buildServiceToSalesBoard(
       highPressureCases: cases.filter((item) => item.tradePressure === "high").length,
       openRevenueCandidates: cases.filter((item) => (item.outreachDealValue ?? 0) > 0).length,
       overdueCases: cases.filter((item) => item.overdueOpenJobs > 0).length,
+    },
+    dataQuality: {
+      sourceCounts: {
+        serviceJobs: jobs.length,
+        customerOwnedMachines: customerOwnedMachines.length,
+        fleetSignals: signals.length,
+      },
+      jobsWithoutMachineId,
+      recentJobsMatchedToCustomerOwnedMachine,
+      jobsOutsideHorizon,
+      customerOwnedMachinesWithFleetSignal: customerOwnedMachines.filter((machine) => matchFleetSignal(machine, signals) != null).length,
     },
     cases,
   };

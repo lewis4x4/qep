@@ -169,6 +169,22 @@ describe("finance-enforcement-api contract", () => {
         note: "Safe default forces reapproval.",
         is_active: true,
       },
+      {
+        config_key: "trade_nonrepresented_discount_band",
+        config_value: { min_discount_pct: 8, max_discount_pct: 10, default_discount_pct: 8 },
+        safe_default: { default_discount_pct: 8, max_discount_pct: 10, min_discount_pct: 8 },
+        authorizing_question: "Ryan 2026-07-03: non-represented trade valuation band",
+        note: "Owner-reviewed Ryan policy.",
+        is_active: true,
+      },
+      {
+        config_key: "trade_valuation_guardrail",
+        config_value: { max_trade_cost_pct_of_auction_value: 1, approval_required_above_guardrail: true },
+        safe_default: { approval_required_above_guardrail: true, max_trade_cost_pct_of_auction_value: 1 },
+        authorizing_question: "Ryan 2026-07-03: bring trades in at auction value or less",
+        note: "Owner-reviewed Ryan guardrail.",
+        is_active: true,
+      },
     ]);
 
     const invoiceWidth = status.requiredConfig.find((row) => row.config_key === "invoice_pad_width");
@@ -185,6 +201,15 @@ describe("finance-enforcement-api contract", () => {
     expect(reconReapproval?.effective_value).toBeNull();
     expect(reconReapproval?.parked_default).toEqual({ amount_delta: 2500, basis: "either", percent_delta: 0.1 });
     expect(reconReapproval?.note).toContain("Safe default forces reapproval.");
+
+    const tradeDiscountBand = status.requiredConfig.find((row) => row.config_key === "trade_nonrepresented_discount_band");
+    expect(tradeDiscountBand?.status).toBe("owner_reviewed");
+    expect(tradeDiscountBand?.effective_value).toEqual({ min_discount_pct: 8, max_discount_pct: 10, default_discount_pct: 8 });
+
+    const tradeGuardrail = status.requiredConfig.find((row) => row.config_key === "trade_valuation_guardrail");
+    expect(tradeGuardrail?.status).toBe("config_required");
+    expect(tradeGuardrail?.effective_value).toBeNull();
+    expect(tradeGuardrail?.parked_default).toEqual({ max_trade_cost_pct_of_auction_value: 1, approval_required_above_guardrail: true });
 
     const bankAccounts = status.requiredConfig.find((row) => row.config_key === "bank_account_list");
     expect(bankAccounts?.status).toBe("config_required");

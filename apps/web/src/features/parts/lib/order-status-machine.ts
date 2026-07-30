@@ -10,7 +10,7 @@ export type OrderStatus =
 export function validNextStatuses(current: string): OrderStatus[] {
   switch (current) {
     case "draft":
-      return ["submitted", "confirmed", "cancelled"];
+      return ["cancelled"];
     case "submitted":
       return ["confirmed", "cancelled"];
     case "confirmed":

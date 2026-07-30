@@ -33,6 +33,12 @@ function boundaryLabel(role: FinanceSystemBoundaryRow["role"]): string {
   return "Downstream output only";
 }
 
+function boundaryBadgeVariant(role: FinanceSystemBoundaryRow["role"]): "success" | "secondary" | "outline" {
+  if (role === "forward_accounting_sor") return "success";
+  if (role === "transition_operational_sor") return "secondary";
+  return "outline";
+}
+
 function ownerSystemLabel(ownerSystem: FinanceFoundationCapability["ownerSystem"]): string {
   if (ownerSystem === "qep_os") return "QEP OS";
   if (ownerSystem === "intellidealer_transition") return "IntelliDealer transition";
@@ -70,6 +76,7 @@ export function FinanceFoundationStatusPanel({ workspaceId }: FinanceFoundationS
 
   const foundation = status.data;
   if (!foundation) return null;
+  const tradeGate = foundation.capabilities.find((capability) => capability.migration === "766");
 
   return (
     <Card>
@@ -78,13 +85,19 @@ export function FinanceFoundationStatusPanel({ workspaceId }: FinanceFoundationS
           <div>
             <CardTitle className="text-base">K1.1 finance foundation status</CardTitle>
             <CardDescription>
-              QEP OS is the finance source of record; unresolved business values stay explicit until owner-reviewed.
+              QEP OS is the forward finance SoR, IntelliDealer is transition SoR, and QuickBooks Desktop is downstream output only.
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant="success" className="gap-1">
               <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
-              QEP OS SoR
+              QEP OS forward SoR
+            </Badge>
+            <Badge variant="secondary">
+              IntelliDealer transition SoR
+            </Badge>
+            <Badge variant="outline">
+              QuickBooks downstream only
             </Badge>
             <Badge variant="outline" className="gap-1">
               <Database className="h-3.5 w-3.5" aria-hidden />
@@ -97,6 +110,40 @@ export function FinanceFoundationStatusPanel({ workspaceId }: FinanceFoundationS
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        {tradeGate ? (
+          <section
+            aria-label="Trade-reconditioning finance logic"
+            className="border-l-4 border-qep-success pl-3"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-semibold">Shipped QEP OS finance logic</span>
+              <Badge variant="success">migration 766</Badge>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {tradeGate.label}. Keep-and-recondition trades below the 15% expected gross-margin floor require
+              sales-manager approval before commit; material recon-change reapproval remains config-required until
+              owner-reviewed.
+            </p>
+            <p className="mt-1 max-w-3xl break-words text-xs text-muted-foreground">{tradeGate.evidence}</p>
+          </section>
+        ) : null}
+
+        <section aria-label="Source-of-record boundary summary" className="grid gap-3 md:grid-cols-3">
+          {foundation.systemBoundary.map((row) => (
+            <div key={row.system} className="border-l-2 border-border pl-3">
+              <div className="text-sm font-semibold">{row.system}</div>
+              <div className="mt-1">
+                <Badge variant={boundaryBadgeVariant(row.role)}>
+                  {boundaryLabel(row.role)}
+                </Badge>
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Ledger of record: {row.isLedgerOfRecord ? "yes" : "no"}
+              </div>
+            </div>
+          ))}
+        </section>
+
         <section className="space-y-2">
           <h2 className="text-sm font-semibold">System boundary</h2>
           <div className="overflow-x-auto">
@@ -162,6 +209,10 @@ export function FinanceFoundationStatusPanel({ workspaceId }: FinanceFoundationS
 
         <section className="space-y-2">
           <h2 className="text-sm font-semibold">Business values</h2>
+          <p className="text-xs text-muted-foreground">
+            Values are shown only as owner-reviewed when they have named approval evidence or differ from the parked
+            safe default; otherwise the effective value stays null and config-required.
+          </p>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -192,7 +243,9 @@ export function FinanceFoundationStatusPanel({ workspaceId }: FinanceFoundationS
                       </Badge>
                     </TableCell>
                     <TableCell className="max-w-xs break-words text-xs text-muted-foreground">
-                      {row.source_migration ? `migration ${row.source_migration}` : row.authorizing_question}
+                      {row.source_migration
+                        ? `migration ${row.source_migration} · ${row.authorizing_question}`
+                        : row.authorizing_question}
                     </TableCell>
                   </TableRow>
                 ))}
