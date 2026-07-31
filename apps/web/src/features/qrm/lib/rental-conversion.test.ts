@@ -109,6 +109,16 @@ describe("buildRentalTruthConversionBoard", () => {
     expect(board.candidates[0]?.title).toBe("Acme");
     expect(board.candidates[0]?.confidence).toBe("high");
     expect(board.summary.candidates).toBe(2);
+    expect(board.dataQuality).toMatchObject({
+      sourceMode: "rental_truth",
+      sourceCounts: {
+        rentalTruthCompanies: 2,
+        deals: 0,
+        rentalLinks: 0,
+        voiceSignals: 0,
+      },
+      candidatesWithPurchaseValue: 1,
+    });
   });
 });
 
@@ -135,6 +145,7 @@ describe("buildRentalConversionBoard", () => {
     expect(board.summary.rentalIntentSignals).toBe(3);
     expect(board.summary.purchaseReadySignals).toBe(1);
     expect(board.dataQuality.sourceCounts).toEqual({
+      rentalTruthCompanies: 0,
       deals: 2,
       rentalLinks: 2,
       voiceSignals: 2,
@@ -157,6 +168,7 @@ describe("buildRentalConversionBoard", () => {
 
     expect(board.summary.candidates).toBe(0);
     expect(board.dataQuality.sourceCounts).toEqual({
+      rentalTruthCompanies: 0,
       deals: 0,
       rentalLinks: 0,
       voiceSignals: 0,

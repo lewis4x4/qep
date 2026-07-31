@@ -48,7 +48,9 @@ export interface RentalConversionBoard {
     openQuotes: number;
   };
   dataQuality: {
+    sourceMode: "rental_truth" | "crm_voice";
     sourceCounts: {
+      rentalTruthCompanies: number;
       deals: number;
       rentalLinks: number;
       voiceSignals: number;
@@ -192,6 +194,18 @@ export function buildRentalTruthConversionBoard(
       ),
       openQuotes: 0,
     },
+    dataQuality: {
+      sourceMode: "rental_truth",
+      sourceCounts: {
+        rentalTruthCompanies: rows.length,
+        deals: 0,
+        rentalLinks: 0,
+        voiceSignals: 0,
+      },
+      uniqueRentalEquipment: 0,
+      voiceSignalsWithExtractedData: 0,
+      candidatesWithPurchaseValue: candidates.filter((candidate) => candidate.estimatedPurchaseValue != null).length,
+    },
     candidates,
   };
 }
@@ -330,7 +344,9 @@ export function buildRentalConversionBoard(input: {
       openQuotes: input.openQuoteCount,
     },
     dataQuality: {
+      sourceMode: "crm_voice",
       sourceCounts: {
+        rentalTruthCompanies: 0,
         deals: input.deals.length,
         rentalLinks: input.rentalLinks.length,
         voiceSignals: input.voiceSignals.length,

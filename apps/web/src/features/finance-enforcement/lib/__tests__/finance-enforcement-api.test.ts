@@ -211,9 +211,76 @@ describe("finance-enforcement-api contract", () => {
     expect(tradeGuardrail?.effective_value).toBeNull();
     expect(tradeGuardrail?.parked_default).toEqual({ max_trade_cost_pct_of_auction_value: 1, approval_required_above_guardrail: true });
 
-    const bankAccounts = status.requiredConfig.find((row) => row.config_key === "bank_account_list");
+    const bankAccounts = status.requiredConfig.find((row) => row.config_key === "bank_account_register");
     expect(bankAccounts?.status).toBe("config_required");
     expect(bankAccounts?.effective_value).toBeNull();
+  });
+
+  test("foundation status recognizes July 20 owner answers without unlocking partial or legal inputs", () => {
+    const status = api.buildFinanceFoundationStatus([
+      {
+        config_key: "invoice_pad_width",
+        config_value: { digits: 5 },
+        safe_default: { digits: 5 },
+        authorizing_question: "F7",
+        note: "Owner-ratified five-digit sequence.",
+        is_active: true,
+      },
+      {
+        config_key: "book_depreciation_policy",
+        config_value: { owned_equipment_method: "straight_line", compute_bonus_or_section_179: false },
+        safe_default: { owned_equipment_method: "straight_line", compute_bonus_or_section_179: false },
+        authorizing_question: "F3",
+        note: "Owner-ratified book policy.",
+        is_active: true,
+      },
+      {
+        config_key: "open_service_wo_cutover_policy",
+        config_value: { target_month_day: "01-01", legacy_finish_horizon_days: 14 },
+        safe_default: { target_month_day: "01-01", legacy_finish_horizon_days: 14 },
+        authorizing_question: "F6",
+        note: "Owner-ratified cutover.",
+        is_active: true,
+      },
+      {
+        config_key: "master_id_strategy",
+        config_value: { match_key: "intellidealer_account_number", qep_primary_id: "uuid" },
+        safe_default: { match_key: "intellidealer_account_number", qep_primary_id: "uuid" },
+        authorizing_question: "F8",
+        note: "Owner-ratified identity strategy.",
+        is_active: true,
+      },
+      {
+        config_key: "bank_account_register",
+        config_value: { accounts: [{ name: "Operating", institution: "First Federal Bank" }] },
+        safe_default: { accounts: [{ name: "Operating", institution: "First Federal Bank" }] },
+        authorizing_question: "F10",
+        note: "Named account register only.",
+        is_active: true,
+      },
+      {
+        config_key: "branch_allocation_basis",
+        config_value: { basis: "headcount", values_status: "awaiting_current_headcounts" },
+        safe_default: { basis: "headcount", values_status: "awaiting_current_headcounts" },
+        authorizing_question: "F2",
+        note: "Exact headcounts are pending.",
+        is_active: true,
+      },
+      {
+        config_key: "finance_charge_policy_requested",
+        config_value: { monthly_rate: 0.015, activation_status: "legal_review_required" },
+        safe_default: { monthly_rate: 0.015, activation_status: "legal_review_required" },
+        authorizing_question: "F9",
+        note: "Legal approval is pending.",
+        is_active: true,
+      },
+    ]);
+
+    for (const key of ["invoice_pad_width", "book_depreciation_policy", "open_service_wo_cutover_policy", "master_id_strategy", "bank_account_register"]) {
+      expect(status.requiredConfig.find((row) => row.config_key === key)?.status).toBe("owner_reviewed");
+    }
+    expect(status.requiredConfig.find((row) => row.config_key === "branch_allocation_basis")?.status).toBe("config_required");
+    expect(status.requiredConfig.find((row) => row.config_key === "finance_charge_policy_requested")?.status).toBe("config_required");
   });
 
   test("foundation status reads finance_foundation_config and preserves owner-reviewed values", async () => {

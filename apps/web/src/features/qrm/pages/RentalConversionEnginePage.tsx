@@ -279,7 +279,9 @@ export function RentalConversionEnginePage() {
                   Candidates rank higher when repeated rental behavior overlaps with rental-first or rent-to-own signals and active purchase motion.
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Signals: {board.dataQuality.sourceCounts.deals} deals · {board.dataQuality.sourceCounts.rentalLinks} rental links · {board.dataQuality.voiceSignalsWithExtractedData}/{board.dataQuality.sourceCounts.voiceSignals} usable voice signals.
+                  {board.dataQuality.sourceMode === "rental_truth"
+                    ? `Signals: ${board.dataQuality.sourceCounts.rentalTruthCompanies} rental-truth account row${board.dataQuality.sourceCounts.rentalTruthCompanies === 1 ? "" : "s"} · ${board.dataQuality.candidatesWithPurchaseValue} with purchase value.`
+                    : `Signals: ${board.dataQuality.sourceCounts.deals} deals · ${board.dataQuality.sourceCounts.rentalLinks} rental links · ${board.dataQuality.voiceSignalsWithExtractedData}/${board.dataQuality.sourceCounts.voiceSignals} usable voice signals.`}
                 </p>
               </div>
               <Button asChild size="sm" variant="outline">

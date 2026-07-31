@@ -2,12 +2,13 @@
  * Feature-local API adapter for the QEP finance-enforcement surfaces.
  *
  * Wraps the role-gated Postgres RPCs and the tax-calculator edge function
- * shipped in migrations 655-670 plus 766 (branch-prefixed invoice numbering, county
+ * shipped in migrations 655-670, 766, and 826-828 (branch-prefixed invoice numbering, county
  * tax + Ship-To sourcing, Net 30 / 60-day credit holds, margin matrix,
  * equipment-sale reversal approver, Form 8300 + FET, AP 3-way match /
  * approval routing / double-pay guard, QEP OS invoice sequencing, quarter
  * close/reopen, AR dunning, finance-only margin segments, and IntelliDealer
- * master-match dry runs, and the July 3 trade-reconditioning margin gate).
+ * master-match dry runs, the July 3 trade-reconditioning margin gate, and the
+ * July 20 owner-answer finance controls).
  *
  * The shared supabase client is intentionally broad (SupabaseClient, not
  * SupabaseClient<Database>) so RPC names are not checked against the generated
@@ -165,6 +166,27 @@ const FOUNDATION_CAPABILITIES: FinanceFoundationCapability[] = [
     evidence: "gl_periods quarter_status, quarter_reopen_log, reopen_gl_quarter",
   },
   {
+    migration: "826",
+    label: "Owner-ratified finance configuration and structural line classification",
+    ownerSystem: "qep_os",
+    status: "shipped",
+    evidence: "finance_foundation_config plus persisted finance_department, finance_segment, and finance_category fields",
+  },
+  {
+    migration: "827",
+    label: "Five-digit department numbering and named quarter-reopen approvals",
+    ownerSystem: "qep_os",
+    status: "shipped",
+    evidence: "next_invoice_number, finance_approval_principals, quarter_reopen_requests, quarter_reopen_approvals",
+  },
+  {
+    migration: "828",
+    label: "Monthly AR charge controls and append-only customer deposit liabilities",
+    ownerSystem: "qep_os",
+    status: "shipped",
+    evidence: "ar_finance_charge_policy_approvals, run_ar_dunning_cycle, customer_deposit_ledger_entries",
+  },
+  {
     migration: "670",
     label: "IntelliDealer master-match dry-run harness",
     ownerSystem: "intellidealer_transition",
@@ -186,14 +208,23 @@ const REQUIRED_FINANCE_CONFIGS: Array<{
   source_migration: string | null;
   authorizing_question: string;
   note: string;
-  ownerReviewedWhenConfigured?: boolean;
+  ownerReviewEvidence?: readonly string[];
 }> = [
   {
     config_key: "invoice_pad_width",
     label: "Invoice zero-pad width",
-    source_migration: "662",
-    authorizing_question: "Round 3 open item: invoice width",
-    note: "Surface as config-required until owner-reviewed width is accepted.",
+    source_migration: "826",
+    authorizing_question: "F7",
+    note: "Owner-ratified five-digit branch/department sequence; preserve all previously issued identifiers.",
+    ownerReviewEvidence: ["F7"],
+  },
+  {
+    config_key: "department_invoice_prefixes",
+    label: "Department invoice prefixes",
+    source_migration: "826",
+    authorizing_question: "F7",
+    note: "Owner-ratified E/R/P/W prefixes; historical S values remain readable only for compatibility.",
+    ownerReviewEvidence: ["F7"],
   },
   {
     config_key: "cpa_adjustment_posting_target",
@@ -236,7 +267,7 @@ const REQUIRED_FINANCE_CONFIGS: Array<{
     source_migration: "766",
     authorizing_question: "Ryan 2026-07-03: non-represented trade valuation band",
     note: "Owner-reviewed Ryan policy: non-represented trades use an 8-10% auction discount band, stored as config instead of literals.",
-    ownerReviewedWhenConfigured: true,
+    ownerReviewEvidence: ["Ryan 2026-07-03: non-represented trade valuation band"],
   },
   {
     config_key: "trade_valuation_guardrail",
@@ -246,18 +277,19 @@ const REQUIRED_FINANCE_CONFIGS: Array<{
     note: "The approval gate is shipped, but the seeded auction-value ceiling remains a safe default until owner-reviewed.",
   },
   {
-    config_key: "corporate_allocation_basis",
-    label: "Corporate-to-branch allocation basis",
-    source_migration: null,
-    authorizing_question: "K3.1 migration-path decision",
-    note: "Open working-session value; no default basis is assumed.",
+    config_key: "branch_allocation_basis",
+    label: "Corporate-to-branch allocation basis and current headcounts",
+    source_migration: "826",
+    authorizing_question: "F2",
+    note: "Headcount is authorized as the effective-dated basis; exact current branch headcounts remain config-required.",
   },
   {
-    config_key: "depreciation_allocation_rules",
-    label: "Per-unit depreciation allocation rules",
-    source_migration: null,
-    authorizing_question: "K3.1 migration-path decision",
-    note: "Open working-session value; no depreciation schedule is assumed.",
+    config_key: "book_depreciation_policy",
+    label: "Book depreciation policy",
+    source_migration: "826",
+    authorizing_question: "F3",
+    note: "Owner-ratified straight-line book depreciation; bonus depreciation and Section 179 remain CPA-only.",
+    ownerReviewEvidence: ["F3"],
   },
   {
     config_key: "floor_plan_lender_terms",
@@ -269,16 +301,18 @@ const REQUIRED_FINANCE_CONFIGS: Array<{
   {
     config_key: "open_service_wo_cutover_policy",
     label: "Open service-WO cutover policy",
-    source_migration: null,
-    authorizing_question: "K3.1 migration-path decision",
-    note: "Open service WOs remain the hardest cutover case.",
+    source_migration: "826",
+    authorizing_question: "F6",
+    note: "Owner-ratified January 1 split cutover with accumulated labor and parts cost carried for migrated long-running jobs.",
+    ownerReviewEvidence: ["F6"],
   },
   {
     config_key: "master_id_strategy",
     label: "Customer/vendor master-ID strategy",
-    source_migration: "670",
-    authorizing_question: "K3.1 migration-path decision",
-    note: "Dry-run matching is shipped; live canonical-load strategy is still parked.",
+    source_migration: "826",
+    authorizing_question: "F8",
+    note: "Owner-ratified IntelliDealer account-number matching with a fresh QEP UUID and permanent cross-reference.",
+    ownerReviewEvidence: ["F8"],
   },
   {
     config_key: "net45_account_list",
@@ -295,11 +329,35 @@ const REQUIRED_FINANCE_CONFIGS: Array<{
     note: "No internal rate or markup is assumed.",
   },
   {
-    config_key: "bank_account_list",
-    label: "Bank account list and branch cash tracking",
-    source_migration: null,
-    authorizing_question: "Open finance value: exact bank account list",
-    note: "No bank-account list is embedded in code.",
+    config_key: "bank_account_register",
+    label: "Named bank-account register",
+    source_migration: "826",
+    authorizing_question: "F10",
+    note: "Owner-ratified named institutions/accounts only; account and routing numbers remain outside source control.",
+    ownerReviewEvidence: ["F10"],
+  },
+  {
+    config_key: "quickbooks_desktop_boundary",
+    label: "QuickBooks Desktop downstream boundary",
+    source_migration: "826",
+    authorizing_question: "F10",
+    note: "QuickBooks Desktop remains a check-register and CPA-reporting destination, never the QEP ledger.",
+    ownerReviewEvidence: ["F10"],
+  },
+  {
+    config_key: "deposit_liability_policy",
+    label: "Sale and rental deposit-liability policy",
+    source_migration: "826/828",
+    authorizing_question: "F11",
+    note: "Owner-ratified application, damage-first settlement, refund, and monthly reconciliation policy.",
+    ownerReviewEvidence: ["F11"],
+  },
+  {
+    config_key: "finance_charge_policy_requested",
+    label: "Finance-charge and statement activation policy",
+    source_migration: "826/828",
+    authorizing_question: "F9",
+    note: "Owner intent is recorded, but legal approval and an active bound approval remain required before compounding.",
   },
   {
     config_key: "dr15_collection_allowance",
@@ -349,7 +407,9 @@ export function buildFinanceFoundationStatus(
   const requiredConfig = REQUIRED_FINANCE_CONFIGS.map((item): FinanceConfigReadinessRow => {
     const row = byKey.get(item.config_key);
     const ownerReviewedByNamedEvidence = Boolean(
-      row && item.ownerReviewedWhenConfigured && !hasNullLeaf(row.config_value),
+      row
+        && item.ownerReviewEvidence?.includes(row.authorizing_question ?? "")
+        && !hasNullLeaf(row.config_value),
     );
     const configRequired = !ownerReviewedByNamedEvidence && isParkedSafeDefault(row);
     return {
@@ -365,7 +425,7 @@ export function buildFinanceFoundationStatus(
   });
 
   return {
-    preparedFrom: "QEP_GOLD_HANDOFF_NEXT_OPEN_ITEMS_2026-07-03, QEP_FINANCE_K_STREAM_DECISION_ARTIFACT_2026-07-03, Linear QEP-221 July 3 trade-recondition note, and migration 766",
+    preparedFrom: "QEP_GOLD_HANDOFF_NEXT_OPEN_ITEMS_2026-07-03, QEP_FINANCE_K_STREAM_DECISION_ARTIFACT_2026-07-03, QEP_OWNER_ANSWER_PLACEMENT_2026-07-20, and migrations 766/826-828",
     systemBoundary: SYSTEM_BOUNDARY,
     capabilities: FOUNDATION_CAPABILITIES,
     requiredConfig,
