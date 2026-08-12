@@ -1,11 +1,24 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, CalendarClock, FileText, Wrench } from "lucide-react";
+import { ArrowLeft, CalendarClock, ClipboardList, FileText, Wrench } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/hooks/useAuth";
 import { ServiceSubNav } from "../components/ServiceSubNav";
+import {
+  enrollServicePlanEquipment,
+  getServicePlanEnrollmentForAgreement,
+  listServicePlanEntitlementBalances,
+  listServicePlanPrograms,
+  setServicePlanEnrollmentStatus,
+} from "../lib/service-plan-api";
+import {
+  canMutateServicePlans,
+  getAgreementEnrollmentReadiness,
+  parseBaselineHoursInput,
+} from "../lib/service-plan-utils";
 import {
   deriveServiceAgreementStatus,
   formatAgreementWindow,
@@ -24,7 +37,13 @@ const STATUS_STYLES: Record<ServiceAgreementStatus, string> = {
 
 export function ServiceAgreementDetailPage() {
   const { agreementId = "" } = useParams<{ agreementId: string }>();
+  const { profile } = useAuth();
   const qc = useQueryClient();
+  const canMutate = canMutateServicePlans(profile?.role);
+  const workspaceId = profile?.active_workspace_id?.trim() || "default";
+  const [enrolledOn, setEnrolledOn] = useState(() => new Date().toISOString().slice(0, 10));
+  const [baselineHours, setBaselineHours] = useState("");
+  const [endReason, setEndReason] = useState("");
 
   const agreementQuery = useQuery({
     queryKey: ["service-agreement", agreementId],
@@ -32,12 +51,29 @@ export function ServiceAgreementDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("service_agreements")
-        .select("id, contract_number, status, customer_id, equipment_id, location_code, program_name, category, coverage_summary, starts_on, expires_on, renewal_date, billing_cycle, term_months, included_pm_services, estimated_contract_value, notes, qrm_companies(name), qrm_equipment(stock_number, serial_number, make, model, name)")
+        .select("id, contract_number, status, customer_id, equipment_id, location_code, program_id, program_name, category, coverage_summary, starts_on, expires_on, renewal_date, billing_cycle, term_months, included_pm_services, estimated_contract_value, notes, qrm_companies(name), qrm_equipment(stock_number, serial_number, make, model, name)")
         .eq("id", agreementId)
         .maybeSingle();
       if (error) throw error;
       return normalizeServiceAgreementRow(data);
     },
+  });
+
+  const programsQuery = useQuery({
+    queryKey: ["service-plan-programs"],
+    queryFn: listServicePlanPrograms,
+  });
+
+  const enrollmentQuery = useQuery({
+    queryKey: ["service-plan-enrollment", agreementId],
+    enabled: agreementId.length > 0,
+    queryFn: () => getServicePlanEnrollmentForAgreement(agreementId),
+  });
+
+  const balancesQuery = useQuery({
+    queryKey: ["service-plan-entitlement-balances", agreementId],
+    enabled: agreementId.length > 0,
+    queryFn: () => listServicePlanEntitlementBalances(agreementId),
   });
 
   const maintenanceQuery = useQuery({
@@ -67,13 +103,72 @@ export function ServiceAgreementDetailPage() {
     },
   });
 
+  const enrollMutation = useMutation({
+    mutationFn: async () => {
+      if (!profile?.id) throw new Error("Sign in required to enroll equipment.");
+      const baseline = parseBaselineHoursInput(baselineHours);
+      return enrollServicePlanEquipment({
+        workspaceId,
+        serviceAgreementId: agreementId,
+        enrolledOn,
+        baselineHours: baseline,
+        actorId: profile.id,
+      });
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["service-plan-enrollment", agreementId] }),
+        qc.invalidateQueries({ queryKey: ["service-plan-entitlement-balances", agreementId] }),
+      ]);
+    },
+  });
+
+  const enrollmentStatusMutation = useMutation({
+    mutationFn: async (status: "active" | "paused" | "ended") => {
+      if (!profile?.id) throw new Error("Sign in required to update enrollment.");
+      const enrollment = enrollmentQuery.data;
+      if (!enrollment) throw new Error("No enrollment to update.");
+      if (status === "ended" && !endReason.trim()) {
+        throw new Error("End reason is required.");
+      }
+      return setServicePlanEnrollmentStatus({
+        workspaceId,
+        enrollmentId: enrollment.id,
+        status,
+        actorId: profile.id,
+        reason: status === "ended" ? endReason.trim() : null,
+      });
+    },
+    onSuccess: async () => {
+      setEndReason("");
+      await qc.invalidateQueries({ queryKey: ["service-plan-enrollment", agreementId] });
+    },
+  });
+
   const header = agreementQuery.data;
   const company = one(header?.qrm_companies);
   const equipment = one(header?.qrm_equipment);
+  const boundProgram = useMemo(
+    () => (programsQuery.data ?? []).find((program) => program.id === header?.program_id) ?? null,
+    [programsQuery.data, header?.program_id],
+  );
   const derivedStatus = useMemo(
     () => (header ? deriveServiceAgreementStatus(header.status, header.expires_on) : "draft"),
     [header],
   );
+  const enrollmentReadiness = header
+    ? getAgreementEnrollmentReadiness({
+        status: header.status,
+        program_id: header.program_id,
+        equipment_id: header.equipment_id,
+        starts_on: header.starts_on,
+        expires_on: header.expires_on,
+        enrolled_on: enrolledOn,
+        programIsActive: boundProgram?.is_active,
+        programReviewed: boundProgram ? boundProgram.review_status === "reviewed" : undefined,
+        programProvisional: boundProgram?.is_provisional,
+      })
+    : null;
 
   if (!agreementId) return null;
 
@@ -88,6 +183,13 @@ export function ServiceAgreementDetailPage() {
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           All agreements
+        </Link>
+        <Link
+          to="/service/plans"
+          className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background px-3 py-1.5 text-xs font-semibold text-muted-foreground"
+        >
+          <ClipboardList className="h-3.5 w-3.5" />
+          Service plans
         </Link>
       </div>
 
@@ -116,16 +218,28 @@ export function ServiceAgreementDetailPage() {
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <input
-                defaultValue={header.program_name}
-                onBlur={(e) => {
-                  if (header.program_name !== e.target.value) {
-                    updateAgreement.mutate({ program_name: e.target.value });
-                  }
+              <select
+                value={header.program_id ?? ""}
+                onChange={(e) => {
+                  const nextId = e.target.value || null;
+                  const program = (programsQuery.data ?? []).find((row) => row.id === nextId) ?? null;
+                  updateAgreement.mutate({
+                    program_id: nextId,
+                    program_name: program?.name ?? header.program_name,
+                  });
                 }}
-                placeholder="Program"
                 className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
-              />
+              >
+                <option value="">No catalog program</option>
+                {(programsQuery.data ?? []).map((program) => {
+                  const enrollReady = program.is_active && program.review_status === "reviewed" && !program.is_provisional;
+                  return (
+                    <option key={program.id} value={program.id}>
+                      {program.name}{enrollReady ? "" : " (not enrollment-ready)"}
+                    </option>
+                  );
+                })}
+              </select>
               <input
                 defaultValue={header.category ?? ""}
                 onBlur={(e) => {
@@ -252,6 +366,137 @@ export function ServiceAgreementDetailPage() {
                 <Link to={`/equipment/${header.equipment_id}`} className="mt-3 inline-flex text-sm font-semibold text-primary">
                   Open Asset 360
                 </Link>
+              ) : null}
+            </Card>
+
+            <Card className="border border-border/50 bg-card/90 p-5 shadow-sm">
+              <div className="flex items-center gap-2">
+                <ClipboardList className="h-4 w-4 text-primary" />
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Service-plan enrollment
+                </p>
+              </div>
+
+              {enrollmentQuery.isLoading ? (
+                <p className="mt-3 text-sm text-muted-foreground">Loading enrollment…</p>
+              ) : enrollmentQuery.data ? (
+                <div className="mt-3 space-y-3">
+                  <p className="text-sm text-foreground">
+                    Status: <span className="font-semibold">{enrollmentQuery.data.status}</span>
+                    {" · "}baseline {enrollmentQuery.data.baseline_hours ?? "—"} ({enrollmentQuery.data.baseline_source})
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Enrolled {enrollmentQuery.data.enrolled_on}
+                    {enrollmentQuery.data.end_reason ? ` · ${enrollmentQuery.data.end_reason}` : ""}
+                  </p>
+                  <div className="space-y-2">
+                    {enrollmentQuery.data.schedules.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No cadence schedules yet.</p>
+                    ) : (
+                      enrollmentQuery.data.schedules.map((schedule) => (
+                        <div key={schedule.id} className="rounded-xl border border-border/50 bg-background/70 p-3 text-sm">
+                          <p className="font-medium text-foreground">Cycle {schedule.cycle_number}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Next due: {schedule.next_due_on ?? "—"}
+                            {schedule.next_due_hours != null ? ` / ${schedule.next_due_hours}h` : ""}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  {(balancesQuery.data ?? []).length > 0 ? (
+                    <div className="rounded-xl border border-border/50 bg-background/70 p-3 text-xs text-muted-foreground">
+                      {(balancesQuery.data ?? []).map((balance) => (
+                        <p key={`${balance.unit_code}-${balance.service_agreement_id}`}>
+                          {balance.unit_code}: available {balance.available_quantity}, reserved {balance.reserved_quantity}, consumed {balance.consumed_quantity}
+                        </p>
+                      ))}
+                    </div>
+                  ) : null}
+                  {canMutate && enrollmentQuery.data.status !== "ended" ? (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-2">
+                        {enrollmentQuery.data.status === "paused" ? (
+                          <Button
+                            variant="outline"
+                            className="min-h-11"
+                            disabled={enrollmentStatusMutation.isPending}
+                            onClick={() => enrollmentStatusMutation.mutate("active")}
+                          >
+                            Resume
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            className="min-h-11"
+                            disabled={enrollmentStatusMutation.isPending}
+                            onClick={() => enrollmentStatusMutation.mutate("paused")}
+                          >
+                            Pause
+                          </Button>
+                        )}
+                      </div>
+                      <input
+                        value={endReason}
+                        onChange={(e) => setEndReason(e.target.value)}
+                        placeholder="End reason"
+                        className="min-h-11 w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
+                      />
+                      <Button
+                        variant="outline"
+                        className="min-h-11"
+                        disabled={enrollmentStatusMutation.isPending}
+                        onClick={() => enrollmentStatusMutation.mutate("ended")}
+                      >
+                        End enrollment
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Enroll this agreement&apos;s machine into the bound catalog program to create hour/calendar schedules.
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <input
+                      type="date"
+                      value={enrolledOn}
+                      onChange={(e) => setEnrolledOn(e.target.value)}
+                      className="min-h-11 rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
+                    />
+                    <input
+                      value={baselineHours}
+                      onChange={(e) => setBaselineHours(e.target.value)}
+                      placeholder="Baseline hours (blank = meter)"
+                      className="min-h-11 rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
+                    />
+                  </div>
+                  {enrollmentReadiness && !enrollmentReadiness.ready ? (
+                    <ul className="space-y-1 text-xs text-muted-foreground">
+                      {enrollmentReadiness.reasons.map((reason) => (
+                        <li key={reason}>• {reason}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {canMutate ? (
+                    <Button
+                      className="min-h-11"
+                      disabled={enrollMutation.isPending || !enrollmentReadiness?.ready}
+                      onClick={() => enrollMutation.mutate()}
+                    >
+                      Enroll equipment
+                    </Button>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Elevated role required to enroll.</p>
+                  )}
+                </div>
+              )}
+              {enrollMutation.isError ? (
+                <p className="mt-2 text-sm text-destructive">{(enrollMutation.error as Error).message}</p>
+              ) : null}
+              {enrollmentStatusMutation.isError ? (
+                <p className="mt-2 text-sm text-destructive">{(enrollmentStatusMutation.error as Error).message}</p>
               ) : null}
             </Card>
 

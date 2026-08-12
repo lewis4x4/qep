@@ -4,6 +4,7 @@ import {
   ShoppingCart,
   Truck,
   ClipboardCheck,
+  ClipboardList,
   FileText,
   ChartColumnIncreasing,
   Banknote,
@@ -27,6 +28,7 @@ const SUB_NAV_LINKS = [
   { to: "/m/service", label: "Tech Mobile", icon: Smartphone },
   { to: "/service/inspections", label: "Inspections", icon: ClipboardCheck },
   { to: "/service/agreements", label: "Agreements", icon: FileText },
+  { to: "/service/plans", label: "Plans", icon: ClipboardList },
   { to: "/service/wip", label: "WIP", icon: ChartColumnIncreasing },
   { to: "/service/parts", label: "Shop Parts", icon: Package },
   { to: "/parts/orders", label: "Parts Orders", icon: ShoppingCart },
@@ -110,6 +112,15 @@ export function ServiceSubNav() {
         location.pathname === "/parts/orders" ||
         /^\/parts\/orders\//.test(location.pathname)
       );
+    }
+    if (to === "/service/agreements") {
+      return (
+        location.pathname === "/service/agreements" ||
+        /^\/service\/agreements\//.test(location.pathname)
+      );
+    }
+    if (to === "/service/plans") {
+      return location.pathname === "/service/plans";
     }
     return location.pathname === to;
   };

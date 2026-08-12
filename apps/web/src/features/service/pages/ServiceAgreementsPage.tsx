@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ClipboardList, Plus, Wrench } from "lucide-react";
+import { ClipboardList, Plus } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { ServiceSubNav } from "../components/ServiceSubNav";
+import { listServicePlanPrograms } from "../lib/service-plan-api";
 import {
   deriveServiceAgreementStatus,
   formatAgreementWindow,
@@ -32,9 +33,11 @@ export function ServiceAgreementsPage() {
   const [showExpired, setShowExpired] = useState(false);
   const [contractNumber, setContractNumber] = useState("");
   const [locationCode, setLocationCode] = useState("");
-  const [programName, setProgramName] = useState("");
+  const [selectedProgramId, setSelectedProgramId] = useState("");
   const [category, setCategory] = useState("");
   const [termMonths, setTermMonths] = useState("12");
+  const [selectedCompanyId, setSelectedCompanyId] = useState("");
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState("");
 
   const companiesQuery = useQuery({
     queryKey: ["service-agreements", "companies"],
@@ -60,23 +63,28 @@ export function ServiceAgreementsPage() {
     },
   });
 
-  const [selectedCompanyId, setSelectedCompanyId] = useState("");
-  const [selectedEquipmentId, setSelectedEquipmentId] = useState("");
+  const programsQuery = useQuery({
+    queryKey: ["service-plan-programs"],
+    queryFn: listServicePlanPrograms,
+  });
 
   const agreementsQuery = useQuery({
     queryKey: ["service-agreements"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("service_agreements")
-        .select("id, contract_number, status, customer_id, equipment_id, location_code, program_name, category, coverage_summary, starts_on, expires_on, renewal_date, billing_cycle, term_months, included_pm_services, estimated_contract_value, notes, qrm_companies(name), qrm_equipment(stock_number, serial_number, make, model, name)")
+        .select("id, contract_number, status, customer_id, equipment_id, location_code, program_id, program_name, category, coverage_summary, starts_on, expires_on, renewal_date, billing_cycle, term_months, included_pm_services, estimated_contract_value, notes, qrm_companies(name), qrm_equipment(stock_number, serial_number, make, model, name)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return normalizeServiceAgreementRows(data);
     },
   });
 
+  const selectedProgram = (programsQuery.data ?? []).find((program) => program.id === selectedProgramId) ?? null;
+
   const createAgreement = useMutation({
     mutationFn: async () => {
+      if (!selectedProgram) throw new Error("Select a catalog program before creating the agreement.");
       const { error } = await supabase
         .from("service_agreements")
         .insert({
@@ -84,7 +92,8 @@ export function ServiceAgreementsPage() {
           customer_id: selectedCompanyId || null,
           equipment_id: selectedEquipmentId || null,
           location_code: locationCode.trim() || null,
-          program_name: programName.trim(),
+          program_id: selectedProgram.id,
+          program_name: selectedProgram.name,
           category: category.trim() || null,
           status: "active",
           starts_on: new Date().toISOString().slice(0, 10),
@@ -100,7 +109,7 @@ export function ServiceAgreementsPage() {
       setSelectedCompanyId("");
       setSelectedEquipmentId("");
       setLocationCode("");
-      setProgramName("");
+      setSelectedProgramId("");
       setCategory("");
       setTermMonths("12");
     },
@@ -131,8 +140,8 @@ export function ServiceAgreementsPage() {
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 Dedicated agreement register for PM contracts with contract number, covered machine,
-                customer, program, category, and expiry tracking. This is separate from `maintenance_schedules`,
-                which remain the downstream schedule engine.
+                customer, catalog program, category, and expiry tracking. Bind a reviewed active plan
+                before enrolling equipment on the agreement detail page.
               </p>
             </div>
             <div className="rounded-2xl bg-primary/10 p-3 text-primary">
@@ -201,12 +210,21 @@ export function ServiceAgreementsPage() {
               ))}
             </select>
             <div className="grid gap-3 sm:grid-cols-2">
-              <input
-                value={programName}
-                onChange={(e) => setProgramName(e.target.value)}
-                placeholder="Program"
+              <select
+                value={selectedProgramId}
+                onChange={(e) => setSelectedProgramId(e.target.value)}
                 className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
-              />
+              >
+                <option value="">Select catalog program</option>
+                {(programsQuery.data ?? []).map((program) => {
+                  const enrollReady = program.is_active && program.review_status === "reviewed" && !program.is_provisional;
+                  return (
+                    <option key={program.id} value={program.id}>
+                      {program.name}{enrollReady ? "" : " (not enrollment-ready)"}
+                    </option>
+                  );
+                })}
+              </select>
               <input
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
@@ -228,6 +246,9 @@ export function ServiceAgreementsPage() {
                 className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
               />
             </div>
+            <p className="text-xs text-muted-foreground">
+              Need to review drafts first? Open <Link to="/service/plans" className="font-semibold text-primary">Service Plans</Link>.
+            </p>
             {createAgreement.isError ? (
               <p className="text-sm text-destructive">{(createAgreement.error as Error).message}</p>
             ) : null}

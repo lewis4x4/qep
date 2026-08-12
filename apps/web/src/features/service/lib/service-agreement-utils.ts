@@ -33,6 +33,7 @@ export type ServiceAgreementRow = {
   customer_id: string | null;
   equipment_id: string | null;
   location_code: string | null;
+  program_id: string | null;
   program_name: string;
   category: string | null;
   coverage_summary: string | null;
@@ -153,6 +154,7 @@ export function normalizeServiceAgreementRows(rows: unknown): ServiceAgreementRo
       customer_id: stringOrNull(value.customer_id),
       equipment_id: stringOrNull(value.equipment_id),
       location_code: stringOrNull(value.location_code),
+      program_id: stringOrNull(value.program_id),
       program_name: programName,
       category: stringOrNull(value.category),
       coverage_summary: stringOrNull(value.coverage_summary),

@@ -93,6 +93,9 @@ const ServiceAgreementsPage = lazy(() =>
 const ServiceAgreementDetailPage = lazy(() =>
   import("./features/service/pages/ServiceAgreementDetailPage").then((m) => ({ default: m.ServiceAgreementDetailPage }))
 );
+const ServicePlansPage = lazy(() =>
+  import("./features/service/pages/ServicePlansPage").then((m) => ({ default: m.ServicePlansPage }))
+);
 const ServiceWorkInProcessPage = lazy(() =>
   import("./features/service/pages/ServiceWorkInProcessPage").then((m) => ({ default: m.ServiceWorkInProcessPage }))
 );
@@ -1282,6 +1285,16 @@ function App() {
                 element={
                   canAccessServiceSurface ? (
                     <ServiceAgreementsPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/service/plans"
+                element={
+                  canAccessServiceSurface ? (
+                    <ServicePlansPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
