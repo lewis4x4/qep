@@ -94,6 +94,7 @@ export type ServicePlanSchedulePrompt = {
   service_agreement_id: string | null;
   equipment_id: string | null;
   job_number: string | null;
+  scheduled_start_at: string | null;
 };
 
 export type ActivationReadiness = {
@@ -197,11 +198,21 @@ export function summarizeProgramInterval(interval: ServicePlanProgramInterval): 
 }
 
 export function getProgramActivationReadiness(
-  program: Pick<ServicePlanProgram, "review_status" | "is_provisional" | "is_active" | "intervals">,
+  program: Pick<
+    ServicePlanProgram,
+    "review_status" | "is_provisional" | "is_active" | "reviewed_by" | "reviewed_at" | "review_notes" | "intervals"
+  >,
 ): ActivationReadiness {
   const reasons: string[] = [];
   if (program.is_active) reasons.push("Program is already active.");
-  if (program.review_status !== "reviewed") reasons.push("Record a QEP review with notes first.");
+  if (
+    program.review_status !== "reviewed"
+    || !program.reviewed_by
+    || !program.reviewed_at
+    || !program.review_notes?.trim()
+  ) {
+    reasons.push("Record a QEP review with notes first.");
+  }
   if (program.is_provisional) reasons.push("Provisional programs cannot be activated.");
   const hasActiveInterval = program.intervals.some((interval) => interval.is_active);
   if (!hasActiveInterval) reasons.push("At least one active interval is required.");
@@ -229,9 +240,11 @@ export function getAgreementEnrollmentReadiness(input: {
   if (input.expires_on && input.expires_on < input.enrolled_on) {
     reasons.push("Enrollment date is after the agreement expiry.");
   }
-  if (input.programIsActive === false) reasons.push("Bound program must be active.");
-  if (input.programReviewed === false) reasons.push("Bound program must be reviewed.");
-  if (input.programProvisional === true) reasons.push("Bound program must not be provisional.");
+  if (input.program_id) {
+    if (input.programIsActive !== true) reasons.push("Bound program must be active.");
+    if (input.programReviewed !== true) reasons.push("Bound program must be reviewed.");
+    if (input.programProvisional !== false) reasons.push("Bound program must not be provisional.");
+  }
   return { ready: reasons.length === 0, reasons };
 }
 
@@ -414,12 +427,16 @@ export function normalizeServicePlanSchedulePrompts(rows: unknown): ServicePlanS
       service_agreement_id: dueEvent ? stringOrNull(dueEvent.service_agreement_id) : null,
       equipment_id: dueEvent ? stringOrNull(dueEvent.equipment_id) : null,
       job_number: job ? stringOrNull(job.wo_number) ?? stringOrNull(job.tracking_token) : null,
+      scheduled_start_at: job ? stringOrNull(job.scheduled_start_at) : null,
     }];
   });
 }
 
-export function isOpenSchedulePrompt(prompt: Pick<ServicePlanSchedulePrompt, "due_status">): boolean {
-  return prompt.due_status === "detected" || prompt.due_status === "job_created";
+export function isOpenSchedulePrompt(
+  prompt: Pick<ServicePlanSchedulePrompt, "due_status" | "scheduled_start_at">,
+): boolean {
+  return (prompt.due_status === "detected" || prompt.due_status === "job_created")
+    && prompt.scheduled_start_at === null;
 }
 
 export function parseBaselineHoursInput(value: string): number | null {

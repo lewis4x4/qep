@@ -164,7 +164,11 @@ describe("ServiceAgreementDetailPage enrollment (integration)", () => {
     });
 
     expect(screen.getByText("Service-plan enrollment")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Enroll equipment" }));
+    const enrollButton = screen.getByRole("button", { name: "Enroll equipment" }) as HTMLButtonElement;
+    await waitFor(() => {
+      expect(enrollButton.disabled).toBe(false);
+    });
+    fireEvent.click(enrollButton);
 
     await waitFor(() => {
       expect(enrollCalls.length).toBe(1);

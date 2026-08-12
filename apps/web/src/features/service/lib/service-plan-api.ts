@@ -7,6 +7,7 @@ import {
   normalizeServicePlanProgramIntervals,
   normalizeServicePlanPrograms,
   normalizeServicePlanSchedulePrompts,
+  isOpenSchedulePrompt,
   type ServicePlanCancellationKind,
   type ServicePlanEnrollment,
   type ServicePlanEnrollmentStatus,
@@ -79,14 +80,13 @@ export async function listOpenServicePlanSchedulePrompts(): Promise<ServicePlanS
       ),
       service_jobs (
         wo_number,
-        tracking_token
+        tracking_token,
+        scheduled_start_at
       )
     `)
     .order("created_at", { ascending: false });
   throwOnError(error);
-  return normalizeServicePlanSchedulePrompts(data).filter(
-    (prompt) => prompt.due_status === "detected" || prompt.due_status === "job_created",
-  );
+  return normalizeServicePlanSchedulePrompts(data).filter(isOpenSchedulePrompt);
 }
 
 export async function getServicePlanEnrollmentForAgreement(

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * CDO gate for The Floor.
+ * CDO gate for authenticated operator surfaces.
  *
- * Runs authenticated desktop/mobile browser checks for /floor, captures
- * screenshots, and executes a lightweight a11y scan. This intentionally
+ * Runs authenticated desktop/mobile browser checks for the selected scope,
+ * captures screenshots, and executes a lightweight a11y scan. This intentionally
  * fails when auth credentials are missing: the old stub let UI changes pass
  * without seeing the product.
  */
@@ -38,6 +38,7 @@ main().catch((error) => {
 async function main() {
   const { loadLocalEnv } = await import("./_shared/local-env.mjs");
   loadLocalEnv(repoRoot);
+  const target = designReviewTarget(process.env.DESIGN_REVIEW_SCOPE);
 
   let playwright;
   try {
@@ -66,14 +67,14 @@ async function main() {
     await visitAndAssert({
       page: desktopPage,
       baseUrl,
-      route: "/floor",
-      screenshotName: "floor-desktop.png",
-      requiredText: ["Role Home", "Work Queue"],
-      forbiddenText: ["Role preview", "COMPOSE"],
+      route: target.route,
+      screenshotName: `${target.artifactPrefix}-desktop.png`,
+      requiredText: target.requiredText,
+      forbiddenText: target.forbiddenText,
       checks,
       artifacts,
     });
-    await runA11yScan(desktopPage, "/floor desktop", checks);
+    await runA11yScan(desktopPage, `${target.route} desktop`, checks);
 
     await desktop.close();
 
@@ -92,14 +93,14 @@ async function main() {
     await visitAndAssert({
       page: mobilePage,
       baseUrl,
-      route: "/floor",
-      screenshotName: "floor-mobile.png",
-      requiredText: ["Role Home", "Work Queue"],
-      forbiddenText: ["Role preview", "COMPOSE"],
+      route: target.route,
+      screenshotName: `${target.artifactPrefix}-mobile.png`,
+      requiredText: target.requiredText,
+      forbiddenText: target.forbiddenText,
       checks,
       artifacts,
     });
-    await runA11yScan(mobilePage, "/floor mobile", checks);
+    await runA11yScan(mobilePage, `${target.route} mobile`, checks);
     await mobile.close();
   } finally {
     await browser.close().catch(() => {});
@@ -122,8 +123,8 @@ async function main() {
     verdict: failures.length === 0 ? "pass" : "fail",
     mission_alignment:
       failures.length === 0
-        ? "pass: The operator Floor rendered in authenticated desktop and mobile contexts."
-        : "fail: The Floor could not be proven visually ready.",
+        ? target.missionPass
+        : target.missionFail,
     base_url: baseUrl,
     checks,
     artifacts,
@@ -133,6 +134,28 @@ async function main() {
 
   console.log(JSON.stringify(report, null, 2));
   if (failures.length > 0) process.exit(1);
+}
+
+function designReviewTarget(scope) {
+  if (scope === "service-plans") {
+    return {
+      route: "/service/plans",
+      artifactPrefix: "service-plans",
+      requiredText: ["PM program catalog", "Open schedule prompts", "Activation boundary"],
+      forbiddenText: ["Review and activation are the same action"],
+      missionPass: "pass: H9.1 service-plan review, activation, and PM prompt surfaces rendered in authenticated desktop and mobile contexts.",
+      missionFail: "fail: H9.1 service-plan staff workflows could not be proven visually ready.",
+    };
+  }
+
+  return {
+    route: "/floor",
+    artifactPrefix: "floor",
+    requiredText: ["Role Home", "Work Queue"],
+    forbiddenText: ["Role preview", "COMPOSE"],
+    missionPass: "pass: The operator Floor rendered in authenticated desktop and mobile contexts.",
+    missionFail: "fail: The Floor could not be proven visually ready.",
+  };
 }
 
 async function resolveBaseUrl() {

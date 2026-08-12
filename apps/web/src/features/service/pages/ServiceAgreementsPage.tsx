@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { ServiceSubNav } from "../components/ServiceSubNav";
 import { listServicePlanPrograms } from "../lib/service-plan-api";
+import { canMutateServicePlans } from "../lib/service-plan-utils";
 import {
   deriveServiceAgreementStatus,
   formatAgreementWindow,
@@ -29,6 +30,7 @@ const STATUS_STYLES: Record<ServiceAgreementStatus, string> = {
 export function ServiceAgreementsPage() {
   const { profile } = useAuth();
   const qc = useQueryClient();
+  const canMutate = canMutateServicePlans(profile?.role);
   const [search, setSearch] = useState("");
   const [showExpired, setShowExpired] = useState(false);
   const [contractNumber, setContractNumber] = useState("");
@@ -80,10 +82,14 @@ export function ServiceAgreementsPage() {
     },
   });
 
-  const selectedProgram = (programsQuery.data ?? []).find((program) => program.id === selectedProgramId) ?? null;
+  const enrollmentReadyPrograms = (programsQuery.data ?? []).filter(
+    (program) => program.is_active && program.review_status === "reviewed" && !program.is_provisional,
+  );
+  const selectedProgram = enrollmentReadyPrograms.find((program) => program.id === selectedProgramId) ?? null;
 
   const createAgreement = useMutation({
     mutationFn: async () => {
+      if (!canMutate) throw new Error("Elevated role required to create service agreements.");
       if (!selectedProgram) throw new Error("Select a catalog program before creating the agreement.");
       const { error } = await supabase
         .from("service_agreements")
@@ -174,20 +180,29 @@ export function ServiceAgreementsPage() {
               </p>
               <h2 className="mt-1 text-lg font-semibold text-foreground">Add contract</h2>
             </div>
-            <Button size="sm" className="rounded-xl" onClick={() => createAgreement.mutate()} disabled={createAgreement.isPending}>
-              <Plus className="mr-1 h-4 w-4" />
-              Create
-            </Button>
+            {canMutate ? (
+              <Button
+                size="sm"
+                className="rounded-xl"
+                onClick={() => createAgreement.mutate()}
+                disabled={createAgreement.isPending || !selectedProgram || !contractNumber.trim()}
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                Create
+              </Button>
+            ) : null}
           </div>
 
           <div className="mt-4 grid gap-3">
             <input
+              disabled={!canMutate}
               value={contractNumber}
               onChange={(e) => setContractNumber(e.target.value)}
               placeholder="Contract number"
               className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
             />
             <select
+              disabled={!canMutate}
               value={selectedEquipmentId}
               onChange={(e) => setSelectedEquipmentId(e.target.value)}
               className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
@@ -200,6 +215,7 @@ export function ServiceAgreementsPage() {
               ))}
             </select>
             <select
+              disabled={!canMutate}
               value={selectedCompanyId}
               onChange={(e) => setSelectedCompanyId(e.target.value)}
               className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
@@ -211,21 +227,18 @@ export function ServiceAgreementsPage() {
             </select>
             <div className="grid gap-3 sm:grid-cols-2">
               <select
+                disabled={!canMutate}
                 value={selectedProgramId}
                 onChange={(e) => setSelectedProgramId(e.target.value)}
                 className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
               >
                 <option value="">Select catalog program</option>
-                {(programsQuery.data ?? []).map((program) => {
-                  const enrollReady = program.is_active && program.review_status === "reviewed" && !program.is_provisional;
-                  return (
-                    <option key={program.id} value={program.id}>
-                      {program.name}{enrollReady ? "" : " (not enrollment-ready)"}
-                    </option>
-                  );
-                })}
+                {enrollmentReadyPrograms.map((program) => (
+                  <option key={program.id} value={program.id}>{program.name}</option>
+                ))}
               </select>
               <input
+                disabled={!canMutate}
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 placeholder="Category"
@@ -234,12 +247,14 @@ export function ServiceAgreementsPage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <input
+                disabled={!canMutate}
                 value={locationCode}
                 onChange={(e) => setLocationCode(e.target.value)}
                 placeholder="Location"
                 className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
               />
               <input
+                disabled={!canMutate}
                 value={termMonths}
                 onChange={(e) => setTermMonths(e.target.value)}
                 placeholder="Term months"
@@ -247,7 +262,9 @@ export function ServiceAgreementsPage() {
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              Need to review drafts first? Open <Link to="/service/plans" className="font-semibold text-primary">Service Plans</Link>.
+              {canMutate
+                ? <>Need to review drafts first? Open <Link to="/service/plans" className="font-semibold text-primary">Service Plans</Link>.</>
+                : "Read-only for your role. Elevated operators create and change agreements."}
             </p>
             {createAgreement.isError ? (
               <p className="text-sm text-destructive">{(createAgreement.error as Error).message}</p>

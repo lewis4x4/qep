@@ -92,6 +92,7 @@ export function ServiceAgreementDetailPage() {
 
   const updateAgreement = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
+      if (!canMutate) throw new Error("Elevated role required to change service agreements.");
       const { error } = await supabase
         .from("service_agreements")
         .update(payload)
@@ -150,6 +151,13 @@ export function ServiceAgreementDetailPage() {
   const equipment = one(header?.qrm_equipment);
   const boundProgram = useMemo(
     () => (programsQuery.data ?? []).find((program) => program.id === header?.program_id) ?? null,
+    [programsQuery.data, header?.program_id],
+  );
+  const bindingPrograms = useMemo(
+    () => (programsQuery.data ?? []).filter(
+      (program) => program.id === header?.program_id
+        || (program.is_active && program.review_status === "reviewed" && !program.is_provisional),
+    ),
     [programsQuery.data, header?.program_id],
   );
   const derivedStatus = useMemo(
@@ -220,6 +228,7 @@ export function ServiceAgreementDetailPage() {
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <select
                 value={header.program_id ?? ""}
+                disabled={!canMutate || updateAgreement.isPending || Boolean(enrollmentQuery.data)}
                 onChange={(e) => {
                   const nextId = e.target.value || null;
                   const program = (programsQuery.data ?? []).find((row) => row.id === nextId) ?? null;
@@ -231,7 +240,7 @@ export function ServiceAgreementDetailPage() {
                 className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
               >
                 <option value="">No catalog program</option>
-                {(programsQuery.data ?? []).map((program) => {
+                {bindingPrograms.map((program) => {
                   const enrollReady = program.is_active && program.review_status === "reviewed" && !program.is_provisional;
                   return (
                     <option key={program.id} value={program.id}>
@@ -241,6 +250,7 @@ export function ServiceAgreementDetailPage() {
                 })}
               </select>
               <input
+                disabled={!canMutate}
                 defaultValue={header.category ?? ""}
                 onBlur={(e) => {
                   if ((header.category ?? "") !== e.target.value) {
@@ -251,6 +261,7 @@ export function ServiceAgreementDetailPage() {
                 className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
               />
               <input
+                disabled={!canMutate}
                 defaultValue={header.location_code ?? ""}
                 onBlur={(e) => {
                   if ((header.location_code ?? "") !== e.target.value) {
@@ -261,6 +272,7 @@ export function ServiceAgreementDetailPage() {
                 className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
               />
               <input
+                disabled={!canMutate}
                 defaultValue={header.billing_cycle ?? ""}
                 onBlur={(e) => {
                   if ((header.billing_cycle ?? "") !== e.target.value) {
@@ -271,6 +283,7 @@ export function ServiceAgreementDetailPage() {
                 className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
               />
               <input
+                disabled={!canMutate}
                 type="date"
                 defaultValue={header.starts_on ?? ""}
                 onBlur={(e) => {
@@ -281,6 +294,7 @@ export function ServiceAgreementDetailPage() {
                 className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
               />
               <input
+                disabled={!canMutate}
                 type="date"
                 defaultValue={header.expires_on ?? ""}
                 onBlur={(e) => {
@@ -294,6 +308,7 @@ export function ServiceAgreementDetailPage() {
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <input
+                disabled={!canMutate}
                 type="number"
                 defaultValue={header.term_months ?? undefined}
                 onBlur={(e) => {
@@ -306,6 +321,7 @@ export function ServiceAgreementDetailPage() {
                 className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
               />
               <input
+                disabled={!canMutate}
                 type="number"
                 defaultValue={header.included_pm_services ?? undefined}
                 onBlur={(e) => {
@@ -320,6 +336,7 @@ export function ServiceAgreementDetailPage() {
             </div>
 
             <textarea
+              disabled={!canMutate}
               defaultValue={header.coverage_summary ?? ""}
               onBlur={(e) => {
                 if ((header.coverage_summary ?? "") !== e.target.value) {
@@ -331,6 +348,7 @@ export function ServiceAgreementDetailPage() {
             />
 
             <textarea
+              disabled={!canMutate}
               defaultValue={header.notes ?? ""}
               onBlur={(e) => {
                 if ((header.notes ?? "") !== e.target.value) {
@@ -341,14 +359,16 @@ export function ServiceAgreementDetailPage() {
               className="mt-3 min-h-[110px] w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
             />
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => updateAgreement.mutate({ status: "cancelled" })}>
-                Cancel agreement
-              </Button>
-              <Button variant="outline" onClick={() => updateAgreement.mutate({ status: "active" })}>
-                Mark active
-              </Button>
-            </div>
+            {canMutate ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => updateAgreement.mutate({ status: "cancelled" })}>
+                  Cancel agreement
+                </Button>
+                <Button variant="outline" onClick={() => updateAgreement.mutate({ status: "active" })}>
+                  Mark active
+                </Button>
+              </div>
+            ) : null}
           </Card>
 
           <div className="space-y-4">

@@ -1,0 +1,93 @@
+{
+  "segment": "H9.1-service-plans-ui",
+  "agent": "release_gate_agent",
+  "timestamp": "2026-08-12T21:19:57Z",
+  "verdict": "GO",
+  "mission_alignment": {
+    "verdict": "pass",
+    "evidence": "Reviewed preventive-maintenance intent now becomes auditable equipment enrollment, schedule action, and entitlement truth for service staff while provisional catalog assumptions remain inactive, non-enrollable, and separated from recorded QEP review and later activation.",
+    "risk": "OEM/model fit, kit, labor, pricing, and commercial terms remain human-validated inputs; remote deployment remains blocked until linked Supabase migration history is reconciled."
+  },
+  "options": {
+    "ui": true,
+    "chaos": true,
+    "design_advisory": false
+  },
+  "checks": [
+    {
+      "id": "qa_agent",
+      "status": "pass",
+      "required": true,
+      "command": "bun run segment:gates --segment H9.1-service-plans-ui --ui",
+      "output": "15/15 orchestrated checks passed; 3158 unit tests and all 28 integration files passed."
+    },
+    {
+      "id": "chief_design_officer_agent",
+      "status": "pass",
+      "required": true,
+      "command": "DESIGN_REVIEW_SCOPE=service-plans bun run design:review",
+      "output": "Authenticated desktop/mobile route passed with zero accessibility violations and zero console errors."
+    },
+    {
+      "id": "testing_simulation_agent",
+      "status": "pass",
+      "required": true,
+      "command": "bun run stress:test",
+      "output": "Chaos stress suite passed."
+    },
+    {
+      "id": "security_agent",
+      "status": "pass",
+      "required": true,
+      "command": "bun run audit:secrets; scoped OWASP and RLS review",
+      "output": "SHIP: no H9.1 authz, workspace-isolation, injection, secret, or audit blocker."
+    },
+    {
+      "id": "performance_agent",
+      "status": "pass",
+      "required": true,
+      "command": "build artifact, dependency-diff, render, and query review",
+      "output": "No new dependencies or broad render/query fan-out; production build passed with no H9.1 regression evidence."
+    },
+    {
+      "id": "migration_agent",
+      "status": "pass",
+      "required": true,
+      "command": "bun run migrations:check; bun run audit:rls-initplan; bun test ./supabase/migrations/835_h91_service_plan_staff_ui_closeout.test.ts",
+      "output": "Sequence 001..835 passed, 470 post-baseline RLS migrations passed initplan audit, 835 static suite passed 4/4, and explicit rollback notes are present."
+    },
+    {
+      "id": "remote_deployment",
+      "status": "skipped",
+      "required": false,
+      "command": "supabase db push --dry-run",
+      "output": "Safety stop: linked project has remote-only timestamp migration versions. No database changes were applied and history was not repaired blindly."
+    }
+  ],
+  "summary": {
+    "total": 7,
+    "passed": 6,
+    "failed": 0,
+    "skipped": 1,
+    "blocking_failures": []
+  },
+  "findings": [
+    {
+      "severity": "P2",
+      "title": "Remote deployment blocked by migration-history drift",
+      "detail": "Reconcile the linked project's remote-only timestamp migration versions before rerunning supabase db push; do not mark applied production migrations reverted without an authoritative history audit."
+    },
+    {
+      "severity": "ADVISORY",
+      "title": "Pre-existing transitive build-tool advisories",
+      "detail": "The repo-wide dependency audit reports eight high transitive advisories in existing build/dev tooling; H9.1 changed no dependency manifest and introduced none of the affected chains."
+    }
+  ],
+  "artifacts": [
+    "test-results/agent-gates/20260812T210715Z-H9.1-service-plans-ui.json",
+    "test-results/segment-handoffs/H9.1-service-plans-ui-2026-08-12.md",
+    "test-results/design-review/service-plans-desktop.png",
+    "test-results/design-review/service-plans-mobile.png",
+    "docs/operations/H9_1_SERVICE_PLAN_STAFF_UI_HANDOFF_2026-08-12.md"
+  ]
+}

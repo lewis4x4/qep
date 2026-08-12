@@ -95,6 +95,9 @@ describe("service-plan-utils", () => {
       review_status: "draft" as const,
       is_provisional: true,
       is_active: false,
+      reviewed_by: null,
+      reviewed_at: null,
+      review_notes: null,
       intervals: [{
         id: "i1",
         program_id: "p1",
@@ -116,8 +119,21 @@ describe("service-plan-utils", () => {
       review_status: "reviewed",
       is_provisional: false,
       is_active: false,
+      reviewed_by: "manager-1",
+      reviewed_at: "2026-08-12T12:00:00.000Z",
+      review_notes: "OEM/model, kit, labor, and commercial terms confirmed.",
       intervals: draft.intervals,
     }).ready).toBe(true);
+
+    expect(getProgramActivationReadiness({
+      review_status: "reviewed",
+      is_provisional: false,
+      is_active: false,
+      reviewed_by: null,
+      reviewed_at: null,
+      review_notes: null,
+      intervals: draft.intervals,
+    }).ready).toBe(false);
   });
 
   test("reports enrollment readiness for agreement binding", () => {
@@ -147,6 +163,19 @@ describe("service-plan-utils", () => {
       programReviewed: true,
       programProvisional: false,
     }).ready).toBe(true);
+
+    const unresolvedProgram = getAgreementEnrollmentReadiness({
+      status: "active",
+      program_id: "program-1",
+      equipment_id: "eq-1",
+      starts_on: "2026-08-01",
+      expires_on: "2027-08-01",
+      enrolled_on: "2026-08-12",
+    });
+    expect(unresolvedProgram.ready).toBe(false);
+    expect(unresolvedProgram.reasons).toContain("Bound program must be active.");
+    expect(unresolvedProgram.reasons).toContain("Bound program must be reviewed.");
+    expect(unresolvedProgram.reasons).toContain("Bound program must not be provisional.");
   });
 
   test("normalizes enrollments, balances, and open prompts", () => {
@@ -217,7 +246,7 @@ describe("service-plan-utils", () => {
           service_agreement_id: "agreement-1",
           equipment_id: "eq-1",
         },
-        service_jobs: { wo_number: "SJ-100" },
+        service_jobs: { wo_number: "SJ-100", scheduled_start_at: null },
       },
       {
         id: "prompt-2",
@@ -228,12 +257,24 @@ describe("service-plan-utils", () => {
         evidence: {},
         created_at: "2026-08-11T12:00:00.000Z",
         service_plan_pm_due_events: { status: "completed" },
-        service_jobs: { tracking_token: "WO-9" },
+        service_jobs: { tracking_token: "WO-9", scheduled_start_at: null },
+      },
+      {
+        id: "prompt-3",
+        due_event_id: "due-3",
+        service_job_id: "job-3",
+        prompt_type: "advisor_schedule_pm",
+        prompt_key: "due-3",
+        evidence: {},
+        created_at: "2026-08-10T12:00:00.000Z",
+        service_plan_pm_due_events: { status: "job_created" },
+        service_jobs: { wo_number: "SJ-101", scheduled_start_at: "2026-08-13T13:00:00.000Z" },
       },
     ]);
-    expect(prompts).toHaveLength(2);
+    expect(prompts).toHaveLength(3);
     expect(isOpenSchedulePrompt(prompts[0]!)).toBe(true);
     expect(isOpenSchedulePrompt(prompts[1]!)).toBe(false);
+    expect(isOpenSchedulePrompt(prompts[2]!)).toBe(false);
     expect(prompts[0]?.job_number).toBe("SJ-100");
     expect(prompts[1]?.job_number).toBe("WO-9");
   });

@@ -120,6 +120,8 @@ describe("ServiceAgreementsPage (integration)", () => {
 
     expect(screen.getAllByText(/Premier PM/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Evergreen Farms/).length).toBeGreaterThan(0);
-    expect(screen.getByText("Service Plans")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Create" })).toBeNull();
+    expect(screen.getByText(/Read-only for your role/i)).toBeTruthy();
+    expect((screen.getByPlaceholderText("Contract number") as HTMLInputElement).disabled).toBe(true);
   });
 });

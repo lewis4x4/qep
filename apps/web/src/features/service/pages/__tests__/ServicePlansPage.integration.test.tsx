@@ -6,6 +6,7 @@ import type { PropsWithChildren } from "react";
 
 const reviewCalls: Array<Record<string, unknown>> = [];
 const activationCalls: Array<Record<string, unknown>> = [];
+const cancellationCalls: Array<Record<string, unknown>> = [];
 
 mock.module("@/hooks/useAuth", () => ({
   useAuth: () => ({
@@ -95,6 +96,7 @@ mock.module("../../lib/service-plan-api", () => ({
       service_agreement_id: "agreement-1",
       equipment_id: "eq-1",
       job_number: "WO-370",
+      scheduled_start_at: null,
     },
   ]),
   reviewServicePlanProgram: async (input: Record<string, unknown>) => {
@@ -139,7 +141,9 @@ mock.module("../../lib/service-plan-api", () => ({
       intervals: [],
     };
   },
-  cancelServicePlanPmDueEvent: async () => undefined,
+  cancelServicePlanPmDueEvent: async (input: Record<string, unknown>) => {
+    cancellationCalls.push(input);
+  },
 }));
 
 const { ServicePlansPage } = await import("../ServicePlansPage");
@@ -173,6 +177,7 @@ describe("ServicePlansPage (integration)", () => {
     expect(screen.getByText(/not customer-live/i)).toBeTruthy();
     expect(screen.getByText(/Record a QEP review with notes first/i)).toBeTruthy();
     expect(screen.getByText(/Provisional programs cannot be activated/i)).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Activate" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText("Job WO-370")).toBeTruthy();
     expect(screen.getByText(/entitlement reserved/i)).toBeTruthy();
   });
@@ -231,6 +236,39 @@ describe("ServicePlansPage (integration)", () => {
     expect(activationCalls[0]).toMatchObject({
       programId: "program-2",
       isActive: true,
+      actorId: "manager-1",
+    });
+  });
+
+  test("requires a reason and uses the controlled PM cancellation action", async () => {
+    cancellationCalls.length = 0;
+    render(
+      <Providers>
+        <ServicePlansPage />
+      </Providers>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Job WO-370")).toBeTruthy();
+    });
+
+    const cancelButton = screen.getByRole("button", { name: "Cancel due work" }) as HTMLButtonElement;
+    expect(cancelButton.disabled).toBe(true);
+
+    fireEvent.change(screen.getByPlaceholderText("Cancellation reason"), {
+      target: { value: "Customer moved service outside the coverage window." },
+    });
+    expect(cancelButton.disabled).toBe(false);
+    fireEvent.click(cancelButton);
+
+    await waitFor(() => {
+      expect(cancellationCalls.length).toBe(1);
+    });
+    expect(cancellationCalls[0]).toMatchObject({
+      workspaceId: "default",
+      dueEventId: "due-1",
+      cancellationKind: "cancelled",
+      reason: "Customer moved service outside the coverage window.",
       actorId: "manager-1",
     });
   });

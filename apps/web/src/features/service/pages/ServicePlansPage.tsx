@@ -265,12 +265,18 @@ export function ServicePlansPage() {
                     Latest review notes
                   </p>
                   <p className="mt-2 text-foreground">{selectedProgram.review_notes}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Recorded {selectedProgram.reviewed_at
+                      ? new Date(selectedProgram.reviewed_at).toLocaleString()
+                      : "without a timestamp"}
+                  </p>
                 </div>
               ) : null}
 
               {canMutate ? (
                 <div className="space-y-3">
                   <textarea
+                    aria-label="QEP review notes"
                     value={reviewNotes}
                     onChange={(e) => setReviewNotes(e.target.value)}
                     placeholder="QEP review notes (required before activation)"
@@ -279,10 +285,15 @@ export function ServicePlansPage() {
                   <div className="flex flex-wrap gap-2">
                     <Button
                       className="min-h-11"
-                      disabled={reviewMutation.isPending || selectedProgram.is_active}
+                      disabled={
+                        reviewMutation.isPending
+                        || selectedProgram.is_active
+                        || selectedProgram.review_status === "reviewed"
+                        || selectedProgram.review_status === "retired"
+                      }
                       onClick={() => reviewMutation.mutate(selectedProgram)}
                     >
-                      Record review
+                      {selectedProgram.review_status === "reviewed" ? "Review recorded" : "Record review"}
                     </Button>
                     {selectedProgram.is_active ? (
                       <Button
@@ -370,7 +381,7 @@ export function ServicePlansPage() {
                     </p>
                   </div>
                   <Link
-                    to={`/service?job=${prompt.service_job_id}`}
+                    to={`/service?job=${encodeURIComponent(prompt.service_job_id)}`}
                     className="inline-flex min-h-11 items-center rounded-xl border border-border/60 px-3 text-sm font-semibold text-primary"
                   >
                     Open job
@@ -380,6 +391,7 @@ export function ServicePlansPage() {
                 {canMutate ? (
                   <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                     <input
+                      aria-label={`Cancellation reason for ${prompt.job_number ?? "generated PM job"}`}
                       value={cancelReasonByPrompt[prompt.due_event_id] ?? ""}
                       onChange={(e) =>
                         setCancelReasonByPrompt((prev) => ({
@@ -393,7 +405,10 @@ export function ServicePlansPage() {
                     <Button
                       variant="outline"
                       className="min-h-11"
-                      disabled={cancelPromptMutation.isPending}
+                      disabled={
+                        cancelPromptMutation.isPending
+                        || !(cancelReasonByPrompt[prompt.due_event_id] ?? "").trim()
+                      }
                       onClick={() =>
                         cancelPromptMutation.mutate({
                           dueEventId: prompt.due_event_id,
