@@ -1,0 +1,414 @@
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { draftEmail, type EmailDraft } from "../_shared/draft-email.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
+import {
+  optionsResponse,
+  safeJsonError,
+  safeJsonOk,
+} from "../_shared/safe-cors.ts";
+import {
+  requireServiceUser,
+  type ServiceAuthResult,
+} from "../_shared/service-auth.ts";
+import {
+  buildRequiredVoiceGate,
+  mergeVoiceGate,
+  type VoiceComplianceGate,
+} from "../_shared/voice-compliance.ts";
+
+export interface RequoteDraftsAuth {
+  userId: string;
+  role: string;
+  workspaceId: string;
+}
+
+export interface RequoteDraftsDependencies {
+  createAdminClient: () => SupabaseClient;
+  requireServiceUser: (
+    authHeader: string | null,
+    origin: string | null,
+  ) => Promise<ServiceAuthResult>;
+  draftEmail: (ctx: Parameters<typeof draftEmail>[0]) => Promise<EmailDraft>;
+}
+
+const defaultDependencies: RequoteDraftsDependencies = {
+  createAdminClient: () =>
+    createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    ),
+  requireServiceUser,
+  draftEmail,
+};
+
+function resolveDependencies(
+  overrides: Partial<RequoteDraftsDependencies> = {},
+): RequoteDraftsDependencies {
+  return { ...defaultDependencies, ...overrides };
+}
+
+export async function handleRequoteDraftsRequest(
+  req: Request,
+  overrides: Partial<RequoteDraftsDependencies> = {},
+): Promise<Response> {
+  const deps = resolveDependencies(overrides);
+  const origin = req.headers.get("origin");
+
+  if (req.method === "OPTIONS") return optionsResponse(origin);
+
+  try {
+    const auth = await deps.requireServiceUser(
+      req.headers.get("Authorization"),
+      origin,
+    );
+    if (!auth.ok) return auth.response;
+
+    const workspaceId = auth.workspaceId;
+    const user = { id: auth.userId };
+    const supabaseAdmin = deps.createAdminClient();
+
+    const url = new URL(req.url);
+    const action = url.pathname.split("/").pop() || "";
+
+    if (req.method === "GET" && action === "impact") {
+      const { data, error } = await supabaseAdmin
+        .from("price_change_impact")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .order("price_delta_total", { ascending: false, nullsFirst: false });
+
+      if (error) {
+        console.error("price_change_impact error:", error);
+        return safeJsonError("Failed to load impact analysis", 500, origin);
+      }
+
+      const rows = (data ?? []) as Array<Record<string, unknown>>;
+      const totalQuotes = rows.length;
+      const totalDealsAffected = new Set(rows.map((r) => r.deal_id).filter(Boolean))
+        .size;
+      const totalDollarExposure = rows.reduce(
+        (sum, r) => sum + (Number(r.price_delta_total) || 0),
+        0,
+      );
+
+      return safeJsonOk({
+        summary: {
+          total_quotes_affected: totalQuotes,
+          total_deals_affected: totalDealsAffected,
+          total_dollar_exposure: Math.round(totalDollarExposure * 100) / 100,
+        },
+        impact_items: rows.slice(0, 100),
+      }, origin);
+    }
+
+    if (req.method === "POST" && action === "draft") {
+      const body = await req.json();
+      if (!body.quote_package_id) {
+        return safeJsonError("quote_package_id required", 400, origin);
+      }
+
+      const { data: quote, error: quoteErr } = await supabaseAdmin
+        .from("quote_packages")
+        .select("*")
+        .eq("id", body.quote_package_id)
+        .eq("workspace_id", workspaceId)
+        .maybeSingle();
+
+      if (quoteErr || !quote) {
+        return safeJsonError("Quote not found", 404, origin);
+      }
+
+      const { data: impactRows } = await supabaseAdmin
+        .from("price_change_impact")
+        .select("*")
+        .eq("quote_package_id", body.quote_package_id)
+        .eq("workspace_id", workspaceId);
+
+      const impactRowsArr = (impactRows ?? []) as Array<Record<string, unknown>>;
+      if (impactRowsArr.length === 0) {
+        return safeJsonError("No price changes affecting this quote", 400, origin);
+      }
+
+      const manufacturers = [...new Set(impactRowsArr.map((r) => r.make).filter(Boolean))]
+        .join(", ");
+      const effectiveDate = impactRowsArr[0]?.price_changed_at
+        ? new Date(String(impactRowsArr[0].price_changed_at)).toISOString().split("T")[0]
+        : new Date().toISOString().split("T")[0];
+      const totalDelta = impactRowsArr.reduce(
+        (sum: number, r) => sum + (Number(r.price_delta_total) || 0),
+        0,
+      );
+
+      let customerName = "Customer";
+      let repName: string | undefined;
+      if (quote.deal_id) {
+        const { data: deal } = await supabaseAdmin
+          .from("crm_deals")
+          .select("name, primary_contact_id, assigned_rep_id, crm_contacts(first_name, last_name)")
+          .eq("id", quote.deal_id)
+          .eq("workspace_id", workspaceId)
+          .maybeSingle();
+        if (deal) {
+          const contact = Array.isArray((deal as Record<string, unknown>).crm_contacts)
+            ? ((deal as { crm_contacts: Array<{ first_name?: string; last_name?: string }> })
+              .crm_contacts[0])
+            : ((deal as { crm_contacts?: { first_name?: string; last_name?: string } })
+              .crm_contacts);
+          if (contact) {
+            customerName = `${contact.first_name || ""} ${contact.last_name || ""}`.trim() ||
+              customerName;
+          }
+          if ((deal as { assigned_rep_id?: string }).assigned_rep_id) {
+            const { data: rep } = await supabaseAdmin
+              .from("profiles")
+              .select("full_name")
+              .eq("id", (deal as { assigned_rep_id: string }).assigned_rep_id)
+              .maybeSingle();
+            repName = (rep as { full_name?: string })?.full_name?.split(" ")[0];
+          }
+        }
+      }
+
+      const emailDraft = await deps.draftEmail({
+        purpose: "requote",
+        customer_name: customerName,
+        rep_name: repName,
+        manufacturer: manufacturers || undefined,
+        effective_date: effectiveDate,
+        deal_value: Number(quote.net_total) || undefined,
+        extra_context: {
+          price_delta_total: totalDelta,
+          line_items_affected: impactRowsArr.length,
+        },
+      });
+
+      const voiceCompliance = emailDraft.ai_generated
+        ? buildRequiredVoiceGate("requote-drafts")
+        : null;
+      const draftContext = {
+        quote_package_id: body.quote_package_id,
+        manufacturers,
+        effective_date: effectiveDate,
+        price_delta_total: totalDelta,
+        impact_items: impactRowsArr.length,
+        ai_generated: emailDraft.ai_generated,
+      };
+
+      const { data: draftRow, error: draftErr } = await supabaseAdmin
+        .from("email_drafts")
+        .insert({
+          workspace_id: workspaceId,
+          scenario: "requote",
+          tone: emailDraft.tone === "urgent" ? "urgent" : "consultative",
+          deal_id: quote.deal_id,
+          contact_id: quote.contact_id,
+          subject: emailDraft.subject,
+          body: emailDraft.body,
+          preview: emailDraft.body.substring(0, 140),
+          urgency_score: totalDelta > 0 ? Math.min(1.0, totalDelta / 10000) : 0.3,
+          context: voiceCompliance?.required === true
+            ? mergeVoiceGate(draftContext, voiceCompliance)
+            : draftContext,
+          status: "pending",
+          created_by: user.id,
+        })
+        .select("id")
+        .maybeSingle();
+
+      if (draftErr) {
+        console.error("email_drafts insert error:", draftErr);
+      }
+
+      if (draftRow) {
+        await supabaseAdmin
+          .from("quote_packages")
+          .update({
+            requote_draft_email_id: draftRow.id,
+            requires_requote: true,
+            requote_reason: `Auto-generated requote draft (${manufacturers} price change)`,
+          })
+          .eq("id", body.quote_package_id)
+          .eq("workspace_id", workspaceId);
+      }
+
+      return safeJsonOk({
+        ok: true,
+        email_draft: {
+          id: draftRow?.id,
+          subject: emailDraft.subject,
+          body: emailDraft.body,
+          tone: emailDraft.tone,
+          ai_generated: emailDraft.ai_generated,
+          voice_compliance: voiceCompliance,
+        },
+        impact: {
+          line_items_affected: impactRowsArr.length,
+          total_dollar_delta: Math.round(totalDelta * 100) / 100,
+          manufacturers,
+          effective_date: effectiveDate,
+        },
+      }, origin);
+    }
+
+    if (req.method === "POST" && action === "batch") {
+      const body = await req.json().catch(() => ({}));
+      const ids: string[] = Array.isArray(body.quote_package_ids)
+        ? body.quote_package_ids
+        : [];
+      if (ids.length === 0) {
+        return safeJsonError("quote_package_ids[] required", 400, origin);
+      }
+      if (ids.length > 50) {
+        return safeJsonError("Max 50 quotes per batch", 400, origin);
+      }
+
+      const results: Array<{
+        quote_package_id: string;
+        draft_id: string | null;
+        voice_compliance?: VoiceComplianceGate | null;
+        error?: string;
+      }> = [];
+
+      for (const quoteId of ids) {
+        try {
+          const { data: quote } = await supabaseAdmin
+            .from("quote_packages")
+            .select("*")
+            .eq("id", quoteId)
+            .eq("workspace_id", workspaceId)
+            .maybeSingle();
+          if (!quote) {
+            results.push({ quote_package_id: quoteId, draft_id: null, error: "quote not found" });
+            continue;
+          }
+
+          const { data: impactRows } = await supabaseAdmin
+            .from("price_change_impact")
+            .select("*")
+            .eq("quote_package_id", quoteId)
+            .eq("workspace_id", workspaceId);
+          const rowsArr = (impactRows ?? []) as Array<Record<string, unknown>>;
+          if (rowsArr.length === 0) {
+            results.push({ quote_package_id: quoteId, draft_id: null, error: "no price changes" });
+            continue;
+          }
+
+          const manufacturers = [...new Set(rowsArr.map((r) => r.make).filter(Boolean))].join(", ");
+          const effectiveDate = rowsArr[0]?.price_changed_at
+            ? new Date(String(rowsArr[0].price_changed_at)).toISOString().split("T")[0]
+            : new Date().toISOString().split("T")[0];
+          const totalDelta = rowsArr.reduce(
+            (sum: number, r) => sum + (Number(r.price_delta_total) || 0),
+            0,
+          );
+
+          let customerName = "Customer";
+          if (quote.deal_id) {
+            const { data: deal } = await supabaseAdmin
+              .from("crm_deals")
+              .select("name, primary_contact_id, crm_contacts(first_name, last_name)")
+              .eq("id", quote.deal_id)
+              .eq("workspace_id", workspaceId)
+              .maybeSingle();
+            if (deal) {
+              const contact = Array.isArray((deal as Record<string, unknown>).crm_contacts)
+                ? ((deal as { crm_contacts: Array<{ first_name?: string; last_name?: string }> })
+                  .crm_contacts[0])
+                : ((deal as { crm_contacts?: { first_name?: string; last_name?: string } })
+                  .crm_contacts);
+              if (contact) {
+                customerName = `${contact.first_name || ""} ${contact.last_name || ""}`.trim() ||
+                  customerName;
+              }
+            }
+          }
+
+          const emailDraft = await deps.draftEmail({
+            purpose: "requote",
+            customer_name: customerName,
+            manufacturer: manufacturers || undefined,
+            effective_date: effectiveDate,
+            deal_value: Number(quote.net_total) || undefined,
+            extra_context: {
+              price_delta_total: totalDelta,
+              line_items_affected: rowsArr.length,
+            },
+          });
+
+          const voiceCompliance = emailDraft.ai_generated
+            ? buildRequiredVoiceGate("requote-drafts")
+            : null;
+          const draftContext = {
+            quote_package_id: quoteId,
+            manufacturers,
+            effective_date: effectiveDate,
+            price_delta_total: totalDelta,
+            batch: true,
+            ai_generated: emailDraft.ai_generated,
+          };
+
+          const { data: draftRow, error: draftErr } = await supabaseAdmin
+            .from("email_drafts")
+            .insert({
+              workspace_id: workspaceId,
+              scenario: "requote",
+              tone: emailDraft.tone === "urgent" ? "urgent" : "consultative",
+              deal_id: quote.deal_id,
+              contact_id: quote.contact_id,
+              subject: emailDraft.subject,
+              body: emailDraft.body,
+              preview: emailDraft.body.substring(0, 140),
+              urgency_score: totalDelta > 0 ? Math.min(1.0, totalDelta / 10000) : 0.3,
+              context: voiceCompliance?.required === true
+                ? mergeVoiceGate(draftContext, voiceCompliance)
+                : draftContext,
+              status: "pending",
+              created_by: user.id,
+            })
+            .select("id")
+            .maybeSingle();
+
+          if (draftErr || !draftRow) {
+            results.push({ quote_package_id: quoteId, draft_id: null, error: "draft insert failed" });
+            continue;
+          }
+
+          await supabaseAdmin
+            .from("quote_packages")
+            .update({
+              requote_draft_email_id: draftRow.id,
+              requires_requote: true,
+              requote_reason: `Batch requote draft (${manufacturers} price change)`,
+            })
+            .eq("id", quoteId)
+            .eq("workspace_id", workspaceId);
+
+          results.push({
+            quote_package_id: quoteId,
+            draft_id: draftRow.id,
+            voice_compliance: voiceCompliance,
+          });
+        } catch (err) {
+          results.push({
+            quote_package_id: quoteId,
+            draft_id: null,
+            error: err instanceof Error ? err.message : "unknown error",
+          });
+        }
+      }
+
+      return safeJsonOk({
+        ok: true,
+        generated: results.filter((r) => r.draft_id).length,
+        failed: results.filter((r) => !r.draft_id).length,
+        results,
+      }, origin, 201);
+    }
+
+    return safeJsonError("Not found", 404, origin);
+  } catch (err) {
+    captureEdgeException(err, { fn: "requote-drafts", req });
+    console.error("requote-drafts error:", err);
+    return safeJsonError("Internal server error", 500, req.headers.get("origin"));
+  }
+}
