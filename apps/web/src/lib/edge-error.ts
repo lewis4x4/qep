@@ -18,6 +18,46 @@ export interface EdgeInvokeError {
   context?: Response;
 }
 
+function extractClientErrorMessage(error: unknown): string | null {
+  if (typeof error === "string") return error.trim() || null;
+  if (error instanceof Error) return error.message.trim() || null;
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string") return message.trim() || null;
+  }
+  return null;
+}
+
+/**
+ * Sanitize Supabase client / PostgREST / Postgres errors before showing them
+ * in operator-facing UI. Never surfaces raw `permission denied for table …`
+ * or other internal database copy.
+ */
+export function sanitizeClientError(
+  error: unknown,
+  fallback: string,
+): string {
+  const raw = extractClientErrorMessage(error);
+  if (!raw) return fallback;
+
+  const lc = raw.toLowerCase();
+  if (
+    lc.includes("permission denied") ||
+    lc.includes("42501") ||
+    lc.includes("row-level security") ||
+    lc.includes("new row violates row-level security") ||
+    lc.includes("for table ") ||
+    lc.includes("for column ") ||
+    lc.includes("relation ") ||
+    lc.includes("pgrst") ||
+    lc.includes("postgres")
+  ) {
+    return fallback;
+  }
+
+  return fallback;
+}
+
 export async function explainInvokeError(
   error: EdgeInvokeError | null | undefined,
   fallback: string,

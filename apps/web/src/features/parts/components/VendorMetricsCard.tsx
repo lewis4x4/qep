@@ -1,9 +1,12 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { sanitizeClientError } from "@/lib/edge-error";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { normalizeVendorMetricsRows } from "../lib/parts-row-normalizers";
+
+const VENDOR_METRICS_UNAVAILABLE = "Vendor metrics unavailable.";
 
 const RESPONSIVENESS_THRESHOLD = 0.4;
 
@@ -90,8 +93,11 @@ export function VendorMetricsCard() {
   }
   if (vendorsQ.isError) {
     return (
-      <Card className="p-4 text-sm text-destructive border-destructive/40" role="alert">
-        {(vendorsQ.error as Error)?.message ?? "Vendor metrics failed to load."}
+      <Card className="p-4 space-y-1 border-muted" role="status">
+        <h2 className="text-sm font-medium text-muted-foreground">Vendor scorecard</h2>
+        <p className="text-sm text-muted-foreground">
+          {sanitizeClientError(vendorsQ.error, VENDOR_METRICS_UNAVAILABLE)}
+        </p>
       </Card>
     );
   }
