@@ -71,6 +71,7 @@ const IRON_DEPARTMENT_OPTIONS: { value: string; label: string }[] = [
   { value: "iron_advisor", label: "Sales" },
   { value: "iron_parts_counter", label: "Parts Counter" },
   { value: "iron_parts_manager", label: "Parts Manager" },
+  { value: "iron_woman", label: "Deal Desk" },
   { value: "iron_man", label: "Service" },
   { value: "iron_manager", label: "Management" },
 ];

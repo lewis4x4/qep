@@ -49,6 +49,7 @@ import {
   Factory,
 } from "lucide-react";
 import type { UserRole } from "@/lib/database.types";
+import { resolveOperatorNavRole } from "@/lib/home-route";
 
 export type AppNavRole = UserRole | "service_writer" | "technician" | "parts_counter" | "dispatch" | "finance_admin" | string;
 export type PrimaryHeaderId = "sales" | "parts" | "service" | "workforce" | "rentals" | "qrm";
@@ -840,8 +841,9 @@ export function resolveRoleScopedNavItems(
   role: string,
   ironRole?: string | null,
 ): NavItem[] {
+  const navRole = resolveOperatorNavRole(role, ironRole);
   return resolveNavItems(quoteBuilderEnabled, quoteBuilderLoading)
-    .filter((item) => item.roles.includes(role))
+    .filter((item) => item.roles.includes(navRole))
     .filter((item) => isNavItemVisibleForIronRole(item, ironRole));
 }
 

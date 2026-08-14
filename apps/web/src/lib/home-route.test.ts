@@ -22,7 +22,15 @@ describe("resolveHomeRoute", () => {
     expect(resolveHomeRoute("rep", "iron_woman")).toBe("/sales/today");
     expect(resolveHomeRoute("rep", "iron_man")).toBe("/sales/today");
     expect(resolveHomeRoute("owner", "iron_owner")).toBe("/owner");
+    expect(resolveHomeRoute("owner", "iron_parts_counter")).toBe("/owner");
     expect(resolveHomeRoute("manager", "iron_parts_manager")).toBe("/qrm");
+  });
+
+  test("routes rep invites with parts iron roles to the parts operational home", () => {
+    expect(resolveHomeRoute("rep", "iron_parts_counter")).toBe("/parts/companion/queue");
+    expect(resolveHomeRoute("rep", "iron_parts_manager")).toBe("/parts/companion/queue");
+    expect(resolveHomeRoute("rep")).toBe("/sales/today");
+    expect(resolveHomeRoute("rep", null)).toBe("/sales/today");
   });
 
   test("falls back to /floor only for non-core roles with floor mode/iron assignment", () => {

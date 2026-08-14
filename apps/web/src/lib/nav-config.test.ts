@@ -120,6 +120,17 @@ describe("nav-config", () => {
     expect(serviceWriterHrefs).not.toContain("/service/branches");
     expect(serviceWriterHrefs).not.toContain("/service/scheduler-health");
   });
+
+  test("rep with iron_parts_counter sees operator-safe Parts nav", () => {
+    const partsCounterHrefs = resolvePrimaryNavGroups(false, false, "rep", "iron_parts_counter")
+      .find((group) => group.id === "parts")
+      ?.sections.flatMap((section) => section.items.map((item) => item.href));
+
+    expect(partsCounterHrefs).toContain("/parts");
+    expect(partsCounterHrefs).toContain("/parts/orders");
+    expect(partsCounterHrefs).not.toContain("/parts/forecast");
+    expect(partsCounterHrefs).not.toContain("/parts/vendors");
+  });
 });
 
 describe("nav-config — WAVE phase 6 Sales dropdown wiring", () => {
