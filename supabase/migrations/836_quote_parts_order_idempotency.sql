@@ -1,5 +1,5 @@
 -- ============================================================================
--- Migration 835: RF-001 idempotency hardening — one parts order per accepted quote
+-- Migration 836: RF-001 idempotency hardening — one parts order per accepted quote
 --
 -- N2.1 materializes accepted quote part lines into parts_orders via
 -- quote_package_id. Application-level probes already guard replays; this
