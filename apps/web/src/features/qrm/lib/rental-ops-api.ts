@@ -189,6 +189,55 @@ export const rentalOpsApi = {
     rentalOpsFetch({ action: "set_contract_commissions", ...data }) as Promise<{
       commissions: Array<{ salesperson_id: string; split_pct: number; role: string | null }>;
     }>,
+  /** L12.1: activate the ledger from durable AR or signature-verified Stripe evidence. */
+  activatePaidInvoiceCommission: (data: {
+    rental_invoice_id: string;
+    payment_source_kind: "customer_payment_application" | "stripe_payment_intent";
+    payment_source_id: string;
+  }) => rentalOpsFetch({ action: "activate_paid_invoice_commission", ...data }),
+  /** L12.1: approved customer rent refund/credit; cents exclude tax and non-rent charges. */
+  recordRentRefundCredit: (data: {
+    rental_invoice_id: string;
+    refunded_rent_cents: number;
+    refund_kind: "credit_memo" | "goodwill_refund" | "cash_refund" | "other_rent_refund";
+    idempotency_key: string;
+    source_reference: string;
+    reason: string;
+  }) => rentalOpsFetch({ action: "record_rent_refund_credit", ...data }),
+  /** L12.1: correction is a negative, approved adjustment tied to the paid source it corrects. */
+  recordCommissionCorrection: (data: {
+    rental_invoice_id: string;
+    refunded_rent_cents: number;
+    idempotency_key: string;
+    source_reference: string;
+    corrects_source_event_key: string;
+    reason: string;
+  }) => rentalOpsFetch({ action: "record_commission_correction", ...data }),
+  /** L12.1: freeze negotiated credit and post the conversion commission in one approval boundary. */
+  approveConversionCommission: (data: {
+    qb_deal_id: string;
+    equipment_id: string;
+    negotiated_rent_credit_cents: number;
+    idempotency_key: string;
+    approval_reason: string;
+  }) => rentalOpsFetch({ action: "approve_conversion_commission", ...data }),
+  /** L12.1: stage historical payroll evidence; a different approver must post it. */
+  stageLegacyPayrollCommission: (data: {
+    contract_id: string;
+    equipment_id: string;
+    salesperson_id: string;
+    rental_contract_commission_id: string;
+    rent_basis_cents: number;
+    paid_at: string;
+    payroll_reference: string;
+    source_document_reference: string;
+    idempotency_key: string;
+    notes?: string | null;
+  }) => rentalOpsFetch({ action: "stage_legacy_payroll_commission", ...data }),
+  approveLegacyPayrollCommission: (data: {
+    import_id: string;
+    approval_reason: string;
+  }) => rentalOpsFetch({ action: "approve_legacy_payroll_commission", ...data }),
   /** L9.3: RPO conversion — creates (or returns) the deal for this contract. */
   convertRpoToDeal: (data: { contract_id: string }) =>
     rentalOpsFetch({ action: "convert_rpo_to_deal", ...data }) as Promise<{

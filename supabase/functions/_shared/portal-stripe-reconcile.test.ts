@@ -4,11 +4,13 @@ import { reconcileSucceededPayment } from "./portal-stripe-reconcile.ts";
 function createMockSupabase(options: {
   paymentIntent?: Record<string, unknown> | null;
   invoice?: Record<string, unknown> | null;
+  rentalInvoice?: Record<string, unknown> | null;
   deposit?: Record<string, unknown> | null;
   deal?: Record<string, unknown> | null;
   customerProfile?: Record<string, unknown> | null;
   recomputeError?: { message: string } | null;
   receiptError?: { message: string; code?: string } | null;
+  commissionError?: { message: string; code?: string } | null;
   exceptionInsertError?: { message: string; code?: string } | null;
   updateErrors?: Record<string, { message: string; code?: string } | null>;
 }) {
@@ -51,6 +53,9 @@ function createMockSupabase(options: {
                   }
                   if (table === "customer_invoices") {
                     return { data: options.invoice ?? null, error: null };
+                  }
+                  if (table === "rental_invoices") {
+                    return { data: options.rentalInvoice ?? null, error: null };
                   }
                   if (table === "deposits") {
                     return { data: options.deposit ?? null, error: null };
@@ -102,6 +107,8 @@ function createMockSupabase(options: {
       return Promise.resolve({
         error: fn === "record_sale_deposit_receipt"
           ? options.receiptError ?? null
+          : fn === "rental_activate_paid_invoice_commission"
+          ? options.commissionError ?? null
           : options.recomputeError ?? null,
       });
     },
@@ -249,6 +256,88 @@ Deno.test("reconcileSucceededPayment blocks underpaid invoice application", asyn
     (paymentIntentUpdate?.args?.metadata as Record<string, unknown>)
       ?.invoice_payment_blocked_reason,
     "amount_below_invoice_balance",
+  );
+});
+
+Deno.test("reconcileSucceededPayment activates a mapped rental commission from verified Stripe evidence", async () => {
+  const supabase = createMockSupabase({
+    paymentIntent: {
+      id: "intent-row-rental",
+      workspace_id: "workspace-1",
+      company_id: "company-1",
+      invoice_id: "invoice-rental",
+      amount_cents: 10000,
+      stripe_payment_intent_id: "pi_rental",
+      metadata: {},
+    },
+    invoice: {
+      id: "invoice-rental",
+      workspace_id: "workspace-1",
+      total: 100,
+      amount_paid: 0,
+      status: "sent",
+      paid_at: null,
+      payment_reference: null,
+      crm_company_id: "company-1",
+    },
+    rentalInvoice: { id: "rental-invoice-1" },
+  });
+
+  await reconcileSucceededPayment({
+    supabaseAdmin: supabase as never,
+    eventId: "evt_rental",
+    stripePaymentIntentId: "pi_rental",
+    checkoutSessionId: null,
+    fallbackAmountCents: null,
+  });
+
+  const activation = supabase.calls.find((call) =>
+    call.type === "rpc" && call.args?.fn === "rental_activate_paid_invoice_commission"
+  );
+  assertEquals(activation?.args, {
+    fn: "rental_activate_paid_invoice_commission",
+    p_workspace_id: "workspace-1",
+    p_rental_invoice_id: "rental-invoice-1",
+    p_payment_source_kind: "stripe_payment_intent",
+    p_payment_source_id: "intent-row-rental",
+    p_actor_id: null,
+  });
+});
+
+Deno.test("reconcileSucceededPayment fails closed when mapped rental commission activation fails", async () => {
+  const supabase = createMockSupabase({
+    paymentIntent: {
+      id: "intent-row-rental",
+      workspace_id: "workspace-1",
+      company_id: "company-1",
+      invoice_id: "invoice-rental",
+      amount_cents: 10000,
+      stripe_payment_intent_id: "pi_rental",
+      metadata: {},
+    },
+    invoice: {
+      id: "invoice-rental",
+      workspace_id: "workspace-1",
+      total: 100,
+      amount_paid: 0,
+      status: "sent",
+      paid_at: null,
+      payment_reference: null,
+      crm_company_id: "company-1",
+    },
+    rentalInvoice: { id: "rental-invoice-1" },
+    commissionError: { message: "commission split is missing" },
+  });
+
+  await assertRejectsWith(
+    () => reconcileSucceededPayment({
+      supabaseAdmin: supabase as never,
+      eventId: "evt_rental",
+      stripePaymentIntentId: "pi_rental",
+      checkoutSessionId: null,
+      fallbackAmountCents: null,
+    }),
+    "failed to activate rental commission from Stripe payment",
   );
 });
 

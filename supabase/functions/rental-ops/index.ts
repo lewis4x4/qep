@@ -155,6 +155,62 @@ type SetContractCommissionsPayload = {
   }>;
 };
 
+type ActivatePaidInvoiceCommissionPayload = {
+  action: "activate_paid_invoice_commission";
+  rental_invoice_id?: string;
+  payment_source_kind?: "customer_payment_application" | "stripe_payment_intent";
+  payment_source_id?: string;
+};
+
+type RecordRentRefundCreditPayload = {
+  action: "record_rent_refund_credit";
+  rental_invoice_id?: string;
+  refunded_rent_cents?: number | string;
+  refund_kind?: "credit_memo" | "goodwill_refund" | "cash_refund" | "other_rent_refund";
+  idempotency_key?: string;
+  source_reference?: string;
+  reason?: string;
+};
+
+type RecordCommissionCorrectionPayload = {
+  action: "record_commission_correction";
+  rental_invoice_id?: string;
+  refunded_rent_cents?: number | string;
+  idempotency_key?: string;
+  source_reference?: string;
+  corrects_source_event_key?: string;
+  reason?: string;
+};
+
+type ApproveConversionCommissionPayload = {
+  action: "approve_conversion_commission";
+  qb_deal_id?: string;
+  equipment_id?: string;
+  negotiated_rent_credit_cents?: number | string;
+  idempotency_key?: string;
+  approval_reason?: string;
+};
+
+type StageLegacyPayrollCommissionPayload = {
+  action: "stage_legacy_payroll_commission";
+  contract_id?: string;
+  equipment_id?: string;
+  salesperson_id?: string;
+  rental_contract_commission_id?: string;
+  rent_basis_cents?: number | string;
+  paid_at?: string;
+  payroll_reference?: string;
+  source_document_reference?: string;
+  idempotency_key?: string;
+  notes?: string | null;
+};
+
+type ApproveLegacyPayrollCommissionPayload = {
+  action: "approve_legacy_payroll_commission";
+  import_id?: string;
+  approval_reason?: string;
+};
+
 type StartCheckoutInspectionPayload = {
   action: "start_checkout_inspection";
   contract_id?: string;
@@ -300,6 +356,12 @@ type RentalOpsPayload =
   | UpsertJobsiteGeofencePayload
   | ListContractCommissionsPayload
   | SetContractCommissionsPayload
+  | ActivatePaidInvoiceCommissionPayload
+  | RecordRentRefundCreditPayload
+  | RecordCommissionCorrectionPayload
+  | ApproveConversionCommissionPayload
+  | StageLegacyPayrollCommissionPayload
+  | ApproveLegacyPayrollCommissionPayload
   | CheckOutContractPayload;
 
 const RENTAL_CHECKOUT_TEMPLATE = {
@@ -378,6 +440,28 @@ function toCurrencyAmount(value: number | string | null | undefined): number {
   const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : 0;
   if (!Number.isFinite(parsed) || parsed < 0) return 0;
   return Math.round(parsed * 100) / 100;
+}
+
+function toRequiredCents(value: number | string | null | undefined): number | null {
+  const parsed = typeof value === "number"
+    ? value
+    : typeof value === "string" && value.trim()
+    ? Number(value)
+    : NaN;
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function toNonnegativeCents(value: number | string | null | undefined): number | null {
+  const parsed = typeof value === "number"
+    ? value
+    : typeof value === "string" && value.trim()
+    ? Number(value)
+    : NaN;
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function trimmed(value: string | null | undefined): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function requireServiceRoleEnv(origin: string | null) {
@@ -787,6 +871,183 @@ Deno.serve(async (req) => {
       );
       if (setError) return safeJsonError(setError.message, 400, origin);
       return safeJsonOk({ commissions: saved ?? [] }, origin);
+    }
+
+    if (body.action === "activate_paid_invoice_commission") {
+      if (!["finance_admin", "manager", "admin", "owner"].includes(auth.role)) {
+        return safeJsonError("Rental commission activation requires finance or manager approval", 403, origin);
+      }
+      const rentalInvoiceId = trimmed(body.rental_invoice_id);
+      const paymentSourceId = trimmed(body.payment_source_id);
+      if (!rentalInvoiceId || !paymentSourceId ||
+        !["customer_payment_application", "stripe_payment_intent"].includes(body.payment_source_kind ?? "")) {
+        return safeJsonError(
+          "rental_invoice_id, canonical payment_source_kind, and payment_source_id required",
+          400,
+          origin,
+        );
+      }
+      const { data, error } = await admin.rpc("rental_activate_paid_invoice_commission", {
+        p_workspace_id: workspaceId,
+        p_rental_invoice_id: rentalInvoiceId,
+        p_payment_source_kind: body.payment_source_kind,
+        p_payment_source_id: paymentSourceId,
+        p_actor_id: auth.userId,
+      });
+      if (error) return safeJsonError(error.message, 400, origin);
+      return safeJsonOk({ commission_entries: data ?? [] }, origin);
+    }
+
+    if (body.action === "record_rent_refund_credit") {
+      if (!["finance_admin", "manager", "admin", "owner"].includes(auth.role)) {
+        return safeJsonError("Rental refund commission changes require finance or manager approval", 403, origin);
+      }
+      const rentalInvoiceId = trimmed(body.rental_invoice_id);
+      const refundedRentCents = toRequiredCents(body.refunded_rent_cents);
+      const idempotencyKey = trimmed(body.idempotency_key);
+      const sourceReference = trimmed(body.source_reference);
+      const reason = trimmed(body.reason);
+      if (!rentalInvoiceId || refundedRentCents == null || !idempotencyKey || !sourceReference || !reason ||
+        !["credit_memo", "goodwill_refund", "cash_refund", "other_rent_refund"].includes(body.refund_kind ?? "")) {
+        return safeJsonError(
+          "rental_invoice_id, positive refunded_rent_cents, supported refund_kind, idempotency_key, source_reference, and reason required",
+          400,
+          origin,
+        );
+      }
+      const { data, error } = await admin.rpc("rental_record_approved_rent_adjustment", {
+        p_workspace_id: workspaceId,
+        p_rental_invoice_id: rentalInvoiceId,
+        p_refunded_rent_cents: refundedRentCents,
+        p_source_kind: body.refund_kind,
+        p_idempotency_key: idempotencyKey,
+        p_source_reference: sourceReference,
+        p_reason: reason,
+        p_corrects_source_event_key: null,
+        p_actor_id: auth.userId,
+      });
+      if (error) return safeJsonError(error.message, 400, origin);
+      return safeJsonOk({ adjustment: data }, origin);
+    }
+
+    if (body.action === "record_commission_correction") {
+      if (!["finance_admin", "manager", "admin", "owner"].includes(auth.role)) {
+        return safeJsonError("Rental commission corrections require finance or manager approval", 403, origin);
+      }
+      const rentalInvoiceId = trimmed(body.rental_invoice_id);
+      const refundedRentCents = toRequiredCents(body.refunded_rent_cents);
+      const idempotencyKey = trimmed(body.idempotency_key);
+      const sourceReference = trimmed(body.source_reference);
+      const correctsSourceEventKey = trimmed(body.corrects_source_event_key);
+      const reason = trimmed(body.reason);
+      if (!rentalInvoiceId || refundedRentCents == null || !idempotencyKey || !sourceReference ||
+        !correctsSourceEventKey || !reason) {
+        return safeJsonError(
+          "rental_invoice_id, positive refunded_rent_cents, idempotency_key, source_reference, corrects_source_event_key, and reason required",
+          400,
+          origin,
+        );
+      }
+      const { data, error } = await admin.rpc("rental_record_approved_rent_adjustment", {
+        p_workspace_id: workspaceId,
+        p_rental_invoice_id: rentalInvoiceId,
+        p_refunded_rent_cents: refundedRentCents,
+        p_source_kind: "correction",
+        p_idempotency_key: idempotencyKey,
+        p_source_reference: sourceReference,
+        p_reason: reason,
+        p_corrects_source_event_key: correctsSourceEventKey,
+        p_actor_id: auth.userId,
+      });
+      if (error) return safeJsonError(error.message, 400, origin);
+      return safeJsonOk({ correction: data }, origin);
+    }
+
+    if (body.action === "approve_conversion_commission") {
+      if (!["manager", "admin", "owner"].includes(auth.role)) {
+        return safeJsonError("Conversion commission approval requires manager or owner", 403, origin);
+      }
+      const qbDealId = trimmed(body.qb_deal_id);
+      const equipmentId = trimmed(body.equipment_id);
+      const negotiatedCreditCents = toNonnegativeCents(body.negotiated_rent_credit_cents);
+      const idempotencyKey = trimmed(body.idempotency_key);
+      const approvalReason = trimmed(body.approval_reason);
+      if (!qbDealId || !equipmentId || negotiatedCreditCents == null || !idempotencyKey || !approvalReason) {
+        return safeJsonError(
+          "qb_deal_id, equipment_id, nonnegative negotiated_rent_credit_cents, idempotency_key, and approval_reason required",
+          400,
+          origin,
+        );
+      }
+      const { data, error } = await admin.rpc("rental_approve_conversion_commission", {
+        p_workspace_id: workspaceId,
+        p_qb_deal_id: qbDealId,
+        p_equipment_id: equipmentId,
+        p_negotiated_rent_credit_cents: negotiatedCreditCents,
+        p_idempotency_key: idempotencyKey,
+        p_actor_id: auth.userId,
+        p_approval_reason: approvalReason,
+      });
+      if (error) return safeJsonError(error.message, 400, origin);
+      return safeJsonOk({ settlement: data }, origin);
+    }
+
+    if (body.action === "stage_legacy_payroll_commission") {
+      if (!["finance_admin", "admin", "owner"].includes(auth.role)) {
+        return safeJsonError("Legacy rental payroll staging requires finance or owner access", 403, origin);
+      }
+      const contractId = trimmed(body.contract_id);
+      const equipmentId = trimmed(body.equipment_id);
+      const salespersonId = trimmed(body.salesperson_id);
+      const splitId = trimmed(body.rental_contract_commission_id);
+      const rentBasisCents = toRequiredCents(body.rent_basis_cents);
+      const paidAt = trimmed(body.paid_at);
+      const payrollReference = trimmed(body.payroll_reference);
+      const sourceDocumentReference = trimmed(body.source_document_reference);
+      const idempotencyKey = trimmed(body.idempotency_key);
+      if (!contractId || !equipmentId || !salespersonId || !splitId || rentBasisCents == null || !paidAt ||
+        !payrollReference || !sourceDocumentReference || !idempotencyKey) {
+        return safeJsonError(
+          "contract, unit, payee split, positive rent basis, paid_at, payroll/source references, and idempotency_key required",
+          400,
+          origin,
+        );
+      }
+      const { data, error } = await admin.rpc("rental_stage_legacy_payroll_commission", {
+        p_workspace_id: workspaceId,
+        p_contract_id: contractId,
+        p_equipment_id: equipmentId,
+        p_salesperson_id: salespersonId,
+        p_rental_contract_commission_id: splitId,
+        p_rent_basis_cents: rentBasisCents,
+        p_paid_at: paidAt,
+        p_payroll_reference: payrollReference,
+        p_source_document_reference: sourceDocumentReference,
+        p_idempotency_key: idempotencyKey,
+        p_staged_by: auth.userId,
+        p_notes: trimmed(body.notes),
+      });
+      if (error) return safeJsonError(error.message, 400, origin);
+      return safeJsonOk({ import: data }, origin);
+    }
+
+    if (body.action === "approve_legacy_payroll_commission") {
+      if (!["finance_admin", "admin", "owner"].includes(auth.role)) {
+        return safeJsonError("Legacy rental payroll approval requires finance or owner access", 403, origin);
+      }
+      const importId = trimmed(body.import_id);
+      const approvalReason = trimmed(body.approval_reason);
+      if (!importId || !approvalReason) {
+        return safeJsonError("import_id and approval_reason required", 400, origin);
+      }
+      const { data, error } = await admin.rpc("rental_approve_legacy_payroll_commission", {
+        p_workspace_id: workspaceId,
+        p_import_id: importId,
+        p_approved_by: auth.userId,
+        p_approval_reason: approvalReason,
+      });
+      if (error) return safeJsonError(error.message, 400, origin);
+      return safeJsonOk({ import: data }, origin);
     }
 
     if (body.action === "exchange_line") {

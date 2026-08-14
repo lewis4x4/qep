@@ -485,4 +485,42 @@ export async function reconcileSucceededPayment(input: {
       `failed to persist Stripe invoice reconciliation state: ${paymentIntentUpdateError.message}`,
     );
   }
+
+  // L12.1: a signature-verified Stripe PaymentIntent is one of the two
+  // canonical payment sources accepted by the rental commission boundary.
+  // Non-rental invoices are a no-op; a mapped rental invoice must activate
+  // successfully so webhook retry remains the recovery path rather than a
+  // silently paid invoice with missing employee compensation.
+  if (paymentIntent.invoice_id) {
+    const { data: rentalInvoice, error: rentalInvoiceError } = await input.supabaseAdmin
+      .from("rental_invoices")
+      .select("id")
+      .eq("customer_invoice_id", paymentIntent.invoice_id)
+      .maybeSingle();
+    if (rentalInvoiceError) {
+      throw new Error(
+        `failed to resolve rental invoice for commission activation: ${rentalInvoiceError.message}`,
+      );
+    }
+    if (rentalInvoice?.id) {
+      if (!paymentIntent.workspace_id) {
+        throw new Error("rental commission activation requires payment intent workspace provenance");
+      }
+      const { error: commissionError } = await input.supabaseAdmin.rpc(
+        "rental_activate_paid_invoice_commission",
+        {
+          p_workspace_id: paymentIntent.workspace_id,
+          p_rental_invoice_id: rentalInvoice.id,
+          p_payment_source_kind: "stripe_payment_intent",
+          p_payment_source_id: paymentIntent.id,
+          p_actor_id: null,
+        },
+      );
+      if (commissionError) {
+        throw new Error(
+          `failed to activate rental commission from Stripe payment: ${commissionError.message}`,
+        );
+      }
+    }
+  }
 }
