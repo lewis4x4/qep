@@ -154,27 +154,43 @@ class QueryBuilder implements PromiseLike<{ data: unknown; error: null }> {
         data = [];
       }
     } else if (this.table === "crm_embeddings") {
+      const entityType = this.filters.find((filter) => filter.column === "entity_type" && filter.op === "eq")?.value;
       const entityIds = this.filters.find((filter) => filter.column === "entity_id" && filter.op === "in")?.value;
-      if (Array.isArray(entityIds) && entityIds.includes("company-a-1")) {
+      if (entityType === "voice_capture") {
+        data = [{
+          id: "crm-emb-voice-a-1",
+          embedding: VALID_EMBEDDING,
+          entity_id: "voice-a-1",
+        }];
+      } else if (Array.isArray(entityIds) && entityIds.includes("company-a-1")) {
         data = [{ id: "crm-emb-a-1", embedding: VALID_EMBEDDING }];
       } else if (!entityIds) {
         data = [{ id: "crm-emb-global-1", embedding: VALID_EMBEDDING }];
       } else {
         data = [];
       }
+    } else if (this.table === "voice_captures") {
+      data = [{
+        id: "voice-a-1",
+        linked_contact_id: null,
+        linked_company_id: "company-a-1",
+        linked_deal_id: null,
+      }];
     } else if (
       this.table === "crm_contacts" ||
       this.table === "crm_companies" ||
       this.table === "crm_deals" ||
       this.table === "crm_equipment" ||
-      this.table === "voice_captures" ||
       this.table === "crm_activities"
     ) {
       const workspace = this.filters.find((filter) => filter.column === "workspace_id")?.value;
-      if (workspace === PROFILE_WORKSPACE && this.table === "crm_companies") {
+      const idIn = this.filters.find((filter) => filter.column === "id" && filter.op === "in")?.value;
+      if (workspace === PROFILE_WORKSPACE) {
         data = [{ id: "company-a-1" }];
-      } else if (workspace === CRON_WORKSPACE && this.table === "crm_companies") {
+      } else if (workspace === CRON_WORKSPACE) {
         data = [{ id: "company-cron-1" }];
+      } else if (Array.isArray(idIn) && idIn.includes("company-a-1")) {
+        data = [{ id: "company-a-1", workspace_id: PROFILE_WORKSPACE }];
       } else {
         data = [];
       }
@@ -407,9 +423,10 @@ Deno.test("service-role caller can target an explicit workspace on validate-dime
 
 Deno.test("service-role re-embed-crm passes workspace_id when scoped", async () => {
   const client = new MockAdminClient();
-  const capture = { body: {} as Record<string, unknown> };
+  const capture = { body: {} as Record<string, unknown>, headers: {} as Record<string, string> };
   const fetchImpl = (async (_input: RequestInfo | URL, init?: RequestInit) => {
     capture.body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    capture.headers = Object.fromEntries(new Headers(init?.headers).entries());
     return new Response(JSON.stringify({ total_processed: 3, total_errors: 0 }), { status: 200 });
   }) as typeof fetch;
 
@@ -428,13 +445,39 @@ Deno.test("service-role re-embed-crm passes workspace_id when scoped", async () 
   assertEquals(response.status, 200);
   assertEquals(capture.body.force_all, true);
   assertEquals(capture.body.workspace_id, CRON_WORKSPACE);
+  assertEquals(capture.headers["x-workspace-id"], CRON_WORKSPACE);
 });
 
-Deno.test("JWT re-embed-crm passes profile workspace to embed-crm", async () => {
+Deno.test("service-role unscoped re-embed-crm delegates global force_all without workspace", async () => {
   const client = new MockAdminClient();
-  const capture = { body: {} as Record<string, unknown> };
+  const capture = { body: {} as Record<string, unknown>, headers: {} as Record<string, string> };
   const fetchImpl = (async (_input: RequestInfo | URL, init?: RequestInit) => {
     capture.body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    capture.headers = Object.fromEntries(new Headers(init?.headers).entries());
+    return new Response(JSON.stringify({ total_processed: 5, total_errors: 0 }), { status: 200 });
+  }) as typeof fetch;
+
+  const response = await handleKbMaintenance(
+    request({ action: "re-embed-crm" }, { Authorization: "Bearer service-role-token" }),
+    dependencies(client, {
+      ok: true,
+      isServiceRole: true,
+      headerWorkspaceId: null,
+    }, fetchImpl),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(capture.body.force_all, true);
+  assertEquals(capture.body.workspace_id, undefined);
+  assertEquals(capture.headers["x-workspace-id"], undefined);
+});
+
+Deno.test("JWT re-embed-crm passes profile workspace without global force_all", async () => {
+  const client = new MockAdminClient();
+  const capture = { body: {} as Record<string, unknown>, headers: {} as Record<string, string> };
+  const fetchImpl = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    capture.body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    capture.headers = Object.fromEntries(new Headers(init?.headers).entries());
     return new Response(JSON.stringify({ total_processed: 2, total_errors: 0 }), { status: 200 });
   }) as typeof fetch;
 
@@ -454,5 +497,35 @@ Deno.test("JWT re-embed-crm passes profile workspace to embed-crm", async () => 
 
   assertEquals(response.status, 200);
   assertEquals(capture.body.workspace_id, PROFILE_WORKSPACE);
+  assertEquals(capture.body.force_all, undefined);
+  assertEquals(capture.headers["x-workspace-id"], PROFILE_WORKSPACE);
   assertEquals(capture.body.workspace_id === FORGED_WORKSPACE, false);
+});
+
+Deno.test("JWT validate-dimensions scopes voice_capture CRM embeddings via linked company workspace", async () => {
+  const client = new MockAdminClient();
+  const response = await handleKbMaintenance(
+    request({ action: "validate-dimensions" }, { Authorization: "Bearer admin-token" }),
+    dependencies(client, {
+      ok: true,
+      isServiceRole: false,
+      userId: "user-admin-1",
+      role: "admin",
+      workspaceId: PROFILE_WORKSPACE,
+    }),
+  );
+
+  assertEquals(response.status, 200);
+  const body = await response.json();
+  assertEquals(body.crm_embeddings.checked >= 1, true);
+  assertEquals(
+    client.filters.some(
+      (filter) => filter.table === "crm_embeddings" && filter.column === "entity_type" && filter.value === "voice_capture",
+    ),
+    true,
+  );
+  assertEquals(
+    client.filters.some((filter) => filter.table === "voice_captures"),
+    true,
+  );
 });

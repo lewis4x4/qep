@@ -15,14 +15,13 @@ const ALLOWED_ORIGINS = [
   "http://localhost:5173",
 ];
 
-const CRM_ENTITY_TABLES: Record<string, string> = {
-  contact: "crm_contacts",
-  company: "crm_companies",
-  deal: "crm_deals",
-  equipment: "crm_equipment",
-  voice_capture: "voice_captures",
-  activity: "crm_activities",
-};
+const CRM_DIRECT_ENTITY_TYPES: Array<[string, string]> = [
+  ["contact", "crm_contacts"],
+  ["company", "crm_companies"],
+  ["deal", "crm_deals"],
+  ["equipment", "crm_equipment"],
+  ["activity", "crm_activities"],
+];
 
 export function corsHeaders(origin: string | null) {
   return {
@@ -283,27 +282,174 @@ async function reembedServiceNotes(
   return { processed };
 }
 
+async function fetchEmbeddingsForDirectCrmEntities(
+  adminClient: SupabaseClient,
+  entityType: string,
+  table: string,
+  workspaceId: string,
+): Promise<Array<{ id: string; embedding: unknown }>> {
+  const { data: entities } = await adminClient
+    .from(table)
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .is("deleted_at", null)
+    .limit(20);
+
+  const entityIds = (entities ?? [])
+    .map((entity) => entity.id)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+
+  if (entityIds.length === 0) return [];
+
+  const { data: embeddings } = await adminClient
+    .from("crm_embeddings")
+    .select("id, embedding")
+    .eq("entity_type", entityType)
+    .in("entity_id", entityIds);
+
+  return (embeddings ?? []) as Array<{ id: string; embedding: unknown }>;
+}
+
+async function fetchVoiceCaptureEmbeddingsInWorkspace(
+  adminClient: SupabaseClient,
+  workspaceId: string,
+): Promise<Array<{ id: string; embedding: unknown }>> {
+  const { data: embeddings } = await adminClient
+    .from("crm_embeddings")
+    .select("id, embedding, entity_id")
+    .eq("entity_type", "voice_capture")
+    .limit(50);
+
+  if (!embeddings?.length) return [];
+
+  const captureIds = embeddings
+    .map((row) => row.entity_id)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+
+  if (captureIds.length === 0) return [];
+
+  const { data: captures } = await adminClient
+    .from("voice_captures")
+    .select("id, linked_contact_id, linked_company_id, linked_deal_id")
+    .in("id", captureIds);
+
+  const captureMap = new Map(
+    (captures ?? []).map((capture) => [capture.id as string, capture]),
+  );
+
+  const contactIds = [...new Set(
+    (captures ?? [])
+      .map((capture) => capture.linked_contact_id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0),
+  )];
+  const companyIds = [...new Set(
+    (captures ?? [])
+      .map((capture) => capture.linked_company_id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0),
+  )];
+  const dealIds = [...new Set(
+    (captures ?? [])
+      .map((capture) => capture.linked_deal_id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0),
+  )];
+
+  const contactWorkspaceMap: Record<string, string> = {};
+  if (contactIds.length > 0) {
+    const { data: contacts } = await adminClient
+      .from("crm_contacts")
+      .select("id, workspace_id")
+      .in("id", contactIds)
+      .is("deleted_at", null);
+    for (const contact of contacts ?? []) {
+      if (typeof contact.id === "string" && typeof contact.workspace_id === "string") {
+        contactWorkspaceMap[contact.id] = contact.workspace_id;
+      }
+    }
+  }
+
+  const companyWorkspaceMap: Record<string, string> = {};
+  if (companyIds.length > 0) {
+    const { data: companies } = await adminClient
+      .from("crm_companies")
+      .select("id, workspace_id")
+      .in("id", companyIds)
+      .is("deleted_at", null);
+    for (const company of companies ?? []) {
+      if (typeof company.id === "string" && typeof company.workspace_id === "string") {
+        companyWorkspaceMap[company.id] = company.workspace_id;
+      }
+    }
+  }
+
+  const dealWorkspaceMap: Record<string, string> = {};
+  if (dealIds.length > 0) {
+    const { data: deals } = await adminClient
+      .from("crm_deals")
+      .select("id, workspace_id")
+      .in("id", dealIds)
+      .is("deleted_at", null);
+    for (const deal of deals ?? []) {
+      if (typeof deal.id === "string" && typeof deal.workspace_id === "string") {
+        dealWorkspaceMap[deal.id] = deal.workspace_id;
+      }
+    }
+  }
+
+  const rows: Array<{ id: string; embedding: unknown }> = [];
+  for (const embedding of embeddings) {
+    const capture = captureMap.get(embedding.entity_id as string);
+    if (!capture) continue;
+
+    const resolvedWorkspace = (
+      capture.linked_contact_id && contactWorkspaceMap[capture.linked_contact_id as string]
+    ) || (
+      capture.linked_company_id && companyWorkspaceMap[capture.linked_company_id as string]
+    ) || (
+      capture.linked_deal_id && dealWorkspaceMap[capture.linked_deal_id as string]
+    ) || "default";
+
+    if (resolvedWorkspace === workspaceId) {
+      rows.push({ id: embedding.id as string, embedding: embedding.embedding });
+    }
+  }
+
+  return rows;
+}
+
 async function reembedCrm(
   workspaceScope: WorkspaceScope,
+  isJwtCaller: boolean,
   fetchImpl: typeof fetch = fetch,
 ): Promise<Response> {
+  if (isJwtCaller && workspaceScope.mode !== "scoped") {
+    throw new Error("JWT callers require a workspace-bound CRM re-embed");
+  }
+
   const projectUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!projectUrl || !serviceRoleKey) {
     throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
   }
 
-  const body: Record<string, unknown> = { force_all: true };
+  const body: Record<string, unknown> = {};
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${serviceRoleKey}`,
+    "Content-Type": "application/json",
+  };
+
   if (workspaceScope.mode === "scoped") {
     body.workspace_id = workspaceScope.workspaceId;
+    headers["x-workspace-id"] = workspaceScope.workspaceId;
+    if (!isJwtCaller) {
+      body.force_all = true;
+    }
+  } else {
+    body.force_all = true;
   }
 
   const response = await fetchImpl(`${projectUrl}/functions/v1/embed-crm`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${serviceRoleKey}`,
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(120_000),
   });
@@ -352,27 +498,19 @@ async function fetchScopedCrmEmbeddings(
   }
 
   const rows: Array<{ id: string; embedding: unknown }> = [];
-  for (const [entityType, table] of Object.entries(CRM_ENTITY_TABLES)) {
-    const { data: entities } = await adminClient
-      .from(table)
-      .select("id")
-      .eq("workspace_id", workspaceScope.workspaceId)
-      .limit(20);
-
-    const entityIds = (entities ?? [])
-      .map((entity) => entity.id)
-      .filter((id): id is string => typeof id === "string" && id.length > 0);
-
-    if (entityIds.length === 0) continue;
-
-    const { data: embeddings } = await adminClient
-      .from("crm_embeddings")
-      .select("id, embedding")
-      .eq("entity_type", entityType)
-      .in("entity_id", entityIds);
-
-    rows.push(...((embeddings ?? []) as Array<{ id: string; embedding: unknown }>));
+  for (const [entityType, table] of CRM_DIRECT_ENTITY_TYPES) {
+    rows.push(...await fetchEmbeddingsForDirectCrmEntities(
+      adminClient,
+      entityType,
+      table,
+      workspaceScope.workspaceId,
+    ));
   }
+
+  rows.push(...await fetchVoiceCaptureEmbeddingsInWorkspace(
+    adminClient,
+    workspaceScope.workspaceId,
+  ));
 
   return rows.slice(0, 100);
 }
@@ -540,7 +678,14 @@ export async function handleKbMaintenance(
     }
 
     if (action === "re-embed-crm") {
-      const response = await reembedCrm(workspaceScope, fetchImpl);
+      if (!auth.isServiceRole && workspaceScope.mode !== "scoped") {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { ...ch, "Content-Type": "application/json" },
+        });
+      }
+
+      const response = await reembedCrm(workspaceScope, !auth.isServiceRole, fetchImpl);
       const payload = await response.json();
       await logKbJobRunFinish(adminClient, {
         runId,
