@@ -6,6 +6,7 @@ import {
   canAccessPrimaryHeaderForIronRole,
   isUtilityRoute,
   NAV_ITEMS,
+  PRIMARY_NAV_GROUPS,
   resolveActivePrimaryHeader,
   resolvePrimaryNavGroups,
   resolveUtilityNavSections,
@@ -20,6 +21,11 @@ describe("nav-config", () => {
     expect(resolveActivePrimaryHeader("/workforce")).toBe("workforce");
     expect(resolveActivePrimaryHeader("/workforce/appraisals")).toBe("workforce");
     expect(resolveActivePrimaryHeader("/workforce/pay-ladder")).toBe("workforce");
+  });
+
+  test("routes Rentals primary nav to the operational command center, not the vision showcase", () => {
+    const rentals = PRIMARY_NAV_GROUPS.find((group) => group.id === "rentals");
+    expect(rentals?.href).toBe("/qrm/rentals");
   });
 
   test("scopes iron_advisor away from parts/service/workforce/rentals menus", () => {

@@ -24,7 +24,10 @@
     # VITE_VOICE_REALTIME_ENABLED=true. Keep the flag off if this CSP entry is removed.
     # worker-src 'self' blob: is required by Sentry's session replay integration which spawns a Web Worker
     # from a Blob URL for compression. Without it Safari blocks the worker spawn and replay can't initialize.
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.supabase.com wss://*.supabase.com https://api.openai.com wss://api.openai.com https://api.anthropic.com https://api.hubapi.com https://graph.microsoft.com https://login.microsoftonline.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://sentry.io; font-src 'self' data: https://fonts.gstatic.com; frame-ancestors 'self'"
+    # MapLibre (apps/web/src/components/primitives/MapLibreCanvas.tsx): connect-src needs the OSM raster
+    # tile hosts — MapLibre fetches tiles via fetch/XHR (not img-src). img-src already allows https:; no
+    # additional worker-src beyond blob: is required for MapLibre on rental/fleet/opportunity map routes.
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.supabase.com wss://*.supabase.com https://api.openai.com wss://api.openai.com https://api.anthropic.com https://api.hubapi.com https://graph.microsoft.com https://login.microsoftonline.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://sentry.io https://a.tile.openstreetmap.org https://b.tile.openstreetmap.org https://c.tile.openstreetmap.org; font-src 'self' data: https://fonts.gstatic.com; frame-ancestors 'self'"
     Cache-Control = "no-cache"
 
 [[headers]]

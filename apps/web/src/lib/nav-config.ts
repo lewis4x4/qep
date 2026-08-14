@@ -90,7 +90,7 @@ export const PRIMARY_NAV_GROUPS: PrimaryNavGroupDefinition[] = [
   { id: "parts", label: "Parts", href: "/parts" },
   { id: "service", label: "Service", href: "/service" },
   { id: "workforce", label: "Workforce", href: "/workforce" },
-  { id: "rentals", label: "Rentals", href: "/rentals" },
+  { id: "rentals", label: "Rentals", href: "/qrm/rentals" },
 ];
 
 export const GRAPPLE_PRODUCTION_ROLE_NAMES = [

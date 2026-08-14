@@ -25,7 +25,7 @@ export function resolveHomeRoute(
       return "/service";
     case "rental":
     case "rentals":
-      return "/rentals";
+      return "/qrm/rentals";
     case "rep":
       return "/sales/today";
     default:
