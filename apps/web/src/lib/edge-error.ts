@@ -58,6 +58,47 @@ export function sanitizeClientError(
   return fallback;
 }
 
+/** Operator-facing copy when team-scope Command Center access is denied. */
+export const COMMAND_CENTER_TEAM_SCOPE_DENIED_MESSAGE =
+  "You don't have access to the shop-wide Command Center view. Ask a manager.";
+
+const COMMAND_CENTER_INTERNAL_AUTH_PATTERNS: RegExp[] = [
+  /blend\s*weight/i,
+  /≥\s*0\.5/,
+  /iron manager blend/i,
+  /team scope requires/i,
+  /iron manager privileges/i,
+];
+
+function containsInternalAuthJargon(message: string): boolean {
+  return COMMAND_CENTER_INTERNAL_AUTH_PATTERNS.some((pattern) =>
+    pattern.test(message),
+  );
+}
+
+/**
+ * Strip internal privilege formulas from Command Center invoke failures.
+ * Maps known team-scope 403 bodies (old deployed copy or pre-deploy main) to
+ * dealership English. Other errors pass through unchanged.
+ */
+export function sanitizeCommandCenterInvokeMessage(
+  message: string,
+  httpStatus?: number,
+): string {
+  const trimmed = message.trim();
+  if (!trimmed) return COMMAND_CENTER_TEAM_SCOPE_DENIED_MESSAGE;
+
+  if (containsInternalAuthJargon(trimmed)) {
+    return COMMAND_CENTER_TEAM_SCOPE_DENIED_MESSAGE;
+  }
+
+  if (httpStatus === 403 && /team scope/i.test(trimmed)) {
+    return COMMAND_CENTER_TEAM_SCOPE_DENIED_MESSAGE;
+  }
+
+  return trimmed;
+}
+
 export async function explainInvokeError(
   error: EdgeInvokeError | null | undefined,
   fallback: string,
