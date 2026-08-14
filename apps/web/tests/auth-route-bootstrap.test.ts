@@ -44,6 +44,14 @@ describe("isRecognizedApplicationPath", () => {
   it("does not treat garbage paths as recognized app paths", () => {
     expect(isRecognizedApplicationPath("/zzz-not-a-page")).toBe(false);
     expect(isRecognizedApplicationPath("/not-real/route")).toBe(false);
+    expect(isRecognizedApplicationPath("/portal/this-is-not-a-page")).toBe(false);
+  });
+});
+
+describe("portal typo handling contract", () => {
+  it("keeps unknown portal subpaths off the public catch-all login list", () => {
+    expect(shouldShowLoginForUnauthenticatedPath("/portal/this-is-not-a-page")).toBe(false);
+    expect(isRecognizedApplicationPath("/portal")).toBe(false);
   });
 });
 

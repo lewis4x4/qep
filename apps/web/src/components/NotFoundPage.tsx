@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { HardHat, ArrowLeft, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { resolveNotFoundHomeLabel } from "@/lib/not-found-home-label";
 
 type NotFoundAudience = "authenticated" | "public";
 
@@ -12,6 +13,7 @@ export function NotFoundPage({
   homeHref?: string;
 }): React.ReactElement {
   const isPublic = audience === "public";
+  const homeLabel = resolveNotFoundHomeLabel(homeHref);
 
   return (
     <div
@@ -44,7 +46,7 @@ export function NotFoundPage({
       <p className="text-muted-foreground max-w-sm mb-8 leading-relaxed">
         {isPublic
           ? "The address may be mistyped or the page may have moved. Sign in if you were trying to reach your workspace."
-          : "The page you're looking for doesn't exist or may have been moved. Head back to your dashboard to get back on track."}
+          : "The page you're looking for doesn't exist or may have been moved. Head back to your workspace to get back on track."}
       </p>
 
       {/* Action */}
@@ -57,7 +59,7 @@ export function NotFoundPage({
         ) : (
           <Link to={homeHref}>
             <ArrowLeft className="w-4 h-4 mr-2" aria-hidden="true" />
-            Back to Dashboard
+            {homeLabel}
           </Link>
         )}
       </Button>

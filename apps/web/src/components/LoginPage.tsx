@@ -1,4 +1,5 @@
 import { useState, useEffect, type ReactNode } from "react";
+import { Link, useLocation } from "react-router-dom";
 import type { AuthError } from "@supabase/supabase-js";
 import {
   AlertTriangle,
@@ -56,7 +57,12 @@ function passwordResetRedirect(mode: LoginSurfaceMode): string {
   return `${window.location.origin}${path}?recovery=1`;
 }
 
+function isForgotPasswordPath(pathname: string): boolean {
+  return pathname === "/forgot-password";
+}
+
 export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
+  const { pathname } = useLocation();
   const { toast, dismiss } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -64,6 +70,8 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
   const [resetLoading, setResetLoading] = useState(false);
 
   const isPortal = mode === "portal";
+  const showForgotPasswordFlow = isForgotPasswordPath(pathname);
+  const signInPath = isPortal ? "/portal/login" : "/login";
   const formCopy = loginFormCopy(mode);
   const marketing = loginMarketingCopy(mode);
 
@@ -254,10 +262,14 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
 
                 <div>
                   <h2 className="text-4xl font-semibold tracking-tight text-white sm:text-[2.9rem] sm:leading-[1.02]">
-                    {formCopy.headline}
+                    {showForgotPasswordFlow ? "Reset your password" : formCopy.headline}
                   </h2>
                   <p className="mt-3 max-w-md text-base leading-7 text-slate-400">
-                    {formCopy.subcopy}
+                    {showForgotPasswordFlow
+                      ? isPortal
+                        ? "Enter the email tied to your portal account and we'll send a reset link."
+                        : "Enter your work email and we'll send a password reset link."
+                      : formCopy.subcopy}
                   </p>
                 </div>
 
@@ -274,6 +286,53 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
 
               <Card className="border-white/10 bg-white/[0.04] shadow-[0_30px_80px_rgba(0,0,0,0.28)] backdrop-blur">
                 <CardContent className="p-5 sm:p-6">
+                  {showForgotPasswordFlow ? (
+                    <form
+                      data-testid="forgot-password-form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void handleForgotPassword();
+                      }}
+                      className="space-y-4"
+                    >
+                      <div className="space-y-2">
+                        <Label htmlFor="email-reset" className="text-sm font-medium text-slate-200">
+                          Email address
+                        </Label>
+                        <div className="relative">
+                          <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                          <Input
+                            id="email-reset"
+                            type="email"
+                            autoComplete="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="you@qepusa.com"
+                            required
+                            className="h-12 border-white/10 bg-[#09111D] pl-10 text-white placeholder:text-slate-500"
+                          />
+                        </div>
+                      </div>
+
+                      <Button
+                        type="submit"
+                        className="h-12 w-full gap-2 bg-qep-orange-accessible text-base font-semibold text-white hover:bg-[#D96C1D]"
+                        disabled={resetLoading}
+                      >
+                        {resetLoading ? "Sending reset…" : "Send reset link"}
+                        {!resetLoading && <ArrowRight className="h-4 w-4" />}
+                      </Button>
+
+                      <p className="text-center text-sm text-slate-400">
+                        <Link
+                          to={signInPath}
+                          className="font-medium text-primary hover:text-[#D96C1D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[#0C1524]"
+                        >
+                          Back to sign in
+                        </Link>
+                      </p>
+                    </form>
+                  ) : (
                   <Tabs defaultValue="password">
                     <TabsList className="mb-6 grid w-full grid-cols-2 border border-white/10 bg-[#0A121E] p-1 text-slate-300">
                       {/*
@@ -393,6 +452,7 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
                       </form>
                     </TabsContent>
                   </Tabs>
+                  )}
                 </CardContent>
               </Card>
 

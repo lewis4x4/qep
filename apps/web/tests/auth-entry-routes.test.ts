@@ -17,4 +17,8 @@ describe("auth entry route wiring", () => {
     expect(appSource).toContain("signedInAuthEntryRedirect");
     expect(appSource).toContain("<NotFoundPage homeHref={homeRoute} />");
   });
+
+  test("routes unknown logged-out portal subpaths to portal login via App.tsx, not the catch-all", () => {
+    expect(appSource).toContain('path="/portal/*" element={<Navigate to="/portal/login" replace />}');
+  });
 });

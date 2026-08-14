@@ -58,8 +58,6 @@ const RECOGNIZED_APPLICATION_PATH_PREFIXES = [
   "/quotes",
   "/voice-quote",
   "/login",
-  "/portal",
-  "/forgot-password",
 ] as const;
 
 const EXPIRED_OR_INVALID_SESSION_PATTERN = /expired|invalid|sign in again/i;
