@@ -33,8 +33,8 @@ describe("resolveHomeRoute", () => {
   test("supports future department roles directly", () => {
     expect(resolveHomeRoute("parts")).toBe("/parts/companion/queue");
     expect(resolveHomeRoute("service")).toBe("/service");
-    expect(resolveHomeRoute("rental")).toBe("/rentals");
-    expect(resolveHomeRoute("rentals")).toBe("/rentals");
+    expect(resolveHomeRoute("rental")).toBe("/qrm/rentals");
+    expect(resolveHomeRoute("rentals")).toBe("/qrm/rentals");
   });
 
   test("routes stakeholders without an iron role to /brief", () => {
