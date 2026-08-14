@@ -55,7 +55,7 @@ export function sanitizeClientError(
     return fallback;
   }
 
-  return fallback;
+  return raw;
 }
 
 export async function explainInvokeError(
