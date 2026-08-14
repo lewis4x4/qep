@@ -300,6 +300,33 @@ export function isBlendTeamScopeEligible(blend: IronRoleWeightEntry[]): boolean 
   return managerWeight >= TEAM_SCOPE_MANAGER_WEIGHT_THRESHOLD;
 }
 
+/**
+ * Whether the caller may request `team` scope on the QRM Command Center.
+ *
+ * Mirrors `canUseElevatedQrmScopes` in `apps/web/src/lib/home-route.ts`:
+ * elevated profile roles (owner / admin / manager) OR cumulative
+ * `iron_manager` blend weight ≥ {@link TEAM_SCOPE_MANAGER_WEIGHT_THRESHOLD}.
+ *
+ * `iron_woman` alone does not grant team scope — Deal Desk operators like
+ * BL (admin + iron_woman) are covered by the profile-role branch, not the
+ * blend branch. Reps with only `iron_woman` in their blend still cannot
+ * widen to team scope by tampering the request body.
+ */
+export function isTeamScopeAllowed(
+  profileRole: string | null | undefined,
+  blend: IronRoleWeightEntry[],
+): boolean {
+  const normalized = (profileRole ?? "").trim().toLowerCase();
+  if (
+    normalized === "owner" ||
+    normalized === "admin" ||
+    normalized === "manager"
+  ) {
+    return true;
+  }
+  return isBlendTeamScopeEligible(blend);
+}
+
 // ─── Blocker classification ────────────────────────────────────────────────
 
 export type BlockerKind =

@@ -39,7 +39,7 @@ import {
   blendRoleWeights,
   buildPipelinePressure,
   getRoleWeights,
-  isBlendTeamScopeEligible,
+  isTeamScopeAllowed,
   narrowRoleBlendRows,
   rankAndAssignLanes,
   rankChiefOfStaff,
@@ -106,10 +106,6 @@ function deriveIronRole(legacyRole: string | null, ironRole: string | null): Iro
   if (isIronRole(ironRole)) return ironRole;
   if (legacyRole && LEGACY_ROLE_MAP[legacyRole]) return LEGACY_ROLE_MAP[legacyRole];
   return "iron_advisor";
-}
-
-function isElevated(role: IronRole): boolean {
-  return role === "iron_manager";
 }
 
 // ── Phase 0 P0.5 — load active role blend for the calling user ──────────────
@@ -404,15 +400,13 @@ Deno.serve(async (req) => {
         origin,
       );
     }
-    // Phase 0 P0.5 W2-5 — team-scope gate is now blend-aware.
-    // An operator gets team scope if their cumulative iron_manager weight
-    // in the active blend is ≥ 0.5. Single-role iron_manager users (the
-    // post-migration-210 backfill default) get 1.0 ≥ 0.5 → identical to
-    // the legacy behavior. Other single-role users get 0 < 0.5 → also
-    // identical. Behavior change is ONLY for blended operators.
-    if (scope === "team" && !isBlendTeamScopeEligible(effectiveBlend)) {
+    // Phase 0 P0.5 W2-5 — team-scope gate mirrors frontend
+    // `canUseElevatedQrmScopes`: elevated profile roles OR iron_manager
+    // blend weight ≥ 0.5. iron_woman alone does not widen team scope.
+    const profileRole = (profile as { role: string | null }).role;
+    if (scope === "team" && !isTeamScopeAllowed(profileRole, effectiveBlend)) {
       return safeJsonError(
-        "Team scope requires Iron Manager privileges (blend weight ≥ 0.5)",
+        "Team scope requires manager/admin privileges or Iron Manager blend weight ≥ 0.5",
         403,
         origin,
       );
@@ -747,8 +741,7 @@ Deno.serve(async (req) => {
     const generatedAt = observedAt;
 
     // Knowledge Gaps + Absence Engine (Slice 1.7) — manager-gated
-    const callerRole = (profile as { role: string | null }).role;
-    const isManagerView = ["admin", "manager", "owner"].includes(callerRole ?? "");
+    const isManagerView = ["admin", "manager", "owner"].includes(profileRole ?? "");
     let knowledgeGaps = buildKnowledgeGapsPayload(
       knowledgeGapsRes.error ? null : (knowledgeGapsRes.data ?? []),
       // Reuse the already-fetched deal rows for absence scoring (avoid duplicate query)

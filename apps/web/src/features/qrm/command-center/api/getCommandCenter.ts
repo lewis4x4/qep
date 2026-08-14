@@ -11,6 +11,7 @@
  * scopes does not return a stale payload from a different scope's cache.
  */
 
+import { explainInvokeError } from "@/lib/edge-error";
 import { supabase } from "@/lib/supabase";
 import type {
   CommandCenterResponse,
@@ -26,7 +27,10 @@ export async function getCommandCenter(
   );
 
   if (error) {
-    const message = error.message ?? "Failed to load QRM Command Center";
+    const message = await explainInvokeError(
+      error,
+      "Failed to load QRM Command Center",
+    );
     throw new Error(message);
   }
   if (!data) {
