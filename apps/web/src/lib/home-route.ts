@@ -36,8 +36,21 @@ export function resolveHomeRoute(
   }
 }
 
+/** Maps live `user_role` enum strings to the home-route buckets used in
+ *  `resolveHomeRoute`. Short aliases (`parts`, `service`) remain supported. */
+const ROLE_HOME_ALIASES: Record<string, string> = {
+  parts_counter: "parts",
+  parts_manager: "parts",
+  service_writer: "service",
+  technician: "service",
+  // No dedicated haul/dispatch board route in the web shell yet; dispatch
+  // operators coordinate through the service command center.
+  dispatch: "service",
+};
+
 function normalizeRole(userRole: string | null | undefined): string {
-  return (userRole ?? "").trim().toLowerCase();
+  const raw = (userRole ?? "").trim().toLowerCase();
+  return ROLE_HOME_ALIASES[raw] ?? raw;
 }
 
 function isFloorIronRole(ironRole: string | null | undefined): boolean {
