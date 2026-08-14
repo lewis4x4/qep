@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test";
 import {
   hasStoredSupabaseAuthToken,
   isAuthenticatedAppPath,
+  isRecognizedApplicationPath,
+  shouldShowLoginForUnauthenticatedPath,
   shouldShowProtectedRouteBootstrap,
 } from "../src/lib/auth-route-bootstrap";
 
@@ -23,6 +25,27 @@ describe("isAuthenticatedAppPath", () => {
 
   it("does not treat the public login entry as authenticated", () => {
     expect(isAuthenticatedAppPath("/")).toBe(false);
+  });
+});
+
+describe("isRecognizedApplicationPath", () => {
+  it("treats the login entry and dashboard as recognized app paths", () => {
+    expect(isRecognizedApplicationPath("/")).toBe(true);
+    expect(isRecognizedApplicationPath("/login")).toBe(true);
+    expect(isRecognizedApplicationPath("/dashboard")).toBe(true);
+    expect(isRecognizedApplicationPath("/sales/today")).toBe(true);
+  });
+
+  it("does not treat garbage paths as recognized app paths", () => {
+    expect(isRecognizedApplicationPath("/zzz-not-a-page")).toBe(false);
+    expect(isRecognizedApplicationPath("/not-real/route")).toBe(false);
+  });
+});
+
+describe("shouldShowLoginForUnauthenticatedPath", () => {
+  it("prompts sign-in for real app URLs and 404s for unknown paths", () => {
+    expect(shouldShowLoginForUnauthenticatedPath("/dashboard")).toBe(true);
+    expect(shouldShowLoginForUnauthenticatedPath("/zzz-not-a-page")).toBe(false);
   });
 });
 

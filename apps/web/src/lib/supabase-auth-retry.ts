@@ -111,6 +111,39 @@ export async function signInWithPasswordWithRetry(params: {
   return { error: lastError };
 }
 
+export async function resetPasswordForEmailWithRetry(params: {
+  email: string;
+  redirectTo: string;
+}): Promise<{ error: AuthError | null }> {
+  let lastError: AuthError | null = null;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    if (attempt === 0) flushStaleAuthTokens();
+    try {
+      const { error } = await withTimeout(
+        supabase.auth.resetPasswordForEmail(params.email, {
+          redirectTo: params.redirectTo,
+        }),
+        AUTH_ATTEMPT_TIMEOUT_MS,
+      );
+      if (!error) {
+        return { error: null };
+      }
+      lastError = error;
+      const retryable = isTransientAuthRecoveryError(error.message ?? "");
+      if (!retryable || attempt === MAX_ATTEMPTS - 1) {
+        return { error };
+      }
+    } catch {
+      lastError = buildTimeoutAuthError();
+      if (attempt === MAX_ATTEMPTS - 1) {
+        return { error: lastError };
+      }
+    }
+    await sleep(350 * (attempt + 1));
+  }
+  return { error: lastError };
+}
+
 export async function signInWithOtpWithRetry(params: {
   email: string;
   options?: { emailRedirectTo?: string };

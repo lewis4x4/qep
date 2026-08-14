@@ -33,6 +33,7 @@ const PartsCompanionRoutes = lazy(() =>
 );
 
 const LoginPage = lazy(() => import("./components/LoginPage"));
+const UnauthenticatedCatchAll = lazy(() => import("./components/UnauthenticatedCatchAll"));
 const PortalLoginPage = lazy(() =>
   import("./features/portal/pages/PortalLoginPage").then((m) => ({ default: m.PortalLoginPage }))
 );
@@ -969,11 +970,12 @@ function App() {
               <Route path="/rq/:token" element={<RentalQuotePublicPage />} />
               <Route path="/portal/login" element={<PortalLoginPage authError={error} />} />
               <Route path="/portal/*" element={<Navigate to="/portal/login" replace />} />
+              <Route path="/login" element={<LoginPage authError={error} />} />
               <Route path="/quote" element={<RedirectPreserveSearch to="/sales/quotes/new" />} />
               <Route path="/quotes" element={<RedirectPreserveSearch to="/sales/quotes" />} />
               <Route path="/quote-v2" element={<RedirectPreserveSearch to="/sales/quotes/new" />} />
               <Route path="/voice-quote" element={<RedirectPreserveSearch to="/sales/voice-quote" />} />
-              <Route path="*" element={<LoginPage authError={error} />} />
+              <Route path="*" element={<UnauthenticatedCatchAll authError={error} />} />
             </Routes>
           </Suspense>
           <Suspense fallback={null}>
