@@ -2,19 +2,20 @@ import { afterEach, describe, expect, mock, test } from "bun:test";
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
-mock.module("@/components/LoginPage", () => ({
-  LoginPage: ({ authError }: { authError?: string | null }) => (
-    <div data-testid="login-page">{authError ?? "login"}</div>
-  ),
+mock.module("@/hooks/use-toast", () => ({
+  useToast: () => ({
+    toast: mock(() => undefined),
+    dismiss: mock(() => undefined),
+  }),
 }));
 
-mock.module("@/components/NotFoundPage", () => ({
-  NotFoundPage: ({ audience }: { audience?: string }) => (
-    <div data-testid="not-found-page" data-audience={audience ?? "authenticated"} />
-  ),
+mock.module("@/lib/supabase-auth-retry", () => ({
+  signInWithPasswordWithRetry: mock(() => Promise.resolve({ error: null })),
+  signInWithOtpWithRetry: mock(() => Promise.resolve({ error: null })),
+  resetPasswordForEmailWithRetry: mock(() => Promise.resolve({ error: null })),
 }));
 
-import { UnauthenticatedCatchAll } from "@/components/UnauthenticatedCatchAll";
+const { UnauthenticatedCatchAll } = await import("@/components/UnauthenticatedCatchAll");
 
 afterEach(cleanup);
 
@@ -28,8 +29,21 @@ describe("UnauthenticatedCatchAll", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId("login-page")).toBeTruthy();
-    expect(screen.queryByTestId("not-found-page")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Welcome back" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "We can't find that page" })).toBeNull();
+  });
+
+  test("shows sign-in for forgot-password", () => {
+    render(
+      <MemoryRouter initialEntries={["/forgot-password"]}>
+        <Routes>
+          <Route path="*" element={<UnauthenticatedCatchAll />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("forgot-password-form")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "We can't find that page" })).toBeNull();
   });
 
   test("shows public 404 for unknown routes", () => {
@@ -41,7 +55,8 @@ describe("UnauthenticatedCatchAll", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId("not-found-page").getAttribute("data-audience")).toBe("public");
-    expect(screen.queryByTestId("login-page")).toBeNull();
+    expect(screen.getByRole("heading", { name: "We can't find that page" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Sign in" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Welcome back" })).toBeNull();
   });
 });

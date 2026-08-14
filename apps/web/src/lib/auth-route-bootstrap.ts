@@ -1,3 +1,6 @@
+/** Public auth entry points — never 404 when a session exists. */
+export const AUTH_ENTRY_PATHS = ["/login", "/portal/login", "/forgot-password"] as const;
+
 const AUTHENTICATED_APP_PATH_PREFIXES = [
   "/dashboard",
   "/chat",
@@ -87,14 +90,31 @@ export function isAuthenticatedAppPath(pathname: string): boolean {
   );
 }
 
+export function isAuthEntryPath(pathname: string): boolean {
+  return AUTH_ENTRY_PATHS.some((path) => pathname === path);
+}
+
 export function isRecognizedApplicationPath(pathname: string): boolean {
-  if (pathname === "/" || pathname === "/login") {
+  if (pathname === "/" || isAuthEntryPath(pathname)) {
     return true;
   }
 
   return RECOGNIZED_APPLICATION_PATH_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
+}
+
+/** Signed-in visitors on auth entry URLs should land on home, not a 404. */
+export function resolveSignedInAuthEntryRedirect(
+  pathname: string,
+  homeRoute: string,
+  portalHomeRoute = "/portal",
+): string {
+  if (pathname === "/portal/login") {
+    return portalHomeRoute;
+  }
+
+  return homeRoute;
 }
 
 /** Logged-out visitors on real app URLs should see sign-in; unknown paths get 404. */
