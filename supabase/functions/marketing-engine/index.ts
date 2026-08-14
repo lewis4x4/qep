@@ -10,204 +10,23 @@
  * POST (cron): Process pending triggers and scheduled campaigns
  * POST (manual): { action: "create_campaign" | "generate_content" | "send_campaign" }
  *
- * Auth: service_role (cron) or admin/manager/owner (manual)
+ * Auth: service_role (cron) or admin/manager/owner (manual).
+ * JWT callers are always bound to profile.active_workspace_id; forged
+ * body.workspace_id is ignored. Service-role may pass workspace_id or
+ * x-workspace-id to target one shop, or run unscoped for shop-wide cron.
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
-import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
-
 import { captureEdgeException } from "../_shared/sentry.ts";
-import { requireServiceUser } from "../_shared/service-auth.ts";
-import type {
-  CampaignTriggerContext,
-  MarketingCampaignPlan,
-} from "../../../shared/qep-moonshot-contracts.ts";
-const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-
-async function generateCampaignContent(
-  trigger: CampaignTriggerContext,
-): Promise<{ subject: string; body: string; social_copy: string }> {
-  if (!OPENAI_API_KEY) {
-    return {
-      subject: `New from QEP: ${trigger.triggerType.replace(/_/g, " ")}`,
-      body: "Check out our latest offerings at Quality Equipment Parts.",
-      social_copy: "New equipment available at QEP! Contact us for details.",
-    };
-  }
-
-  try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        response_format: { type: "json_object" },
-        messages: [{
-          role: "system",
-          content: `You are a marketing content generator for QEP (Quality Equipment Parts), a heavy equipment dealership. Generate compelling, professional marketing content.
-
-Return JSON: { "subject": "email subject", "body": "email body (2-3 paragraphs)", "social_copy": "Facebook/social post (2-3 sentences)" }`,
-        }, {
-          role: "user",
-          content: `Campaign type: ${trigger.triggerType}\nTarget: ${JSON.stringify(trigger.targetSegment)}\nEquipment: ${JSON.stringify(trigger.equipmentContext)}\nTrigger config: ${JSON.stringify(trigger.triggerConfig ?? {})}`,
-        }],
-        max_tokens: 500,
-        temperature: 0.7,
-      }),
-      signal: AbortSignal.timeout(15_000),
-    });
-
-    if (!res.ok) return { subject: "QEP Update", body: "Contact us for details.", social_copy: "New at QEP!" };
-
-    const data = await res.json();
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) return { subject: "QEP Update", body: "Contact us.", social_copy: "New at QEP!" };
-
-    return JSON.parse(content);
-  } catch {
-    return { subject: "QEP Update", body: "Contact us for details.", social_copy: "New at QEP!" };
-  }
-}
+import { handleMarketingEngine } from "./handler.ts";
 
 Deno.serve(async (req) => {
-  const origin = req.headers.get("origin");
-
-  if (req.method === "OPTIONS") {
-    return optionsResponse(origin);
-  }
-
-  if (req.method !== "POST") {
-    return safeJsonError("Method not allowed", 405, origin);
-  }
-
   try {
-    const authHeader = req.headers.get("Authorization")?.trim() ?? null;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-    // Allow both service role (cron) and authenticated users (manual)
-    const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      serviceRoleKey!,
-    );
-
-    if (!isServiceRole) {
-      // Validate user auth for manual invocation
-      const auth = await requireServiceUser(authHeader, origin);
-      if (!auth.ok) return auth.response;
-      if (!["admin", "manager", "owner"].includes(auth.role)) {
-        return safeJsonError("Marketing engine requires elevated role", 403, origin);
-      }
-    }
-
-    let body: { action?: string; campaign_id?: string } = {};
-    try { body = await req.json(); } catch { /* empty body ok for cron */ }
-
-    const results = {
-      triggers_processed: 0,
-      campaigns_created: 0,
-      content_generated: 0,
-      posts_scheduled: 0,
-    };
-
-    // ── Process active inventory triggers ──────────────────────────────
-    if (!body.action || body.action === "process_triggers") {
-      const { data: triggers } = await supabaseAdmin
-        .from("inventory_event_triggers")
-        .select("*")
-        .eq("is_active", true);
-
-      if (triggers) {
-        for (const trigger of triggers) {
-          results.triggers_processed++;
-
-          if (trigger.auto_create_campaign) {
-            const triggerContext: CampaignTriggerContext = {
-              triggerType: trigger.event_type === "new_arrival" ? "inventory_arrival" : "custom",
-              workspaceId: trigger.workspace_id,
-              targetSegment: trigger.target_segment || {},
-              equipmentContext: trigger.equipment_filter || null,
-              triggerConfig: { trigger_id: trigger.id },
-            };
-            const content = await generateCampaignContent(triggerContext);
-            const campaignPlan: MarketingCampaignPlan = {
-              name: `Auto: ${trigger.event_type.replace(/_/g, " ")} — ${new Date().toISOString().split("T")[0]}`,
-              campaignType: triggerContext.triggerType,
-              targetSegment: triggerContext.targetSegment,
-              contentTemplate: content,
-              aiGenerated: true,
-              channels: ["email"],
-              status: "scheduled",
-              triggerType: "inventory_event",
-              triggerConfig: triggerContext.triggerConfig,
-            };
-
-            const { data: campaign } = await supabaseAdmin
-              .from("marketing_campaigns")
-              .insert({
-                workspace_id: trigger.workspace_id,
-                name: campaignPlan.name,
-                campaign_type: campaignPlan.campaignType,
-                target_segment: campaignPlan.targetSegment,
-                content_template: campaignPlan.contentTemplate,
-                ai_generated: campaignPlan.aiGenerated,
-                channels: campaignPlan.channels,
-                status: campaignPlan.status,
-                trigger_type: campaignPlan.triggerType,
-                trigger_config: campaignPlan.triggerConfig,
-              })
-              .select("id")
-              .maybeSingle();
-
-            if (campaign) results.campaigns_created++;
-
-            await supabaseAdmin
-              .from("inventory_event_triggers")
-              .update({
-                last_triggered_at: new Date().toISOString(),
-                trigger_count: (trigger.trigger_count || 0) + 1,
-              })
-              .eq("id", trigger.id);
-          }
-        }
-      }
-    }
-
-    // ── Generate content for specific campaign ─────────────────────────
-    if (body.action === "generate_content" && body.campaign_id) {
-      const { data: campaign } = await supabaseAdmin
-        .from("marketing_campaigns")
-        .select("*")
-        .eq("id", body.campaign_id)
-        .single();
-
-      if (campaign) {
-        const content = await generateCampaignContent({
-          triggerType: campaign.campaign_type,
-          workspaceId: campaign.workspace_id,
-          targetSegment: campaign.target_segment || {},
-          equipmentContext: null,
-        });
-
-        await supabaseAdmin
-          .from("marketing_campaigns")
-          .update({
-            content_template: content,
-            ai_generated: true,
-          })
-          .eq("id", body.campaign_id);
-
-        results.content_generated++;
-      }
-    }
-
-    return safeJsonOk({ ok: true, results }, origin);
+    return await handleMarketingEngine(req);
   } catch (err) {
     captureEdgeException(err, { fn: "marketing-engine", req });
     console.error("marketing-engine error:", err);
-    return safeJsonError("Internal server error", 500, req.headers.get("origin"));
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 });
