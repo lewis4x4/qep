@@ -4,141 +4,22 @@
  * For each customer machine we track, projects which parts will likely be
  * needed in the next 90 days, and tells the sales rep to pre-position them.
  *
- * Strategy:
- *   1. Call predict_parts_needs() SQL RPC — pure-SQL baseline from
- *      customer_fleet current_hours vs machine_profiles.maintenance_schedule +
- *      common_wear_parts.
- *   2. (Optional v2) Augment with Claude-generated reasoning for edge cases —
- *      seasonal patterns, customer-specific usage profiles, etc.
- *   3. Return a summary of plays with next-action hints.
- *
- * Auth: admin / manager / owner (like other cron-style orchestrators).
- * Can be invoked by:
- *   - Daily cron (primary)
- *   - Manual "recompute plays" button in /parts/companion/intelligence
- *   - Post-telemetry update webhook (future)
+ * Auth: admin / manager / owner JWT (workspace-scoped) or service_role (cron).
+ * JWT callers are always bound to profile.active_workspace_id; forged
+ * body.workspace / body.workspace_id is ignored. Service-role may pass
+ * workspace hints or run unscoped for shop-wide cron.
  */
-
-import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import {
-  optionsResponse,
-  safeJsonError,
-  safeJsonOk,
-} from "../_shared/safe-cors.ts";
-import { requireServiceUser } from "../_shared/service-auth.ts";
-import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
-import { logServiceCronRun } from "../_shared/service-cron-run.ts";
-
-interface RequestBody {
-  lookahead_days?: number;
-  workspace?: string | null;
-  // When true: also call auto-replenish afterwards so scheduled orders reflect
-  // the freshly-computed plays
-  chain_auto_replenish?: boolean;
-}
+import { handlePartsPredictiveFailure } from "./handler.ts";
 
 Deno.serve(async (req) => {
-  const origin = req.headers.get("Origin");
-  if (req.method === "OPTIONS") return optionsResponse(origin);
-
-  const startMs = Date.now();
-
   try {
-    // Support both user-JWT (from Intelligence page) and service_role (cron)
-    const authHeader = req.headers.get("Authorization")?.trim() ?? "";
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    if (!supabaseUrl || !serviceKey) {
-      return safeJsonError("Missing SUPABASE_URL / SERVICE_ROLE_KEY", 500, origin);
-    }
-
-    let supabase: SupabaseClient;
-    let calledBy: string;
-
-    if (isServiceRoleCaller(req)) {
-      // Service-role / vault-secret cron path
-      supabase = createClient(supabaseUrl, serviceKey);
-      calledBy = "cron";
-    } else {
-      const auth = await requireServiceUser(authHeader, origin);
-      if (!auth.ok) return auth.response;
-      if (!["admin", "manager", "owner"].includes(auth.role)) {
-        return safeJsonError("predictive failure requires admin/manager/owner role", 403, origin);
-      }
-      // Service client for the heavy RPC writes
-      supabase = createClient(supabaseUrl, serviceKey);
-      calledBy = `user:${auth.userId}`;
-    }
-
-    const body = (req.method === "POST" ? await req.json() : {}) as RequestBody;
-    const lookahead = body.lookahead_days ?? 90;
-
-    // ── 1. Run the pure-SQL baseline prediction ──────────────────────────
-    const { data: predictResult, error: predictErr } = await supabase
-      .rpc("predict_parts_needs", {
-        p_workspace: body.workspace ?? null,
-        p_lookahead_days: lookahead,
-      });
-
-    if (predictErr) {
-      return safeJsonError(`predict_parts_needs failed: ${predictErr.message}`, 500, origin);
-    }
-
-    // ── 2. Optionally chain into auto-replenish ──────────────────────────
-    let replenishResult: Record<string, unknown> | null = null;
-    if (body.chain_auto_replenish === true) {
-      try {
-        const replenishRes = await fetch(
-          `${supabaseUrl}/functions/v1/parts-auto-replenish`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${serviceKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({}),
-          },
-        );
-        replenishResult = await replenishRes.json();
-      } catch (err) {
-        console.warn("auto-replenish chain failed:", (err as Error).message);
-        replenishResult = { error: (err as Error).message };
-      }
-    }
-
-    // ── 3. Fetch summary for the response ────────────────────────────────
-    const { data: summary } = await supabase
-      .rpc("predictive_plays_summary", {
-        p_workspace: body.workspace ?? null,
-      });
-
-    const elapsedMs = Date.now() - startMs;
-
-    // Log cron run (if called by service role)
-    if (calledBy === "cron") {
-      await logServiceCronRun(supabase, {
-        jobName: "parts-predictive-failure",
-        ok: true,
-        metadata: {
-          elapsed_ms: elapsedMs,
-          lookahead_days: lookahead,
-          predict_result: predictResult,
-          replenish_chained: body.chain_auto_replenish === true,
-        },
-      });
-    }
-
-    return safeJsonOk({
-      ok: true,
-      called_by: calledBy,
-      elapsed_ms: elapsedMs,
-      predict: predictResult,
-      replenish: replenishResult,
-      summary,
-    }, origin);
+    return await handlePartsPredictiveFailure(req);
   } catch (err) {
-    captureEdgeException(err, { fn: "parts-predictive-failure" });
-    return safeJsonError((err as Error).message, 500, origin);
+    captureEdgeException(err, { fn: "parts-predictive-failure", req });
+    return new Response(JSON.stringify({ error: (err as Error).message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 });
