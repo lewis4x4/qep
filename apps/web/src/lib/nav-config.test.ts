@@ -96,6 +96,30 @@ describe("nav-config", () => {
     expect(serviceWriterHrefs).toEqual(managerHrefs);
     expect(repGroup).toBeUndefined();
   });
+
+  test("exposes operator-safe Parts and Service nav for floor roles", () => {
+    const partsCounterHrefs = resolvePrimaryNavGroups(false, false, "parts_counter")
+      .find((group) => group.id === "parts")
+      ?.sections.flatMap((section) => section.items.map((item) => item.href));
+    const serviceWriterHrefs = resolvePrimaryNavGroups(false, false, "service_writer")
+      .find((group) => group.id === "service")
+      ?.sections.flatMap((section) => section.items.map((item) => item.href));
+
+    expect(partsCounterHrefs).toContain("/parts");
+    expect(partsCounterHrefs).toContain("/parts/orders");
+    expect(partsCounterHrefs).toContain("/parts/inventory");
+    expect(partsCounterHrefs).not.toContain("/parts/forecast");
+    expect(partsCounterHrefs).not.toContain("/parts/analytics");
+    expect(partsCounterHrefs).not.toContain("/parts/vendors");
+
+    expect(serviceWriterHrefs).toContain("/service");
+    expect(serviceWriterHrefs).toContain("/service/dashboard");
+    expect(serviceWriterHrefs).toContain("/service/intake");
+    expect(serviceWriterHrefs).toContain("/service/parts");
+    expect(serviceWriterHrefs).not.toContain("/service/metrics");
+    expect(serviceWriterHrefs).not.toContain("/service/branches");
+    expect(serviceWriterHrefs).not.toContain("/service/scheduler-health");
+  });
 });
 
 describe("nav-config — WAVE phase 6 Sales dropdown wiring", () => {
