@@ -26,8 +26,11 @@ export function resolveHomeRoute(
     case "rental":
     case "rentals":
       return "/qrm/rentals";
-    case "rep":
+    case "rep": {
+      const ironOperatorHome = resolveIronOperatorHomeRoute(ironRole);
+      if (ironOperatorHome) return ironOperatorHome;
       return "/sales/today";
+    }
     default:
       if (floorMode || isFloorIronRole(ironRole)) {
         return "/floor";
@@ -36,8 +39,51 @@ export function resolveHomeRoute(
   }
 }
 
+/** Maps live `user_role` enum strings to the home-route buckets used in
+ *  `resolveHomeRoute`. Short aliases (`parts`, `service`) remain supported. */
+const ROLE_HOME_ALIASES: Record<string, string> = {
+  parts_counter: "parts",
+  parts_manager: "parts",
+  service_writer: "service",
+  technician: "service",
+  // No dedicated haul/dispatch board route in the web shell yet; dispatch
+  // operators coordinate through the service command center.
+  dispatch: "service",
+};
+
 function normalizeRole(userRole: string | null | undefined): string {
-  return (userRole ?? "").trim().toLowerCase();
+  const raw = (userRole ?? "").trim().toLowerCase();
+  return ROLE_HOME_ALIASES[raw] ?? raw;
+}
+
+/** When user_role is still `rep` (invite default) but iron_role names a floor
+ *  department, route to that department's operational home. Elevated business
+ *  roles are handled earlier in resolveHomeRoute and are not overridden here. */
+function resolveIronOperatorHomeRoute(ironRole: string | null | undefined): string | null {
+  switch (ironRole) {
+    case "iron_parts_counter":
+    case "iron_parts_manager":
+      return "/parts/companion/queue";
+    default:
+      return null;
+  }
+}
+
+/** Nav item role filter: honor iron-assigned department for rep invites.
+ *  Uses live user_role strings (not home-route buckets) so workforce and
+ *  floor-operator nav roles keep matching their NAV_ITEMS entries. */
+export function resolveOperatorNavRole(
+  userRole: string | null | undefined,
+  ironRole?: string | null,
+): string {
+  const raw = (userRole ?? "").trim().toLowerCase();
+  if (raw === "rep") {
+    if (ironRole === "iron_parts_counter" || ironRole === "iron_parts_manager") {
+      return "parts_counter";
+    }
+    return "rep";
+  }
+  return raw;
 }
 
 function isFloorIronRole(ironRole: string | null | undefined): boolean {

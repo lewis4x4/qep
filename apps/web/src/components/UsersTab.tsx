@@ -56,21 +56,33 @@ const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   finance_admin: "Finance admin. AR/AP, invoicing, and close workflows.",
 };
 
-type Department = "sales" | "parts" | "service" | "rentals" | "";
+type Department = "sales" | "parts" | "parts_manager" | "service" | "rentals" | "";
 
 const DEPARTMENT_OPTIONS: { value: Department; label: string; ironRole: string }[] = [
-  { value: "",        label: "— None (default)",  ironRole: "" },
-  { value: "sales",   label: "Sales",             ironRole: "iron_advisor" },
-  { value: "parts",   label: "Parts",             ironRole: "iron_woman" },
-  { value: "service",  label: "Service",           ironRole: "iron_man" },
-  { value: "rentals", label: "Rentals",            ironRole: "iron_advisor" },
+  { value: "", label: "— None (default)", ironRole: "" },
+  { value: "sales", label: "Sales", ironRole: "iron_advisor" },
+  { value: "parts", label: "Parts Counter", ironRole: "iron_parts_counter" },
+  { value: "parts_manager", label: "Parts Manager", ironRole: "iron_parts_manager" },
+  { value: "service", label: "Service", ironRole: "iron_man" },
+  { value: "rentals", label: "Rentals", ironRole: "iron_advisor" },
+];
+
+const IRON_DEPARTMENT_OPTIONS: { value: string; label: string }[] = [
+  { value: "iron_advisor", label: "Sales" },
+  { value: "iron_parts_counter", label: "Parts Counter" },
+  { value: "iron_parts_manager", label: "Parts Manager" },
+  { value: "iron_woman", label: "Deal Desk" },
+  { value: "iron_man", label: "Service" },
+  { value: "iron_manager", label: "Management" },
 ];
 
 const IRON_ROLE_DISPLAY: Record<string, string> = {
   iron_advisor: "Sales",
-  iron_woman: "Parts",
+  iron_woman: "Deal Desk",
   iron_man: "Service",
   iron_manager: "Management",
+  iron_parts_counter: "Parts Counter",
+  iron_parts_manager: "Parts Manager",
 };
 
 const PAGE_SIZE = 10;
@@ -873,10 +885,11 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
               className="w-full border border-input bg-background rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-qep-orange"
             >
               <option value="">— None</option>
-              <option value="iron_advisor">Sales</option>
-              <option value="iron_woman">Parts</option>
-              <option value="iron_man">Service</option>
-              <option value="iron_manager">Management</option>
+              {IRON_DEPARTMENT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
           <DialogFooter>

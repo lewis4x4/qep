@@ -22,7 +22,15 @@ describe("resolveHomeRoute", () => {
     expect(resolveHomeRoute("rep", "iron_woman")).toBe("/sales/today");
     expect(resolveHomeRoute("rep", "iron_man")).toBe("/sales/today");
     expect(resolveHomeRoute("owner", "iron_owner")).toBe("/owner");
+    expect(resolveHomeRoute("owner", "iron_parts_counter")).toBe("/owner");
     expect(resolveHomeRoute("manager", "iron_parts_manager")).toBe("/qrm");
+  });
+
+  test("routes rep invites with parts iron roles to the parts operational home", () => {
+    expect(resolveHomeRoute("rep", "iron_parts_counter")).toBe("/parts/companion/queue");
+    expect(resolveHomeRoute("rep", "iron_parts_manager")).toBe("/parts/companion/queue");
+    expect(resolveHomeRoute("rep")).toBe("/sales/today");
+    expect(resolveHomeRoute("rep", null)).toBe("/sales/today");
   });
 
   test("falls back to /floor only for non-core roles with floor mode/iron assignment", () => {
@@ -30,11 +38,27 @@ describe("resolveHomeRoute", () => {
     expect(resolveHomeRoute("client_stakeholder", null, "internal", true)).toBe("/floor");
   });
 
-  test("supports future department roles directly", () => {
+  test("supports department role aliases and live user_role strings", () => {
     expect(resolveHomeRoute("parts")).toBe("/parts/companion/queue");
+    expect(resolveHomeRoute("parts_counter")).toBe("/parts/companion/queue");
+    expect(resolveHomeRoute("parts_manager")).toBe("/parts/companion/queue");
     expect(resolveHomeRoute("service")).toBe("/service");
+    expect(resolveHomeRoute("service_writer")).toBe("/service");
+    expect(resolveHomeRoute("technician")).toBe("/service");
+    // No haul/dispatch board UI yet — dispatch shares the service command center.
+    expect(resolveHomeRoute("dispatch")).toBe("/service");
     expect(resolveHomeRoute("rental")).toBe("/qrm/rentals");
     expect(resolveHomeRoute("rentals")).toBe("/qrm/rentals");
+  });
+
+  test("floor operator homes win over iron-floor fallback and generic dashboard", () => {
+    expect(resolveHomeRoute("parts_counter", "iron_parts_counter")).toBe("/parts/companion/queue");
+    expect(resolveHomeRoute("parts_counter", "iron_parts_counter", "internal", true)).toBe(
+      "/parts/companion/queue",
+    );
+    expect(resolveHomeRoute("service_writer", "iron_man")).toBe("/service");
+    expect(resolveHomeRoute("technician", null, "internal", false)).toBe("/service");
+    expect(resolveHomeRoute("dispatch", null, "internal", false)).toBe("/service");
   });
 
   test("routes stakeholders without an iron role to /brief", () => {

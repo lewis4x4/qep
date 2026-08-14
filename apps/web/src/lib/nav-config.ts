@@ -49,6 +49,7 @@ import {
   Factory,
 } from "lucide-react";
 import type { UserRole } from "@/lib/database.types";
+import { resolveOperatorNavRole } from "@/lib/home-route";
 
 export type AppNavRole = UserRole | "service_writer" | "technician" | "parts_counter" | "dispatch" | "finance_admin" | string;
 export type PrimaryHeaderId = "sales" | "parts" | "service" | "workforce" | "rentals" | "qrm";
@@ -108,6 +109,11 @@ export const GRAPPLE_PRODUCTION_ROLE_NAMES = [
 const GRAPPLE_PRODUCTION_NAV_ROLES = [...GRAPPLE_PRODUCTION_ROLE_NAMES];
 export const WORKFORCE_ROLE_NAMES = ["admin", "manager", "owner", "service_writer", "technician"] as const;
 const WORKFORCE_NAV_ROLES = [...WORKFORCE_ROLE_NAMES];
+
+const CORE_BUSINESS_NAV_ROLES = ["rep", "admin", "manager", "owner"] as const;
+const PARTS_OPERATOR_NAV_ROLES: AppNavRole[] = [...CORE_BUSINESS_NAV_ROLES, "parts_counter"];
+const SERVICE_OPERATOR_NAV_ROLES: AppNavRole[] = [...CORE_BUSINESS_NAV_ROLES, "service_writer", "technician"];
+const SERVICE_MANAGEMENT_NAV_ROLES: AppNavRole[] = ["admin", "manager", "owner"];
 
 export function canAccessGrappleProductionRole(role: string | null | undefined): boolean {
   return GRAPPLE_PRODUCTION_ROLE_NAMES.includes(role as (typeof GRAPPLE_PRODUCTION_ROLE_NAMES)[number]);
@@ -181,7 +187,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     label: "Parts Command",
     href: "/parts",
     icon: Boxes,
-    roles: ["rep", "admin", "manager", "owner"],
+    roles: PARTS_OPERATOR_NAV_ROLES,
     primaryHeaderId: "parts",
     sectionLabel: "Operations",
   },
@@ -189,7 +195,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     label: "Catalog",
     href: "/parts/catalog",
     icon: BookOpen,
-    roles: ["rep", "admin", "manager", "owner"],
+    roles: PARTS_OPERATOR_NAV_ROLES,
     primaryHeaderId: "parts",
     sectionLabel: "Operations",
   },
@@ -197,7 +203,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     label: "Orders",
     href: "/parts/orders",
     icon: ShoppingCart,
-    roles: ["rep", "admin", "manager", "owner"],
+    roles: PARTS_OPERATOR_NAV_ROLES,
     primaryHeaderId: "parts",
     sectionLabel: "Operations",
   },
@@ -205,7 +211,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     label: "New Order",
     href: "/parts/orders/new",
     icon: PackagePlus,
-    roles: ["rep", "admin", "manager", "owner"],
+    roles: PARTS_OPERATOR_NAV_ROLES,
     primaryHeaderId: "parts",
     sectionLabel: "Operations",
   },
@@ -213,7 +219,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     label: "Fulfillment",
     href: "/parts/fulfillment",
     icon: ReceiptText,
-    roles: ["rep", "admin", "manager", "owner"],
+    roles: PARTS_OPERATOR_NAV_ROLES,
     primaryHeaderId: "parts",
     sectionLabel: "Operations",
   },
@@ -229,7 +235,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     label: "Inventory",
     href: "/parts/inventory",
     icon: Boxes,
-    roles: ["rep", "admin", "manager", "owner"],
+    roles: PARTS_OPERATOR_NAV_ROLES,
     primaryHeaderId: "parts",
     sectionLabel: "Operations",
   },
@@ -269,7 +275,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     label: "Command Center",
     href: "/service",
     icon: Wrench,
-    roles: ["rep", "admin", "manager", "owner"],
+    roles: SERVICE_OPERATOR_NAV_ROLES,
     primaryHeaderId: "service",
     sectionLabel: "Operations",
   },
@@ -277,7 +283,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     label: "Dashboard",
     href: "/service/dashboard",
     icon: Activity,
-    roles: ["rep", "admin", "manager", "owner"],
+    roles: SERVICE_OPERATOR_NAV_ROLES,
     primaryHeaderId: "service",
     sectionLabel: "Operations",
   },
@@ -285,7 +291,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     label: "Intake",
     href: "/service/intake",
     icon: Mic,
-    roles: ["rep", "admin", "manager", "owner"],
+    roles: SERVICE_OPERATOR_NAV_ROLES,
     primaryHeaderId: "service",
     sectionLabel: "Operations",
   },
@@ -293,7 +299,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     label: "Shop Parts",
     href: "/service/parts",
     icon: Boxes,
-    roles: ["rep", "admin", "manager", "owner"],
+    roles: SERVICE_OPERATOR_NAV_ROLES,
     primaryHeaderId: "service",
     sectionLabel: "Operations",
   },
@@ -333,7 +339,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     label: "Metrics",
     href: "/service/metrics",
     icon: LineChart,
-    roles: ["admin", "manager", "owner"],
+    roles: SERVICE_MANAGEMENT_NAV_ROLES,
     primaryHeaderId: "service",
     sectionLabel: "Insight",
   },
@@ -341,7 +347,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     label: "Branches",
     href: "/service/branches",
     icon: UserPlus,
-    roles: ["admin", "manager", "owner"],
+    roles: SERVICE_MANAGEMENT_NAV_ROLES,
     primaryHeaderId: "service",
     sectionLabel: "Management",
   },
@@ -349,7 +355,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     label: "Job Codes",
     href: "/service/job-code-suggestions",
     icon: Lightbulb,
-    roles: ["admin", "manager", "owner"],
+    roles: SERVICE_MANAGEMENT_NAV_ROLES,
     primaryHeaderId: "service",
     sectionLabel: "Management",
   },
@@ -357,7 +363,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     label: "Cron Health",
     href: "/service/scheduler-health",
     icon: Activity,
-    roles: ["admin", "manager", "owner"],
+    roles: SERVICE_MANAGEMENT_NAV_ROLES,
     primaryHeaderId: "service",
     sectionLabel: "Management",
   },
@@ -835,8 +841,9 @@ export function resolveRoleScopedNavItems(
   role: string,
   ironRole?: string | null,
 ): NavItem[] {
+  const navRole = resolveOperatorNavRole(role, ironRole);
   return resolveNavItems(quoteBuilderEnabled, quoteBuilderLoading)
-    .filter((item) => item.roles.includes(role))
+    .filter((item) => item.roles.includes(navRole))
     .filter((item) => isNavItemVisibleForIronRole(item, ironRole));
 }
 
