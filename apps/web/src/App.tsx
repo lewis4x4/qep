@@ -973,6 +973,7 @@ function App() {
               <Route path="/portal/*" element={<Navigate to="/portal/login" replace />} />
               <Route path="/login" element={<LoginPage authError={error} />} />
               <Route path="/forgot-password" element={<LoginPage authError={error} />} />
+              <Route path="/forgot-password/" element={<Navigate to="/forgot-password" replace />} />
               <Route path="/quote" element={<RedirectPreserveSearch to="/sales/quotes/new" />} />
               <Route path="/quotes" element={<RedirectPreserveSearch to="/sales/quotes" />} />
               <Route path="/quote-v2" element={<RedirectPreserveSearch to="/sales/quotes/new" />} />
@@ -1094,6 +1095,10 @@ function App() {
               <Route
                 path="/forgot-password"
                 element={<Navigate to={signedInAuthEntryRedirect("/forgot-password")} replace />}
+              />
+              <Route
+                path="/forgot-password/"
+                element={<Navigate to="/forgot-password" replace />}
               />
               <Route
                 path="/dashboard"

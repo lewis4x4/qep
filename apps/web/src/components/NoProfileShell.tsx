@@ -1,5 +1,6 @@
 import { Suspense } from "react";
-import { Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { isAuthEntryPath, resolveSignedInAuthEntryRedirect } from "@/lib/auth-route-bootstrap";
 import { lazy } from "react";
 import { OfflineBanner } from "./OfflineBanner";
 import { NotFoundPage } from "./NotFoundPage";
@@ -35,6 +36,15 @@ export function NoProfileShell({ authError }: { authError: string | null }) {
   const isPortal =
     location.pathname === "/portal" || location.pathname.startsWith("/portal/");
   const isVendorPortal = location.pathname.startsWith("/vendor/pricing/");
+
+  if (isPortal && isAuthEntryPath(location.pathname)) {
+    return (
+      <Navigate
+        to={resolveSignedInAuthEntryRedirect(location.pathname, "/portal")}
+        replace
+      />
+    );
+  }
 
   if (isPortal || isVendorPortal) {
     return (

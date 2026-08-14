@@ -90,8 +90,17 @@ export function isAuthenticatedAppPath(pathname: string): boolean {
   );
 }
 
+function normalizePathname(pathname: string): string {
+  if (pathname.length > 1 && pathname.endsWith("/")) {
+    return pathname.slice(0, -1);
+  }
+
+  return pathname;
+}
+
 export function isAuthEntryPath(pathname: string): boolean {
-  return AUTH_ENTRY_PATHS.some((path) => pathname === path);
+  const normalized = normalizePathname(pathname);
+  return AUTH_ENTRY_PATHS.some((path) => normalized === path);
 }
 
 export function isRecognizedApplicationPath(pathname: string): boolean {
@@ -110,7 +119,9 @@ export function resolveSignedInAuthEntryRedirect(
   homeRoute: string,
   portalHomeRoute = "/portal",
 ): string {
-  if (pathname === "/portal/login") {
+  const normalized = normalizePathname(pathname);
+
+  if (normalized === "/portal/login") {
     return portalHomeRoute;
   }
 

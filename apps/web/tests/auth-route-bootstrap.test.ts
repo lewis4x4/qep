@@ -70,16 +70,23 @@ describe("isAuthEntryPath", () => {
     }
     expect(isAuthEntryPath("/dashboard")).toBe(false);
   });
+
+  it("treats trailing-slash auth entry routes as recognized", () => {
+    expect(isAuthEntryPath("/forgot-password/")).toBe(true);
+    expect(isRecognizedApplicationPath("/forgot-password/")).toBe(true);
+  });
 });
 
 describe("resolveSignedInAuthEntryRedirect", () => {
   it("sends signed-in login and forgot-password visitors to role home", () => {
     expect(resolveSignedInAuthEntryRedirect("/login", "/sales/today")).toBe("/sales/today");
     expect(resolveSignedInAuthEntryRedirect("/forgot-password", "/qrm")).toBe("/qrm");
+    expect(resolveSignedInAuthEntryRedirect("/forgot-password/", "/qrm")).toBe("/qrm");
   });
 
   it("sends signed-in portal login visitors to portal home", () => {
     expect(resolveSignedInAuthEntryRedirect("/portal/login", "/sales/today")).toBe("/portal");
+    expect(resolveSignedInAuthEntryRedirect("/portal/login/", "/sales/today")).toBe("/portal");
   });
 });
 
