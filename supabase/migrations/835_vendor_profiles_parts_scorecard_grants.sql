@@ -25,3 +25,5 @@ comment on column public.vendor_profiles.fill_rate is
   'Fraction of orders shipped complete (0–1). Readable by authenticated workspace members for parts scorecards.';
 comment on column public.vendor_profiles.composite_score is
   'Weighted vendor score for parts routing. Readable by authenticated workspace members for parts scorecards.';
+
+-- Idempotent: safe to re-run if grants already exist.
