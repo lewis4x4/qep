@@ -15,8 +15,16 @@ import {
 import qepLoginYardHero from "@/assets/qep-login-yard-hero.svg";
 import { BRAND_NAME, BrandLogo } from "@/components/BrandLogo";
 import { isTransientAuthRecoveryError } from "@/lib/auth-recovery";
-import { getSupabaseUrlHostname } from "@/lib/supabase";
-import { signInWithOtpWithRetry, signInWithPasswordWithRetry } from "@/lib/supabase-auth-retry";
+import {
+  loginFormCopy,
+  loginMarketingCopy,
+  type LoginSurfaceMode,
+} from "@/lib/login-page-copy";
+import {
+  resetPasswordForEmailWithRetry,
+  signInWithOtpWithRetry,
+  signInWithPasswordWithRetry,
+} from "@/lib/supabase-auth-retry";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,8 +34,10 @@ import { useToast } from "@/hooks/use-toast";
 
 interface LoginPageProps {
   authError?: string | null;
-  mode?: "internal" | "portal";
+  mode?: LoginSurfaceMode;
 }
+
+const HERO_METRIC_ICONS = [Building2, Truck, Wrench] as const;
 
 function signInErrorDescription(error: AuthError): ReactNode {
   const raw = error.message ?? "";
@@ -35,33 +45,27 @@ function signInErrorDescription(error: AuthError): ReactNode {
     return raw;
   }
   return (
-    <div className="space-y-2 text-sm leading-snug">
-      <p>Your browser could not reach Supabase to sign you in. Check Wi‑Fi, VPN, or iCloud Private Relay.</p>
-      <p className="font-mono text-xs opacity-90 break-words">{raw}</p>
-      <p className="font-mono text-xs opacity-80 break-all">
-        API host in this build: {getSupabaseUrlHostname()}
-      </p>
-      <p className="text-xs opacity-80">
-        If this keeps happening: in Netlify (or your host), confirm{" "}
-        <span className="font-mono">VITE_SUPABASE_URL</span> and{" "}
-        <span className="font-mono">VITE_SUPABASE_ANON_KEY</span> match your Supabase project, then redeploy so the
-        build picks them up. If the host above is wrong, the deploy is using the wrong env.
-      </p>
-    </div>
+    <p className="text-sm leading-snug">
+      Your browser could not reach the sign-in service. Check Wi‑Fi, VPN, or iCloud Private Relay, then try again.
+    </p>
   );
 }
 
-const HERO_METRICS = [
-  { label: "Branches connected", value: "2 live", icon: Building2 },
-  { label: "Field follow-up", value: "< 2 min", icon: Truck },
-  { label: "Quote turnaround", value: "Same day", icon: Wrench },
-];
+function passwordResetRedirect(mode: LoginSurfaceMode): string {
+  const path = mode === "portal" ? "/portal/login" : "/login";
+  return `${window.location.origin}${path}?recovery=1`;
+}
 
 export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
   const { toast, dismiss } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+
+  const isPortal = mode === "portal";
+  const formCopy = loginFormCopy(mode);
+  const marketing = loginMarketingCopy(mode);
 
   useEffect(() => {
     dismiss();
@@ -103,12 +107,36 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
     setLoading(false);
   }
 
-  const isPortal = mode === "portal";
-  const headline = isPortal ? "Portal access" : "Welcome back";
-  const subcopy = isPortal
-    ? `Sign in with your ${BRAND_NAME} customer portal account to view your equipment, service status, invoices, and documents.`
-    : `Sign in with your ${BRAND_NAME} work account to access knowledge, QRM follow-up, voice capture, and quotes.`;
-  const badgeLabel = isPortal ? "Secure customer portal" : "Secure operator access";
+  async function handleForgotPassword(): Promise<void> {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      toast({
+        variant: "destructive",
+        title: "Enter your email first",
+        description: "Add the email address for your account, then choose Forgot password.",
+      });
+      return;
+    }
+
+    setResetLoading(true);
+    const { error } = await resetPasswordForEmailWithRetry({
+      email: trimmedEmail,
+      redirectTo: passwordResetRedirect(mode),
+    });
+    if (error) {
+      toast({
+        variant: "destructive",
+        title: "Couldn't send reset email",
+        description: signInErrorDescription(error),
+      });
+    } else {
+      toast({
+        title: "Check your email",
+        description: `If ${trimmedEmail} has an account, we sent a password reset link.`,
+      });
+    }
+    setResetLoading(false);
+  }
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(232,119,34,0.14),_transparent_28%),linear-gradient(135deg,_#08111F_0%,_#101A2C_52%,_#162134_100%)] px-4 py-4 sm:px-6 lg:px-8">
@@ -123,29 +151,24 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
             <div className="relative z-10 flex h-full flex-col justify-between gap-8">
               <div className="space-y-6">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-5">
-                  <div className="rounded-2xl bg-black/50 p-3 shadow-[0_18px_40px_rgba(0,0,0,0.35)] ring-1 ring-white/10 w-fit max-w-full">
-                    <BrandLogo
-                      className="h-[4.25rem] w-auto max-w-[min(100%,320px)] sm:h-[4.75rem]"
-                      decorative
-                    />
-                    <span className="sr-only">
-                      {BRAND_NAME}. Dealership operating system.
-                    </span>
-                  </div>
+                  <BrandLogo
+                    className="h-[4.25rem] w-auto max-w-[min(100%,320px)] sm:h-[4.75rem]"
+                    decorative
+                  />
+                  <span className="sr-only">{BRAND_NAME}. Dealership operating system.</span>
                 </div>
 
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-200">
                   <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-                  Built for the yard, counter, and close
+                  {marketing.badgeLabel}
                 </div>
 
                 <div className="max-w-2xl space-y-4">
                   <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white sm:text-5xl lg:text-[3.6rem] lg:leading-[1.02]">
-                    Equipment intelligence that feels at home in a dealership.
+                    {marketing.headline}
                   </h1>
                   <p className="max-w-xl text-base leading-7 text-slate-300 sm:text-lg">
-                    Quotes, customer history, field notes, and follow-up all in one system. Built for sales reps,
-                    parts, service, rentals, and management without the usual QRM clutter.
+                    {marketing.subcopy}
                   </p>
                 </div>
               </div>
@@ -155,11 +178,13 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
                   <div className="absolute inset-0 bg-[linear-gradient(180deg,_rgba(255,255,255,0.04),_transparent_25%)]" />
                   <div className="relative mb-4 flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Live dealership view</p>
-                      <p className="mt-1 text-sm text-slate-300">A login screen with a real operating-system feel, not stock SaaS filler.</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+                        {marketing.heroEyebrow}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-300">{marketing.heroCaption}</p>
                     </div>
                     <div className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">
-                      Field ready
+                      {marketing.heroStatusLabel}
                     </div>
                   </div>
 
@@ -177,15 +202,17 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
                           <MapPin className="h-3.5 w-3.5 text-primary" />
                           Lake City operations
                         </div>
-                        <p className="mt-1 text-[11px] text-slate-400">Sales, parts, rentals, and service on one screen.</p>
+                        <p className="mt-1 text-[11px] text-slate-400">
+                          Sales, parts, rentals, and service on one screen.
+                        </p>
                       </div>
 
                       <div className="absolute bottom-4 left-4 max-w-[60%] rounded-2xl border border-white/10 bg-[#0A121E]/82 px-3 py-2 backdrop-blur">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
-                          Sales to service, one system
+                          {marketing.heroOverlayTitle}
                         </p>
                         <p className="mt-1 text-sm font-medium text-white">
-                          A dealership login screen should look like the business it runs.
+                          {marketing.heroOverlayBody}
                         </p>
                       </div>
                     </div>
@@ -193,8 +220,8 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-                  {HERO_METRICS.map((metric) => {
-                    const Icon = metric.icon;
+                  {marketing.heroMetrics.map((metric, index) => {
+                    const Icon = HERO_METRIC_ICONS[index] ?? Building2;
                     return (
                       <Card
                         key={metric.label}
@@ -222,15 +249,15 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
               <div className="mb-8 space-y-4">
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
                   <HardHat className="h-3.5 w-3.5 text-primary" />
-                  {badgeLabel}
+                  {formCopy.badgeLabel}
                 </div>
 
                 <div>
                   <h2 className="text-4xl font-semibold tracking-tight text-white sm:text-[2.9rem] sm:leading-[1.02]">
-                    {headline}
+                    {formCopy.headline}
                   </h2>
                   <p className="mt-3 max-w-md text-base leading-7 text-slate-400">
-                    {subcopy}
+                    {formCopy.subcopy}
                   </p>
                 </div>
 
@@ -288,9 +315,19 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
                         </div>
 
                         <div className="space-y-2">
-                          <Label htmlFor="password" className="text-sm font-medium text-slate-200">
-                            Password
-                          </Label>
+                          <div className="flex items-center justify-between gap-3">
+                            <Label htmlFor="password" className="text-sm font-medium text-slate-200">
+                              Password
+                            </Label>
+                            <button
+                              type="button"
+                              onClick={() => void handleForgotPassword()}
+                              disabled={resetLoading || loading}
+                              className="text-sm font-medium text-primary hover:text-[#D96C1D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[#0C1524] disabled:opacity-60"
+                            >
+                              {resetLoading ? "Sending reset…" : "Forgot password?"}
+                            </button>
+                          </div>
                           <div className="relative">
                             <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                             <Input
@@ -309,10 +346,6 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
                         <Button
                           id="login-button"
                           type="submit"
-                          // WAVE CI/Quality (Slice 2 a11y fix): switch to
-                          // bg-qep-orange-accessible for 4.5:1 contrast on
-                          // white text. Hover still lands on the existing
-                          // darker hover swatch.
                           className="h-12 w-full gap-2 bg-qep-orange-accessible text-base font-semibold text-white hover:bg-[#D96C1D]"
                           disabled={loading}
                         >
@@ -325,7 +358,9 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
                     <TabsContent value="magic" className="mt-0">
                       <form onSubmit={handleMagicLink} className="space-y-4">
                         <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-400">
-                          Send a secure login link to your work email. Best when you are away from your password manager.
+                          {isPortal
+                            ? "Send a secure login link to the email address tied to your portal account."
+                            : "Send a secure login link to your work email. Best when you are away from your password manager."}
                         </div>
 
                         <div className="space-y-2">
@@ -349,7 +384,7 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
 
                         <Button
                           type="submit"
-                          className="h-12 w-full gap-2 bg-primary text-base font-semibold text-white hover:bg-[#D96C1D]"
+                          className="h-12 w-full gap-2 bg-qep-orange-accessible text-base font-semibold text-white hover:bg-[#D96C1D]"
                           disabled={loading}
                         >
                           {loading ? "Sending..." : "Send Magic Link"}
@@ -364,11 +399,11 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
               <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3 text-sm text-slate-400">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="h-4 w-4 text-emerald-400" />
-                  Role-based access enforced
+                  {marketing.footerLines[0]}
                 </div>
                 <div className="flex items-center gap-2">
                   <MapPin className="h-4 w-4 text-primary" />
-                  Built for the field and the front office
+                  {marketing.footerLines[1]}
                 </div>
               </div>
             </div>

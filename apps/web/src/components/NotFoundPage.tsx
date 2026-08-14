@@ -1,8 +1,16 @@
 import { Link } from "react-router-dom";
-import { HardHat, ArrowLeft } from "lucide-react";
+import { HardHat, ArrowLeft, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export function NotFoundPage(): React.ReactElement {
+type NotFoundAudience = "authenticated" | "public";
+
+export function NotFoundPage({
+  audience = "authenticated",
+}: {
+  audience?: NotFoundAudience;
+}): React.ReactElement {
+  const isPublic = audience === "public";
+
   return (
     <div
       role="main"
@@ -32,16 +40,24 @@ export function NotFoundPage(): React.ReactElement {
 
       {/* Description */}
       <p className="text-muted-foreground max-w-sm mb-8 leading-relaxed">
-        The page you're looking for doesn't exist or may have been moved. Head
-        back to your dashboard to get back on track.
+        {isPublic
+          ? "The address may be mistyped or the page may have moved. Sign in if you were trying to reach your workspace."
+          : "The page you're looking for doesn't exist or may have been moved. Head back to your dashboard to get back on track."}
       </p>
 
       {/* Action */}
       <Button asChild size="lg" className="min-w-[160px] min-h-[44px]">
-        <Link to="/dashboard">
-          <ArrowLeft className="w-4 h-4 mr-2" aria-hidden="true" />
-          Back to Dashboard
-        </Link>
+        {isPublic ? (
+          <Link to="/login">
+            <LogIn className="w-4 h-4 mr-2" aria-hidden="true" />
+            Sign in
+          </Link>
+        ) : (
+          <Link to="/dashboard">
+            <ArrowLeft className="w-4 h-4 mr-2" aria-hidden="true" />
+            Back to Dashboard
+          </Link>
+        )}
       </Button>
     </div>
   );
