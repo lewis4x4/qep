@@ -231,8 +231,13 @@ export async function processOfflineQueueAction(
           };
         }
 
-        resolvedDealId = ownedDeal.id;
-        resolvedCompanyId = ownedDeal.company_id ?? company_id ?? null;
+        if (deal_id) {
+          resolvedDealId = ownedDeal.id;
+          resolvedCompanyId = null;
+        } else {
+          resolvedDealId = null;
+          resolvedCompanyId = company_id ?? null;
+        }
       }
 
       const { error } = await db.from("crm_activities").insert({
