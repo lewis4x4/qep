@@ -10,6 +10,7 @@
  * workspace hints or run unscoped for shop-wide cron.
  */
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { safeJsonError } from "../_shared/safe-cors.ts";
 import { handlePartsPredictiveFailure } from "./handler.ts";
 
 Deno.serve(async (req) => {
@@ -17,9 +18,6 @@ Deno.serve(async (req) => {
     return await handlePartsPredictiveFailure(req);
   } catch (err) {
     captureEdgeException(err, { fn: "parts-predictive-failure", req });
-    return new Response(JSON.stringify({ error: (err as Error).message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return safeJsonError("Internal server error", 500, req.headers.get("Origin"));
   }
 });

@@ -345,12 +345,12 @@ mustContain(
   "auto-replenish edge function exists",
 );
 mustContain(
-  "supabase/functions/parts-auto-replenish/index.ts",
+  "supabase/functions/parts-auto-replenish/handler.ts",
   "computeVendorScore",
   "auto-replenish includes vendor scoring logic",
 );
 mustContain(
-  "supabase/functions/parts-auto-replenish/index.ts",
+  "supabase/functions/parts-auto-replenish/handler.ts",
   "parts_auto_replenish_queue",
   "auto-replenish writes to queue table",
 );
