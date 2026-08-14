@@ -31,6 +31,10 @@ Deno.test("public accept atomically records signature, package status, and prosp
   assertStringIncludes(handler, "QUOTE_PIPELINE_STAGE_TARGETS.salesOrderSigned");
   assertStringIncludes(handler, "resolveLatestSentQuoteRepUserId");
   assertStringIncludes(handler, "recordPublicAcceptRepEvidence");
+  assertStringIncludes(handler, "stageAcceptedQuotePartsOrder");
+  assertStringIncludes(handler, 'stageAcceptedQuotePartsOrder(admin, quote.id, "public accept retry")');
+  assertStringIncludes(handler, 'stageAcceptedQuotePartsOrder(admin, quote.id, "public accept")');
+  assertStringIncludes(source, "materializePartsOrderFromQuote");
   assertStringIncludes(source, "quote_public_accept_signed");
   assertStringIncludes(source, "const sentRepUserId = await resolveLatestSentQuoteRepUserId");
   assertStringIncludes(source, "const resolvedRepUserId = sentRepUserId");
@@ -42,6 +46,15 @@ Deno.test("public accept atomically records signature, package status, and prosp
   assertStringIncludes(source, '.eq("subject", "public_accept_signed")');
   assertStringIncludes(source, "if (existingTimeline?.id) return;");
   assertStringIncludes(source, "created_by: input.repUserId");
+});
+
+Deno.test("staff sign acceptance stages parts orders through shared helper", () => {
+  const signIndex = source.indexOf('if (action === "sign")');
+  const signEnd = source.indexOf("// ── POST /ensure-share-token", signIndex);
+  const signBlock = source.slice(signIndex, signEnd);
+
+  assertStringIncludes(signBlock, "accept_quote_package_with_signature");
+  assertStringIncludes(signBlock, 'stageAcceptedQuotePartsOrder(admin, String(body.quote_package_id), "staff sign")');
 });
 
 Deno.test("public accept handles idempotent already-accepted retries before invoking atomic acceptance", () => {
@@ -58,6 +71,8 @@ Deno.test("public accept handles idempotent already-accepted retries before invo
   assertStringIncludes(idempotentBlock, '.select("id, signed_at, document_hash")');
   assertStringIncludes(idempotentBlock, "sentRepUserId");
   assertStringIncludes(idempotentBlock, "recordPublicAcceptRepEvidence");
+  assertStringIncludes(idempotentBlock, "stageAcceptedQuotePartsOrder");
+  assertStringIncludes(idempotentBlock, '"public accept retry"');
   assertStringIncludes(idempotentBlock, "documentHash: typeof latestSig?.document_hash === \"string\"");
   assertStringIncludes(idempotentBlock, "status: String(quote.status)");
 });

@@ -143,8 +143,48 @@ export async function applyGovernedPartPricing(
 }
 
 export type MaterializeResult =
-  | { status: "skipped"; reason: "already_materialized" | "no_part_lines" | "no_company" | "quote_not_found"; partsOrderId?: string }
+  | { status: "skipped"; reason: "already_materialized" | "no_part_lines" | "no_company" | "quote_not_found" | "workspace_mismatch"; partsOrderId?: string }
   | { status: "created"; partsOrderId: string; lineCount: number; subtotal: number; warnings: string[] };
+
+async function resolveQuoteCompanyId(
+  admin: AdminClient,
+  quote: { deal_id?: unknown; contact_id?: unknown; workspace_id?: unknown },
+): Promise<string | null> {
+  const workspaceId = typeof quote.workspace_id === "string" ? quote.workspace_id : "default";
+
+  if (quote.deal_id) {
+    const { data: deal } = await admin
+      .from("qrm_deals")
+      .select("company_id, workspace_id")
+      .eq("id", quote.deal_id as string)
+      .maybeSingle();
+    if (deal) {
+      const dealWorkspaceId = typeof deal.workspace_id === "string" ? deal.workspace_id : null;
+      if (dealWorkspaceId && dealWorkspaceId !== workspaceId) {
+        return null;
+      }
+      const companyId = (deal.company_id as string | null) ?? null;
+      if (companyId) return companyId;
+    }
+  }
+
+  if (quote.contact_id) {
+    const { data: contact } = await admin
+      .from("qrm_contacts")
+      .select("primary_company_id, workspace_id")
+      .eq("id", quote.contact_id as string)
+      .maybeSingle();
+    if (contact) {
+      const contactWorkspaceId = typeof contact.workspace_id === "string" ? contact.workspace_id : null;
+      if (contactWorkspaceId && contactWorkspaceId !== workspaceId) {
+        return null;
+      }
+      return (contact.primary_company_id as string | null) ?? null;
+    }
+  }
+
+  return null;
+}
 
 export async function materializePartsOrderFromQuote(
   admin: AdminClient,
@@ -162,10 +202,24 @@ export async function materializePartsOrderFromQuote(
 
   const { data: quote } = await admin
     .from("quote_packages")
-    .select("id, workspace_id, deal_id")
+    .select("id, workspace_id, deal_id, contact_id")
     .eq("id", quotePackageId)
     .maybeSingle();
   if (!quote) return { status: "skipped", reason: "quote_not_found" };
+
+  const workspaceId = typeof quote.workspace_id === "string" ? quote.workspace_id : "default";
+
+  if (quote.deal_id) {
+    const { data: deal } = await admin
+      .from("qrm_deals")
+      .select("workspace_id")
+      .eq("id", quote.deal_id as string)
+      .maybeSingle();
+    const dealWorkspaceId = typeof deal?.workspace_id === "string" ? deal.workspace_id : null;
+    if (dealWorkspaceId && dealWorkspaceId !== workspaceId) {
+      return { status: "skipped", reason: "workspace_mismatch" };
+    }
+  }
 
   const { data: partLines } = await admin
     .from("quote_package_line_items")
@@ -177,15 +231,7 @@ export async function materializePartsOrderFromQuote(
     return { status: "skipped", reason: "no_part_lines" };
   }
 
-  let crmCompanyId: string | null = null;
-  if (quote.deal_id) {
-    const { data: deal } = await admin
-      .from("qrm_deals")
-      .select("company_id")
-      .eq("id", quote.deal_id as string)
-      .maybeSingle();
-    crmCompanyId = (deal?.company_id as string | null) ?? null;
-  }
+  const crmCompanyId = await resolveQuoteCompanyId(admin, quote);
   if (!crmCompanyId) {
     await admin.rpc("enqueue_exception", {
       p_source: "data_quality",
@@ -246,7 +292,7 @@ export async function materializePartsOrderFromQuote(
   const { data: order, error: orderError } = await admin
     .from("parts_orders")
     .insert({
-      workspace_id: quote.workspace_id ?? "default",
+      workspace_id: workspaceId,
       status: "draft",
       portal_customer_id: null,
       crm_company_id: crmCompanyId,
@@ -262,6 +308,17 @@ export async function materializePartsOrderFromQuote(
     .select("id")
     .single();
   if (orderError || !order) {
+    if (orderError?.code === "23505") {
+      const { data: raced } = await admin
+        .from("parts_orders")
+        .select("id")
+        .eq("quote_package_id", quotePackageId)
+        .limit(1)
+        .maybeSingle();
+      if (raced) {
+        return { status: "skipped", reason: "already_materialized", partsOrderId: raced.id as string };
+      }
+    }
     throw new Error(`parts order materialization failed: ${orderError?.message ?? "no row"}`);
   }
   const partsOrderId = order.id as string;
