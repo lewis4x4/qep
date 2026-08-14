@@ -308,9 +308,12 @@ export async function detectActivityGaps(
   for (const rep of reps as Record<string, unknown>[]) {
     if (activeReps.has(rep.id as string)) continue;
 
+    const workspaceId = (rep.active_workspace_id as string | null) ??
+      (scope.mode === "workspace" ? scope.workspaceId : null);
+    if (!workspaceId) continue;
+
     alerts.push({
-      workspace_id: (rep.active_workspace_id as string | null) ??
-        (scope.mode === "workspace" ? scope.workspaceId : "default"),
+      workspace_id: workspaceId,
       alert_type: "activity_gap",
       severity: "medium",
       title: `No activity from ${rep.full_name ?? "rep"} in 3+ days`,
@@ -514,7 +517,7 @@ async function detectStaleEmbeddingsForSource(
     .select("entity_id, updated_at")
     .eq("entity_type", config.entityType)
     .in("entity_id", sources.map((row) => row.id as string));
-  embeddingQuery = applyWorkspaceEq(embeddingQuery, scope);
+  // crm_embeddings has no workspace_id — scope is enforced on the parent CRM rows above.
 
   const { data: embeddingRows } = await embeddingQuery;
 
@@ -630,6 +633,7 @@ export async function detectOrphanChunks(
     .from("chunks")
     .select("document_id")
     .in("document_id", docRows.map((doc) => doc.id));
+  // chunks has no workspace_id — documents query above is the workspace gate.
 
   const chunkCounts = new Map<string, number>();
   for (const row of (chunkRows ?? []) as Array<{ document_id: string }>) {
@@ -657,6 +661,12 @@ export async function detectOrphanChunks(
   }
 
   return { alerts, meta: buildDetectorMeta(ORPHAN_CHUNKS_LIMIT, scanned) };
+}
+
+/** Drop alerts outside the active scan scope before insert (JWT cannot cross shops). */
+export function filterAlertsToScope(alerts: Alert[], scope: ScanScope): Alert[] {
+  if (scope.mode === "all") return alerts;
+  return alerts.filter((alert) => alert.workspace_id === scope.workspaceId);
 }
 
 export interface AnomalyScanDependencies {
@@ -753,10 +763,12 @@ export async function handleAnomalyScan(
       ...orphanChunkResult.alerts,
     ];
 
+    const scopedAlerts = filterAlertsToScope(allAlerts, scope);
+
     const today = new Date().toISOString().split("T")[0];
     const newAlerts: Alert[] = [];
 
-    for (const alert of allAlerts) {
+    for (const alert of scopedAlerts) {
       if (alert.entity_id) {
         let existingQuery = adminClient
           .from("anomaly_alerts")
@@ -859,7 +871,7 @@ export async function handleAnomalyScan(
 
     console.info(
       `[anomaly-scan] scope=${scope.mode}${scope.mode === "workspace" ? `:${scope.workspaceId}` : ""} ` +
-      `detected=${allAlerts.length} new=${newAlerts.length} scored=${scoreResult.dealsScored} ` +
+      `detected=${scopedAlerts.length} new=${newAlerts.length} scored=${scoreResult.dealsScored} ` +
       `bus_published=${busPublished} bus_failed=${busFailed} ` +
       `(stalling=${stallingResult.alerts.length} overdue=${overdueResult.alerts.length} ` +
       `gaps=${activityGapResult.alerts.length} pipeline=${pipelineResult.alerts.length} ` +
@@ -870,7 +882,7 @@ export async function handleAnomalyScan(
       scope: scope.mode === "workspace"
         ? { mode: "workspace", workspace_id: scope.workspaceId }
         : { mode: "all" },
-      total_detected: allAlerts.length,
+      total_detected: scopedAlerts.length,
       new_alerts: newAlerts.length,
       deals_scored: scoreResult.dealsScored,
       breakdown: {

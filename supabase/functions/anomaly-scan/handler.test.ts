@@ -7,8 +7,10 @@ import {
   PIPELINE_RISK_LIMIT,
   STALLING_DEALS_LIMIT,
   buildDetectorMeta,
+  filterAlertsToScope,
   handleAnomalyScan,
   resolveAnomalyScanScope,
+  type Alert,
   type AnomalyScanDependencies,
 } from "./handler.ts";
 
@@ -120,6 +122,11 @@ class QueryBuilder implements PromiseLike<{ data: unknown; error: null }> {
 class MockAdminClient {
   readonly filters: Filter[] = [];
   readonly inserts: Array<{ table: string; payload: unknown }> = [];
+  readonly stallDealCount: number;
+
+  constructor(options: { stallDealCount?: number } = {}) {
+    this.stallDealCount = options.stallDealCount ?? 2;
+  }
 
   from(table: string): QueryBuilder {
     return new QueryBuilder(this, table);
@@ -147,32 +154,18 @@ class MockAdminClient {
     const workspace = params.filters.find((filter) => filter.column === "workspace_id")?.value;
 
     if (table === "crm_deals") {
-      const rows = [
-        {
-          id: "deal-a",
-          name: "Deal A",
-          workspace_id: WORKSPACE_A,
-          assigned_rep_id: "rep-a",
-          updated_at: "2020-01-01T00:00:00.000Z",
-          amount: 1000,
-          stage_id: "stage-1",
-          next_follow_up_at: "2020-01-01T00:00:00.000Z",
-          expected_close_on: "2099-01-01",
-          created_at: "2020-01-01T00:00:00.000Z",
-        },
-        {
-          id: "deal-b",
-          name: "Deal B",
-          workspace_id: WORKSPACE_B,
-          assigned_rep_id: "rep-b",
-          updated_at: "2020-01-01T00:00:00.000Z",
-          amount: 2000,
-          stage_id: "stage-1",
-          next_follow_up_at: "2020-01-01T00:00:00.000Z",
-          expected_close_on: "2099-01-01",
-          created_at: "2020-01-01T00:00:00.000Z",
-        },
-      ];
+      const rows = Array.from({ length: this.stallDealCount }, (_, index) => ({
+        id: `deal-${index}`,
+        name: `Deal ${index}`,
+        workspace_id: index % 2 === 0 ? WORKSPACE_A : WORKSPACE_B,
+        assigned_rep_id: `rep-${index}`,
+        updated_at: "2020-01-01T00:00:00.000Z",
+        amount: 1000 + index,
+        stage_id: "stage-1",
+        next_follow_up_at: "2020-01-01T00:00:00.000Z",
+        expected_close_on: "2099-01-01",
+        created_at: "2020-01-01T00:00:00.000Z",
+      }));
       const filtered = workspace
         ? rows.filter((row) => row.workspace_id === workspace)
         : rows;
@@ -229,7 +222,9 @@ class MockAdminClient {
     }
 
     if (table === "chunks") {
-      return [];
+      const documentId = params.filters.find((filter) => filter.column === "document_id")?.value;
+      const ids = Array.isArray(documentId) ? documentId as string[] : [];
+      return ids.map((id) => ({ document_id: id }));
     }
 
     if (
@@ -273,11 +268,107 @@ function dependencies(
   };
 }
 
-function dealWorkspaceFilters(client: MockAdminClient): Filter[] {
-  return client.filters.filter((filter) =>
-    filter.table === "crm_deals" && filter.column === "workspace_id"
-  );
+function tableFilters(client: MockAdminClient, table: string): Filter[] {
+  return client.filters.filter((filter) => filter.table === table);
 }
+
+function dealWorkspaceFilters(client: MockAdminClient): Filter[] {
+  return tableFilters(client, "crm_deals").filter((filter) => filter.column === "workspace_id");
+}
+
+Deno.test("filterAlertsToScope blocks cross-shop inserts for JWT workspace scans", () => {
+  const alerts: Alert[] = [
+    {
+      workspace_id: WORKSPACE_A,
+      alert_type: "stalling_deal",
+      severity: "high",
+      title: "A",
+      description: "A",
+      entity_type: "deal",
+      entity_id: "deal-a",
+      assigned_to: null,
+      data: {},
+    },
+    {
+      workspace_id: WORKSPACE_B,
+      alert_type: "stalling_deal",
+      severity: "high",
+      title: "B",
+      description: "B",
+      entity_type: "deal",
+      entity_id: "deal-b",
+      assigned_to: null,
+      data: {},
+    },
+  ];
+
+  assertEquals(
+    filterAlertsToScope(alerts, { mode: "workspace", workspaceId: WORKSPACE_A }).length,
+    1,
+  );
+  assertEquals(filterAlertsToScope(alerts, { mode: "all" }).length, 2);
+});
+
+Deno.test("crm_embeddings and chunks are never filtered by workspace_id", async () => {
+  const client = new MockAdminClient();
+  await handleAnomalyScan(
+    new Request("https://example.test/functions/v1/anomaly-scan", {
+      method: "POST",
+      headers: { Authorization: "Bearer user-token" },
+    }),
+    dependencies(client),
+  );
+
+  assertEquals(
+    tableFilters(client, "crm_embeddings").some((filter) => filter.column === "workspace_id"),
+    false,
+  );
+  assertEquals(
+    tableFilters(client, "chunks").some((filter) => filter.column === "workspace_id"),
+    false,
+  );
+});
+
+Deno.test("orphan chunk alerts use document workspace_id, not default", async () => {
+  const client = new MockAdminClient();
+  const response = await handleAnomalyScan(
+    new Request("https://example.test/functions/v1/anomaly-scan", {
+      method: "POST",
+      headers: { Authorization: "Bearer user-token" },
+    }),
+    dependencies(client),
+  );
+  const body = await response.json();
+
+  assertEquals(response.status, 200);
+  const alertInsert = client.inserts.find((insert) => insert.table === "anomaly_alerts");
+  const rows = Array.isArray(alertInsert?.payload)
+    ? alertInsert?.payload
+    : alertInsert?.payload
+    ? [alertInsert.payload]
+    : [];
+  const orphanAlert = rows.find((row) =>
+    (row as { alert_type?: string }).alert_type === "orphan_chunks"
+  );
+  assertEquals((orphanAlert as { workspace_id?: string } | undefined)?.workspace_id, WORKSPACE_A);
+  assertEquals(body.truncation.orphan_chunks.limit, ORPHAN_CHUNKS_LIMIT);
+});
+
+Deno.test("truncation marks capped detectors when scanned rows hit limit", async () => {
+  const client = new MockAdminClient({ stallDealCount: STALLING_DEALS_LIMIT });
+  const response = await handleAnomalyScan(
+    new Request("https://example.test/functions/v1/anomaly-scan", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
+    }),
+    dependencies(client),
+  );
+  const body = await response.json();
+
+  assertEquals(response.status, 200);
+  assertEquals(body.truncation.stalling_deals.scanned, STALLING_DEALS_LIMIT);
+  assertEquals(body.truncation.stalling_deals.truncated, true);
+});
 
 Deno.test("resolveAnomalyScanScope binds JWT callers to their workspace", () => {
   const jwtScope = resolveAnomalyScanScope({
