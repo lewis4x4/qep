@@ -82,9 +82,13 @@ Deno.test("wrong secret returns 401", async () => {
   assertEquals((await response.json()).error, "Unauthorized");
 });
 
-Deno.test("handler source never references voice_captures purge/delete paths", async () => {
-  const source = await Deno.readTextFile(new URL("./handler.ts", import.meta.url));
-  assertEquals(source.includes("voice_captures"), false);
-  assertEquals(source.includes("purgeVoiceCaptures"), false);
-  assertEquals(source.includes('.from("voice_captures")'), false);
+const LIVE_ENTRY_FILES = ["./handler.ts", "./index.ts"] as const;
+
+Deno.test("live entry files never reference voice_captures purge/delete paths", async () => {
+  for (const file of LIVE_ENTRY_FILES) {
+    const source = await Deno.readTextFile(new URL(file, import.meta.url));
+    assertEquals(source.includes("voice_captures"), false, file);
+    assertEquals(source.includes("purgeVoiceCaptures"), false, file);
+    assertEquals(source.includes('.from("voice_captures")'), false, file);
+  }
 });
