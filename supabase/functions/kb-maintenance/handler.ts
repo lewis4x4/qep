@@ -72,15 +72,17 @@ export type KbMaintenanceAuthResult =
     workspaceId: string;
   };
 
+function hasAuthCredentials(req: Request): boolean {
+  const authHeader = (req.headers.get("Authorization") ?? "").trim();
+  const apiKey = (req.headers.get("apikey") ?? "").trim();
+  const internalSecret = (req.headers.get("x-internal-service-secret") ?? "").trim();
+  return authHeader.length > 0 || apiKey.length > 0 || internalSecret.length > 0;
+}
+
 export async function authenticateKbMaintenance(
   req: Request,
   adminClient: SupabaseClient,
 ): Promise<KbMaintenanceAuthResult> {
-  const authHeader = req.headers.get("Authorization")?.trim();
-  if (!authHeader) {
-    return { ok: false, status: 401 };
-  }
-
   const caller = await resolveCallerContext(req, adminClient);
 
   if (caller.isServiceRole) {
@@ -91,11 +93,19 @@ export async function authenticateKbMaintenance(
     };
   }
 
-  if (!caller.role || !["admin", "manager", "owner"].includes(caller.role)) {
+  if (!hasAuthCredentials(req)) {
+    return { ok: false, status: 401 };
+  }
+
+  if (!caller.userId || !caller.role) {
+    return { ok: false, status: 401 };
+  }
+
+  if (!["admin", "manager", "owner"].includes(caller.role)) {
     return { ok: false, status: 403 };
   }
 
-  if (!caller.workspaceId || !caller.userId) {
+  if (!caller.workspaceId) {
     return { ok: false, status: 403 };
   }
 
@@ -310,110 +320,90 @@ async function fetchEmbeddingsForDirectCrmEntities(
   return (embeddings ?? []) as Array<{ id: string; embedding: unknown }>;
 }
 
+async function fetchVoiceCaptureIdsInWorkspace(
+  adminClient: SupabaseClient,
+  workspaceId: string,
+): Promise<string[]> {
+  const [contactIds, companyIds, dealIds] = await Promise.all([
+    fetchEntityIdsInWorkspace(adminClient, "crm_contacts", workspaceId),
+    fetchEntityIdsInWorkspace(adminClient, "crm_companies", workspaceId),
+    fetchEntityIdsInWorkspace(adminClient, "crm_deals", workspaceId),
+  ]);
+
+  const captureIds: string[] = [];
+
+  if (contactIds.length > 0) {
+    const { data } = await adminClient
+      .from("voice_captures")
+      .select("id")
+      .in("linked_contact_id", contactIds)
+      .limit(50);
+    for (const row of data ?? []) {
+      if (typeof row.id === "string") captureIds.push(row.id);
+    }
+  }
+
+  if (companyIds.length > 0) {
+    const { data } = await adminClient
+      .from("voice_captures")
+      .select("id")
+      .in("linked_company_id", companyIds)
+      .limit(50);
+    for (const row of data ?? []) {
+      if (typeof row.id === "string" && !captureIds.includes(row.id)) {
+        captureIds.push(row.id);
+      }
+    }
+  }
+
+  if (dealIds.length > 0) {
+    const { data } = await adminClient
+      .from("voice_captures")
+      .select("id")
+      .in("linked_deal_id", dealIds)
+      .limit(50);
+    for (const row of data ?? []) {
+      if (typeof row.id === "string" && !captureIds.includes(row.id)) {
+        captureIds.push(row.id);
+      }
+    }
+  }
+
+  return captureIds;
+}
+
+async function fetchEntityIdsInWorkspace(
+  adminClient: SupabaseClient,
+  table: string,
+  workspaceId: string,
+  limit = 20,
+): Promise<string[]> {
+  const { data } = await adminClient
+    .from(table)
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .is("deleted_at", null)
+    .limit(limit);
+
+  return (data ?? [])
+    .map((row) => row.id)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+}
+
 async function fetchVoiceCaptureEmbeddingsInWorkspace(
   adminClient: SupabaseClient,
   workspaceId: string,
 ): Promise<Array<{ id: string; embedding: unknown }>> {
-  const { data: embeddings } = await adminClient
-    .from("crm_embeddings")
-    .select("id, embedding, entity_id")
-    .eq("entity_type", "voice_capture")
-    .limit(50);
-
-  if (!embeddings?.length) return [];
-
-  const captureIds = embeddings
-    .map((row) => row.entity_id)
-    .filter((id): id is string => typeof id === "string" && id.length > 0);
-
+  const captureIds = await fetchVoiceCaptureIdsInWorkspace(adminClient, workspaceId);
   if (captureIds.length === 0) return [];
 
-  const { data: captures } = await adminClient
-    .from("voice_captures")
-    .select("id, linked_contact_id, linked_company_id, linked_deal_id")
-    .in("id", captureIds);
+  const { data: embeddings } = await adminClient
+    .from("crm_embeddings")
+    .select("id, embedding")
+    .eq("entity_type", "voice_capture")
+    .in("entity_id", captureIds);
 
-  const captureMap = new Map(
-    (captures ?? []).map((capture) => [capture.id as string, capture]),
-  );
-
-  const contactIds = [...new Set(
-    (captures ?? [])
-      .map((capture) => capture.linked_contact_id)
-      .filter((id): id is string => typeof id === "string" && id.length > 0),
-  )];
-  const companyIds = [...new Set(
-    (captures ?? [])
-      .map((capture) => capture.linked_company_id)
-      .filter((id): id is string => typeof id === "string" && id.length > 0),
-  )];
-  const dealIds = [...new Set(
-    (captures ?? [])
-      .map((capture) => capture.linked_deal_id)
-      .filter((id): id is string => typeof id === "string" && id.length > 0),
-  )];
-
-  const contactWorkspaceMap: Record<string, string> = {};
-  if (contactIds.length > 0) {
-    const { data: contacts } = await adminClient
-      .from("crm_contacts")
-      .select("id, workspace_id")
-      .in("id", contactIds)
-      .is("deleted_at", null);
-    for (const contact of contacts ?? []) {
-      if (typeof contact.id === "string" && typeof contact.workspace_id === "string") {
-        contactWorkspaceMap[contact.id] = contact.workspace_id;
-      }
-    }
-  }
-
-  const companyWorkspaceMap: Record<string, string> = {};
-  if (companyIds.length > 0) {
-    const { data: companies } = await adminClient
-      .from("crm_companies")
-      .select("id, workspace_id")
-      .in("id", companyIds)
-      .is("deleted_at", null);
-    for (const company of companies ?? []) {
-      if (typeof company.id === "string" && typeof company.workspace_id === "string") {
-        companyWorkspaceMap[company.id] = company.workspace_id;
-      }
-    }
-  }
-
-  const dealWorkspaceMap: Record<string, string> = {};
-  if (dealIds.length > 0) {
-    const { data: deals } = await adminClient
-      .from("crm_deals")
-      .select("id, workspace_id")
-      .in("id", dealIds)
-      .is("deleted_at", null);
-    for (const deal of deals ?? []) {
-      if (typeof deal.id === "string" && typeof deal.workspace_id === "string") {
-        dealWorkspaceMap[deal.id] = deal.workspace_id;
-      }
-    }
-  }
-
-  const rows: Array<{ id: string; embedding: unknown }> = [];
-  for (const embedding of embeddings) {
-    const capture = captureMap.get(embedding.entity_id as string);
-    if (!capture) continue;
-
-    const resolvedWorkspace = (
-      capture.linked_contact_id && contactWorkspaceMap[capture.linked_contact_id as string]
-    ) || (
-      capture.linked_company_id && companyWorkspaceMap[capture.linked_company_id as string]
-    ) || (
-      capture.linked_deal_id && dealWorkspaceMap[capture.linked_deal_id as string]
-    ) || "default";
-
-    if (resolvedWorkspace === workspaceId) {
-      rows.push({ id: embedding.id as string, embedding: embedding.embedding });
-    }
-  }
-
-  return rows;
+  return (embeddings ?? []) as Array<{ id: string; embedding: unknown }>;
 }
 
 async function reembedCrm(
