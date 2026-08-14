@@ -11,7 +11,7 @@ const plan = readText("QEP (1)", "QEP_DECISION_INBOX_MOONSHOT_V2.md");
 const catalog = readText("QEP (1)", "QEP_SERVICE_LINEAR_ROADMAP_CATALOG.md");
 const buildLog = readText("QEP (1)", "QEP_OS_BUILD_LOG_2026-05-21.md");
 const decisionsSql = readText("supabase", "migrations", "595_qep_decisions.sql");
-const endpoint = readText("supabase", "functions", "auto-triage-pipeline", "index.ts");
+const endpoint = readText("supabase", "functions", "auto-triage-pipeline", "handler.ts");
 const logic = readText("supabase", "functions", "auto-triage-pipeline", "logic.ts");
 const logicTest = readText("supabase", "functions", "auto-triage-pipeline", "logic.test.ts");
 
