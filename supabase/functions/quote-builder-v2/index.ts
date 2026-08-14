@@ -4429,6 +4429,138 @@ function ageDaysFromIso(value: unknown): number | null {
   return Math.max(0, Math.floor((Date.now() - parsed) / (24 * 60 * 60 * 1000)));
 }
 
+type ApprovalBypassInventorySignals = {
+  stockAgeDays: number | null;
+  inStock: boolean;
+  hotList: boolean;
+};
+
+const APPROVAL_BYPASS_INVENTORY_SOURCE_CATALOGS = new Set([
+  "catalog_entries",
+  "crm_equipment",
+  "qrm_equipment",
+]);
+
+function inventorySourceFromLine(line: {
+  catalog_entry_id?: unknown;
+  metadata?: Record<string, unknown>;
+}): {
+  catalogEntryId: string | null;
+  sourceCatalog: string | null;
+  sourceId: string | null;
+} {
+  const metadata = line.metadata && typeof line.metadata === "object" && !Array.isArray(line.metadata)
+    ? line.metadata
+    : {};
+  const catalogEntryId = lineString(line.catalog_entry_id, 80);
+  const sourceCatalog = lineString(metadata.source_catalog, 80);
+  const sourceId = lineString(metadata.source_id, 80);
+  return {
+    catalogEntryId: catalogEntryId && UUID_RE.test(catalogEntryId) ? catalogEntryId : null,
+    sourceCatalog,
+    sourceId: sourceId && UUID_RE.test(sourceId) ? sourceId : null,
+  };
+}
+
+function firstInventoryIsoDate(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return null;
+}
+
+function bypassSignalsFromQrmEquipmentRow(row: Record<string, unknown>): ApprovalBypassInventorySignals {
+  const metadata = row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+    ? row.metadata as Record<string, unknown>
+    : {};
+  const availability = String(row.availability ?? "").toLowerCase();
+  const inStock = availability === "available"
+    || Boolean(row.stock_number)
+    || row.in_out_state === "in"
+    || row.readiness_status === "ready";
+  const receivedAt = firstInventoryIsoDate(
+    metadata.received_at,
+    metadata.date_received_to_yard,
+    metadata.physical_received_at,
+    metadata.received_in_stock_at,
+    metadata.yard_received_at,
+    row.delivery_date,
+    row.supplier_invoice_date,
+    row.purchase_date,
+    row.sale_ready_at,
+  );
+  return {
+    stockAgeDays: ageDaysFromIso(receivedAt),
+    inStock,
+    hotList: boolMetadata(metadata.hot_list)
+      || boolMetadata(metadata.on_hot_list)
+      || boolMetadata(metadata.hotList),
+  };
+}
+
+function bypassSignalsFromCatalogEntryRow(row: Record<string, unknown>): ApprovalBypassInventorySignals {
+  const sourceLocation = String(row.source_location ?? "").toLowerCase();
+  const inStock = row.is_yard_stock === true
+    || sourceLocation === "yard_stock"
+    || (Boolean(row.stock_number) && row.is_available !== false);
+  return {
+    stockAgeDays: ageDaysFromIso(row.acquired_at),
+    inStock,
+    hotList: false,
+  };
+}
+
+/** Resolve aged/hot/in-stock bypass inputs from inventory tables — never from client line metadata. */
+async function loadApprovalBypassInventorySignals(input: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  workspaceId: string;
+  quotePackageId: string;
+}): Promise<ApprovalBypassInventorySignals> {
+  const empty: ApprovalBypassInventorySignals = { stockAgeDays: null, inStock: false, hotList: false };
+
+  const { data: equipmentLine, error: lineErr } = await input.admin
+    .from("quote_package_line_items")
+    .select("catalog_entry_id, metadata")
+    .eq("quote_package_id", input.quotePackageId)
+    .eq("line_type", "equipment")
+    .order("display_order", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (lineErr || !equipmentLine) return empty;
+
+  const line = equipmentLine as { catalog_entry_id?: unknown; metadata?: Record<string, unknown> };
+  const { catalogEntryId, sourceCatalog, sourceId } = inventorySourceFromLine(line);
+
+  const candidateIds = [...new Set([
+    sourceCatalog && APPROVAL_BYPASS_INVENTORY_SOURCE_CATALOGS.has(sourceCatalog) ? sourceId : null,
+    catalogEntryId,
+  ].filter((id): id is string => typeof id === "string" && UUID_RE.test(id)))];
+
+  for (const candidateId of candidateIds) {
+    const { data: qrmRow } = await input.admin
+      .from("qrm_equipment")
+      .select("id, workspace_id, availability, stock_number, in_out_state, readiness_status, delivery_date, supplier_invoice_date, purchase_date, sale_ready_at, metadata")
+      .eq("id", candidateId)
+      .eq("workspace_id", input.workspaceId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (qrmRow) return bypassSignalsFromQrmEquipmentRow(qrmRow as Record<string, unknown>);
+  }
+
+  if (catalogEntryId) {
+    const { data: catalogRow } = await input.admin
+      .from("catalog_entries")
+      .select("id, workspace_id, acquired_at, is_yard_stock, source_location, stock_number, is_available")
+      .eq("id", catalogEntryId)
+      .eq("workspace_id", input.workspaceId)
+      .maybeSingle();
+    if (catalogRow) return bypassSignalsFromCatalogEntryRow(catalogRow as Record<string, unknown>);
+  }
+
+  return empty;
+}
+
 /** Maps `approval_bypass_rules.bypass_to_status` to a safe `quote_packages.status` (unknown → approved). */
 function sanitizeBypassTargetQuoteStatus(raw: unknown): "approved" | "approved_with_conditions" {
   const s = typeof raw === "string" ? raw.trim() : "";
@@ -4456,24 +4588,11 @@ async function resolveApprovalBypassRule(input: {
     .is("deleted_at", null);
   if (rulesErr || !Array.isArray(rules) || rules.length === 0) return null;
 
-  const { data: equipmentLine } = await input.admin
-    .from("quote_package_line_items")
-    .select("metadata")
-    .eq("quote_package_id", input.quotePackageId)
-    .eq("line_type", "equipment")
-    .order("display_order", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  const metadata = equipmentLine && typeof equipmentLine === "object" && !Array.isArray(equipmentLine)
-    ? ((equipmentLine as { metadata?: Record<string, unknown> }).metadata ?? {})
-    : {};
-  const stockAgeDays = ageDaysFromIso((metadata as Record<string, unknown>).received_at);
-  const inStock = boolMetadata((metadata as Record<string, unknown>).in_stock)
-    || String((metadata as Record<string, unknown>).availability_status ?? "").toLowerCase() === "in_stock";
-  const hotList = boolMetadata((metadata as Record<string, unknown>).hot_list)
-    || boolMetadata((metadata as Record<string, unknown>).on_hot_list)
-    || boolMetadata((metadata as Record<string, unknown>).hotList);
+  const { stockAgeDays, inStock, hotList } = await loadApprovalBypassInventorySignals({
+    admin: input.admin,
+    workspaceId: input.workspaceId,
+    quotePackageId: input.quotePackageId,
+  });
 
   for (const rule of rules as Array<Record<string, unknown>>) {
     const marginFloor = Number(rule.min_margin_pct ?? 0);
@@ -7079,6 +7198,9 @@ Deno.serve(async (req) => {
       if (taxOverrideAmount != null && !taxOverrideReason) {
         return safeJsonError("tax_override_reason is required when tax_override_amount is provided", 400, origin);
       }
+      if (taxOverrideAmount != null && !canPublish) {
+        return safeJsonError("Tax override requires manager, admin, or owner role", 403, origin);
+      }
 
       // Slice 20e: win-probability snapshot. We store the client-computed
       // rule-based scorer result alongside the quote. Defensive validation:
@@ -7131,6 +7253,25 @@ Deno.serve(async (req) => {
         : typeof body.deal_id === "string" && body.deal_id.length > 0
           ? body.deal_id
           : null;
+      if (
+        resolvedDealId
+        && !existingQuoteById?.deal_id
+        && typeof body.deal_id === "string"
+        && body.deal_id === resolvedDealId
+      ) {
+        const { data: dealRow, error: dealLookupErr } = await admin
+          .from("qrm_deals")
+          .select("id")
+          .eq("id", resolvedDealId)
+          .eq("workspace_id", userWorkspaceId)
+          .maybeSingle();
+        if (dealLookupErr) {
+          return safeJsonError(dealLookupErr.message, 500, origin);
+        }
+        if (!dealRow?.id) {
+          return safeJsonError("Deal not found in workspace", 404, origin);
+        }
+      }
       if (!resolvedDealId) {
         try {
           resolvedDealId = await createDraftDealForQuote({
@@ -7159,6 +7300,7 @@ Deno.serve(async (req) => {
           .from("quote_packages")
           .select("id, workspace_id, status, updated_at, created_by, deal_id, metadata")
           .eq("deal_id", resolvedDealId)
+          .eq("workspace_id", userWorkspaceId)
           .maybeSingle();
       if (existingQuoteErr) {
         return safeJsonError(existingQuoteErr.message, 500, origin);

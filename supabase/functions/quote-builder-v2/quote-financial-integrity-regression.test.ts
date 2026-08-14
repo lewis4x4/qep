@@ -116,33 +116,74 @@ Deno.test("submit-approval loads subtotal and discount_total for bypass max_disc
   );
 });
 
-Deno.test("approval bypass resolver ORs hot list metadata aliases on primary equipment", async () => {
+Deno.test("approval bypass resolver loads inventory signals from server tables, not line metadata", async () => {
   const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
   assert(
+    source.includes("async function loadApprovalBypassInventorySignals("),
+    "bypass must resolve inventory signals from a dedicated server loader",
+  );
+  assert(
+    source.includes("await loadApprovalBypassInventorySignals({"),
+    "resolveApprovalBypassRule must call the server inventory loader",
+  );
+  assert(
+    source.includes('.from("qrm_equipment")'),
+    "bypass loader must read qrm_equipment as inventory source of truth",
+  );
+  assert(
+    source.includes('.from("catalog_entries")'),
+    "bypass loader must read catalog_entries as inventory source of truth",
+  );
+  assertEquals(
     source.includes("boolMetadata((metadata as Record<string, unknown>).hot_list)"),
-    "bypass must read metadata.hot_list",
+    false,
+    "bypass must not trust client line metadata hot_list",
   );
-  assert(
-    source.includes("boolMetadata((metadata as Record<string, unknown>).on_hot_list)"),
-    "bypass must read metadata.on_hot_list",
+  assertEquals(
+    source.includes("(metadata as Record<string, unknown>).availability_status"),
+    false,
+    "bypass must not trust client line metadata availability_status",
   );
-  assert(
-    source.includes("boolMetadata((metadata as Record<string, unknown>).hotList)"),
-    "bypass must read metadata.hotList",
-  );
-  assert(
-    source.includes("if (requiresHotList && !hotList) continue"),
-    "bypass must skip rules when hot list is required but not flagged",
+  assertEquals(
+    source.includes("ageDaysFromIso((metadata as Record<string, unknown>).received_at)"),
+    false,
+    "bypass must not trust client line metadata received_at",
   );
 });
 
-Deno.test("approval bypass resolver gates stock age from equipment metadata received_at", async () => {
+Deno.test("approval bypass inventory loader derives hot list and stock age from qrm_equipment metadata", async () => {
+  const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
+  assert(source.includes("function bypassSignalsFromQrmEquipmentRow("));
+  assert(
+    source.includes("metadata.received_at"),
+    "qrm bypass signals must read received_at from equipment row metadata",
+  );
+  assert(
+    source.includes("boolMetadata(metadata.hot_list)"),
+    "qrm bypass signals must read hot_list from equipment row metadata",
+  );
+  assert(
+    source.includes("boolMetadata(metadata.on_hot_list)"),
+    "qrm bypass signals must read on_hot_list from equipment row metadata",
+  );
+});
+
+Deno.test("approval bypass inventory loader derives yard stock age from catalog_entries.acquired_at", async () => {
+  const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
+  assert(source.includes("function bypassSignalsFromCatalogEntryRow("));
+  assert(
+    source.includes("ageDaysFromIso(row.acquired_at)"),
+    "catalog bypass signals must derive stock age from acquired_at",
+  );
+  assert(
+    source.includes("row.is_yard_stock === true"),
+    "catalog bypass signals must treat yard stock as on-hand",
+  );
+});
+
+Deno.test("approval bypass resolver gates stock age and in-stock requirements", async () => {
   const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
   assert(source.includes("function ageDaysFromIso("), "stock age helper must exist");
-  assert(
-    source.includes("const stockAgeDays = ageDaysFromIso((metadata as Record<string, unknown>).received_at)"),
-    "bypass must derive stock age from primary equipment metadata.received_at",
-  );
   assert(
     source.includes("min_stock_age_days"),
     "bypass rules must include min_stock_age_days",
@@ -151,18 +192,6 @@ Deno.test("approval bypass resolver gates stock age from equipment metadata rece
     source.includes("if (minAge > 0 && (stockAgeDays == null || stockAgeDays < minAge)) continue"),
     "bypass must skip when min stock age is not satisfied",
   );
-});
-
-Deno.test("approval bypass resolver treats in_stock flag and availability_status as on-hand", async () => {
-  const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
-  assert(
-    source.includes("boolMetadata((metadata as Record<string, unknown>).in_stock)"),
-    "bypass must read metadata.in_stock",
-  );
-  assert(
-    source.includes("availability_status") && source.includes('=== "in_stock"'),
-    "bypass must treat availability_status in_stock as on-hand",
-  );
   assert(
     source.includes("requires_in_stock"),
     "bypass rules must include requires_in_stock",
@@ -170,6 +199,10 @@ Deno.test("approval bypass resolver treats in_stock flag and availability_status
   assert(
     source.includes("if (requiresInStock && !inStock) continue"),
     "bypass must skip rules when in-stock is required but not indicated",
+  );
+  assert(
+    source.includes("if (requiresHotList && !hotList) continue"),
+    "bypass must skip rules when hot list is required but not flagged",
   );
 });
 
@@ -283,6 +316,33 @@ Deno.test("public latest PDF resolver redirects to latest sent immutable R2 vers
   assert(source.includes('.order("version_number", { ascending: false })'));
   assert(source.includes("createR2GetUrl"));
   assert(source.includes("status: 302"));
+});
+
+Deno.test("quote save rejects cross-workspace deal_id and unprivileged tax overrides", async () => {
+  const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
+  const saveStart = source.indexOf('if (action === "save")');
+  const saveEnd = source.indexOf('if (action === "submit-approval")', saveStart);
+  const save = source.slice(saveStart, saveEnd);
+  assert(
+    save.includes('.from("qrm_deals")'),
+    "save must validate deal_id against qrm_deals",
+  );
+  assert(
+    save.includes('.eq("workspace_id", userWorkspaceId)'),
+    "save must scope deal lookup to the caller workspace",
+  );
+  assert(
+    save.includes('"Deal not found in workspace"'),
+    "save must reject deal_id outside the caller workspace",
+  );
+  assert(
+    save.includes("taxOverrideAmount != null && !canPublish"),
+    "save must gate tax_override_amount behind manager/admin/owner",
+  );
+  assert(
+    save.includes('"Tax override requires manager, admin, or owner role"'),
+    "save must return a clear tax override authorization error",
+  );
 });
 
 Deno.test("migration exposes immutable PDF version metadata and commit visibility update", async () => {
