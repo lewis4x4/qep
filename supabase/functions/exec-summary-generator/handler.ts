@@ -178,7 +178,6 @@ export function buildBriefing(role: string, definitions: Definition[], snapshots
 export interface ExecSummaryGeneratorDependencies {
   createAdminClient: () => SupabaseClient;
   isAuthorizedCaller: (req: Request, admin: SupabaseClient) => Promise<AuthResult>;
-  internalSecret: string;
 }
 
 function defaultCreateAdminClient(): SupabaseClient {
@@ -188,7 +187,6 @@ function defaultCreateAdminClient(): SupabaseClient {
 const defaultDependencies: ExecSummaryGeneratorDependencies = {
   createAdminClient: defaultCreateAdminClient,
   isAuthorizedCaller,
-  internalSecret: INTERNAL_SECRET,
 };
 
 export async function handleExecSummaryGenerator(

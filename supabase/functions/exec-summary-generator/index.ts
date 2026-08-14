@@ -17,4 +17,4 @@
  */
 import { handleExecSummaryGenerator } from "./handler.ts";
 
-Deno.serve(handleExecSummaryGenerator);
+Deno.serve((req) => handleExecSummaryGenerator(req));
