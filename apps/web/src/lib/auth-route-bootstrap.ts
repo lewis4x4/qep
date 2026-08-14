@@ -102,6 +102,35 @@ export function shouldShowLoginForUnauthenticatedPath(pathname: string): boolean
   return isRecognizedApplicationPath(pathname);
 }
 
+export function isPasswordRecoveryRequest(
+  search?: string,
+  hash?: string,
+): boolean {
+  const resolvedSearch =
+    search ?? (typeof window !== "undefined" ? window.location.search : "");
+  const resolvedHash =
+    hash ?? (typeof window !== "undefined" ? window.location.hash : "");
+  const query = resolvedSearch.startsWith("?") ? resolvedSearch.slice(1) : resolvedSearch;
+  if (new URLSearchParams(query).get("recovery") === "1") {
+    return true;
+  }
+
+  const hashBody = resolvedHash.startsWith("#") ? resolvedHash.slice(1) : resolvedHash;
+  return new URLSearchParams(hashBody).get("type") === "recovery";
+}
+
+export function isPasswordRecoveryLoginPath(
+  pathname: string,
+  search?: string,
+  hash?: string,
+): boolean {
+  if (pathname !== "/login" && pathname !== "/portal/login") {
+    return false;
+  }
+
+  return isPasswordRecoveryRequest(search, hash);
+}
+
 export function shouldShowProtectedRouteBootstrap(params: {
   pathname: string;
   hasStoredToken: boolean;

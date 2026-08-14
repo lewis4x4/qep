@@ -20,11 +20,14 @@ import {
   loginMarketingCopy,
   type LoginSurfaceMode,
 } from "@/lib/login-page-copy";
+import { isPasswordRecoveryRequest } from "@/lib/auth-route-bootstrap";
 import {
   resetPasswordForEmailWithRetry,
   signInWithOtpWithRetry,
   signInWithPasswordWithRetry,
+  updatePasswordWithRetry,
 } from "@/lib/supabase-auth-retry";
+import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -60,8 +63,14 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
   const { toast, dismiss } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoveryMode, setRecoveryMode] = useState(() =>
+    typeof window !== "undefined" ? isPasswordRecoveryRequest() : false,
+  );
 
   const isPortal = mode === "portal";
   const formCopy = loginFormCopy(mode);
@@ -70,6 +79,18 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
   useEffect(() => {
     dismiss();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setRecoveryMode(true);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   async function handlePasswordLogin(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -136,6 +157,44 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
       });
     }
     setResetLoading(false);
+  }
+
+  async function handleSetNewPassword(e: React.FormEvent): Promise<void> {
+    e.preventDefault();
+    if (newPassword.length < 6) {
+      toast({
+        variant: "destructive",
+        title: "Password too short",
+        description: "Use at least 6 characters for your new password.",
+      });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast({
+        variant: "destructive",
+        title: "Passwords do not match",
+        description: "Enter the same password in both fields.",
+      });
+      return;
+    }
+
+    setRecoveryLoading(true);
+    const { error } = await updatePasswordWithRetry({ password: newPassword });
+    if (error) {
+      toast({
+        variant: "destructive",
+        title: "Couldn't update password",
+        description: signInErrorDescription(error),
+      });
+      setRecoveryLoading(false);
+      return;
+    }
+
+    setRecoveryMode(false);
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.delete("recovery");
+    nextUrl.hash = "";
+    window.location.replace(nextUrl.pathname === "/portal/login" ? "/portal" : "/");
   }
 
   return (
@@ -254,10 +313,12 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
 
                 <div>
                   <h2 className="text-4xl font-semibold tracking-tight text-white sm:text-[2.9rem] sm:leading-[1.02]">
-                    {formCopy.headline}
+                    {recoveryMode ? "Set a new password" : formCopy.headline}
                   </h2>
                   <p className="mt-3 max-w-md text-base leading-7 text-slate-400">
-                    {formCopy.subcopy}
+                    {recoveryMode
+                      ? "Choose a new password for your account, then continue into QEP OS."
+                      : formCopy.subcopy}
                   </p>
                 </div>
 
@@ -274,6 +335,58 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
 
               <Card className="border-white/10 bg-white/[0.04] shadow-[0_30px_80px_rgba(0,0,0,0.28)] backdrop-blur">
                 <CardContent className="p-5 sm:p-6">
+                  {recoveryMode ? (
+                    <form onSubmit={handleSetNewPassword} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="new-password" className="text-sm font-medium text-slate-200">
+                          New password
+                        </Label>
+                        <div className="relative">
+                          <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                          <Input
+                            id="new-password"
+                            type="password"
+                            autoComplete="new-password"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            placeholder="Enter a new password"
+                            required
+                            minLength={6}
+                            className="h-12 border-white/10 bg-[#09111D] pl-10 text-white placeholder:text-slate-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="confirm-password" className="text-sm font-medium text-slate-200">
+                          Confirm password
+                        </Label>
+                        <div className="relative">
+                          <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                          <Input
+                            id="confirm-password"
+                            type="password"
+                            autoComplete="new-password"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            placeholder="Re-enter your new password"
+                            required
+                            minLength={6}
+                            className="h-12 border-white/10 bg-[#09111D] pl-10 text-white placeholder:text-slate-500"
+                          />
+                        </div>
+                      </div>
+
+                      <Button
+                        type="submit"
+                        className="h-12 w-full gap-2 bg-qep-orange-accessible text-base font-semibold text-white hover:bg-[#D96C1D]"
+                        disabled={recoveryLoading}
+                      >
+                        {recoveryLoading ? "Updating password..." : "Update password"}
+                        {!recoveryLoading && <ArrowRight className="h-4 w-4" />}
+                      </Button>
+                    </form>
+                  ) : (
                   <Tabs defaultValue="password">
                     <TabsList className="mb-6 grid w-full grid-cols-2 border border-white/10 bg-[#0A121E] p-1 text-slate-300">
                       {/*
@@ -393,6 +506,7 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
                       </form>
                     </TabsContent>
                   </Tabs>
+                  )}
                 </CardContent>
               </Card>
 

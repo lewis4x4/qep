@@ -9,6 +9,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { supabase } from "./lib/supabase";
 import {
   hasStoredSupabaseAuthToken,
+  isPasswordRecoveryLoginPath,
   shouldShowProtectedRouteBootstrap,
 } from "./lib/auth-route-bootstrap";
 import { hasCachedAuthProfile } from "./lib/auth-recovery";
@@ -826,6 +827,13 @@ function IronShellMount() {
 function App() {
   const { user, profile, loading, error } = useAuth();
   const pathname = typeof window !== "undefined" ? window.location.pathname : "/";
+  const passwordRecoveryLogin =
+    typeof window !== "undefined" &&
+    isPasswordRecoveryLoginPath(
+      pathname,
+      window.location.search,
+      window.location.hash,
+    );
   const shouldHoldProtectedRouteBootstrap = shouldShowProtectedRouteBootstrap({
     pathname,
     hasStoredToken: hasStoredSupabaseAuthToken(),
@@ -915,6 +923,40 @@ function App() {
         </div>
         <Toaster />
       </>
+    );
+  }
+
+  if (user && passwordRecoveryLogin) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <Suspense fallback={null}>
+            <OfflineBanner />
+          </Suspense>
+          <Suspense
+            fallback={
+              <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              </div>
+            }
+          >
+            <Routes>
+              <Route path="/portal/login" element={<PortalLoginPage authError={error} />} />
+              <Route path="/login" element={<LoginPage authError={error} />} />
+              <Route
+                path="*"
+                element={
+                  <Navigate
+                    to={pathname.startsWith("/portal") ? "/portal/login?recovery=1" : "/login?recovery=1"}
+                    replace
+                  />
+                }
+              />
+            </Routes>
+          </Suspense>
+          <Toaster />
+        </BrowserRouter>
+      </QueryClientProvider>
     );
   }
 
