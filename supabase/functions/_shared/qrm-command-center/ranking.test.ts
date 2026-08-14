@@ -16,6 +16,7 @@ import {
   getDealSignalState,
   getRoleWeights,
   isBlendTeamScopeEligible,
+  isTeamScopeAllowed,
   narrowRoleBlendRows,
   rankAndAssignLanes,
   rankChiefOfStaff,
@@ -293,6 +294,43 @@ Deno.test("isBlendTeamScopeEligible: two iron_manager rows summing to ≥ 0.5 is
 
 Deno.test("isBlendTeamScopeEligible: empty blend is NOT eligible", () => {
   assertEquals(isBlendTeamScopeEligible([]), false);
+});
+
+// ─── isTeamScopeAllowed (profile role + blend, mirrors home-route.ts) ─────
+
+Deno.test("isTeamScopeAllowed: admin + iron_woman blend grants team scope", () => {
+  assertEquals(
+    isTeamScopeAllowed("admin", [{ role: "iron_woman", weight: 1.0 }]),
+    true,
+  );
+});
+
+Deno.test("isTeamScopeAllowed: manager profile grants team scope regardless of blend", () => {
+  assertEquals(
+    isTeamScopeAllowed("manager", [{ role: "iron_advisor", weight: 1.0 }]),
+    true,
+  );
+});
+
+Deno.test("isTeamScopeAllowed: rep + iron_manager blend ≥ 0.5 grants team scope", () => {
+  assertEquals(
+    isTeamScopeAllowed("rep", [{ role: "iron_manager", weight: 1.0 }]),
+    true,
+  );
+});
+
+Deno.test("isTeamScopeAllowed: rep + iron_woman blend alone does NOT grant team scope", () => {
+  assertEquals(
+    isTeamScopeAllowed("rep", [{ role: "iron_woman", weight: 1.0 }]),
+    false,
+  );
+});
+
+Deno.test("isTeamScopeAllowed: rep + iron_advisor blend does NOT grant team scope", () => {
+  assertEquals(
+    isTeamScopeAllowed("rep", [{ role: "iron_advisor", weight: 1.0 }]),
+    false,
+  );
 });
 
 // ─── Phase 0 P0.5 — blendRoleWeights + scoreDealsWithBlend ────────────────
