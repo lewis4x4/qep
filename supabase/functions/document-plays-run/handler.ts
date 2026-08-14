@@ -5,6 +5,7 @@ import {
   readJsonBody,
   safeText,
 } from "../_shared/crm-router-http.ts";
+import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import {
   createAdminClient,
   resolveCallerContext,
@@ -54,6 +55,41 @@ export function resolveDocumentPlaysRunWorkspace(params: {
   return { ok: true, workspaceId: callerWorkspaceId };
 }
 
+export type DocumentWorkspaceAccessResult =
+  | { ok: true }
+  | { ok: false; status: 404; code: "NOT_FOUND"; message: string };
+
+export async function verifyJwtDocumentWorkspaceAccess(params: {
+  admin: SupabaseClient;
+  isServiceRole: boolean;
+  callerWorkspaceId: string | null;
+  documentId: string | null;
+}): Promise<DocumentWorkspaceAccessResult> {
+  const documentId = safeText(params.documentId);
+  if (params.isServiceRole || !documentId) {
+    return { ok: true };
+  }
+
+  const callerWorkspaceId = safeText(params.callerWorkspaceId);
+  const { data, error } = await params.admin
+    .from("documents")
+    .select("id, workspace_id")
+    .eq("id", documentId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+
+  if (!data || safeText(data.workspace_id) !== callerWorkspaceId) {
+    return {
+      ok: false,
+      status: 404,
+      code: "NOT_FOUND",
+      message: "Document not found.",
+    };
+  }
+
+  return { ok: true };
+}
+
 function normalizePath(pathname: string): string {
   if (pathname.startsWith("/document-plays-run")) {
     return pathname.slice("/document-plays-run".length) || "/";
@@ -74,6 +110,9 @@ function mapError(origin: string | null, error: unknown): Response {
   }
   if (message === "VALIDATION_ERROR") {
     return crmFail({ origin, status: 400, code: "VALIDATION_ERROR", message: "Invalid request parameters." });
+  }
+  if (message === "NOT_FOUND") {
+    return crmFail({ origin, status: 404, code: "NOT_FOUND", message: "Document not found." });
   }
   return crmFail({
     origin,
@@ -131,6 +170,21 @@ export async function handleRunRequest(
       }
       const workspaceId = workspaceResolution.workspaceId;
       if (!documentId && !workspaceId) throw new Error("VALIDATION_ERROR");
+
+      const documentAccess = await verifyJwtDocumentWorkspaceAccess({
+        admin,
+        isServiceRole,
+        callerWorkspaceId: caller.workspaceId,
+        documentId,
+      });
+      if (!documentAccess.ok) {
+        return crmFail({
+          origin,
+          status: documentAccess.status,
+          code: documentAccess.code,
+          message: documentAccess.message,
+        });
+      }
 
       const result = await service.run({
         admin,

@@ -89,8 +89,12 @@ export async function runPlaysEngine(input: RunPlaysInput): Promise<RunPlaysResu
     .gte("valid_until", new Date().toISOString())
     .lte("valid_until", new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString());
 
-  if (documentId) query = query.eq("from_document_id", documentId);
-  else if (workspaceId) query = query.eq("workspace_id", workspaceId);
+  if (documentId) {
+    query = query.eq("from_document_id", documentId);
+    if (workspaceId) query = query.eq("workspace_id", workspaceId);
+  } else if (workspaceId) {
+    query = query.eq("workspace_id", workspaceId);
+  }
 
   const { data: obligationRows, error: obligationsError } = await query;
   if (obligationsError) throw new Error(obligationsError.message);
@@ -234,8 +238,12 @@ export async function runPlaysEngine(input: RunPlaysInput): Promise<RunPlaysResu
     .eq("status", "open")
     .not("projected_due_date", "is", null)
     .lt("projected_due_date", nowIso);
-  if (documentId) expiredQuery = expiredQuery.eq("document_id", documentId);
-  else if (workspaceId) expiredQuery = expiredQuery.eq("workspace_id", workspaceId);
+  if (documentId) {
+    expiredQuery = expiredQuery.eq("document_id", documentId);
+    if (workspaceId) expiredQuery = expiredQuery.eq("workspace_id", workspaceId);
+  } else if (workspaceId) {
+    expiredQuery = expiredQuery.eq("workspace_id", workspaceId);
+  }
   const { data: expiredRows } = await expiredQuery.select("id");
   const expiredCount = Array.isArray(expiredRows) ? expiredRows.length : 0;
 
