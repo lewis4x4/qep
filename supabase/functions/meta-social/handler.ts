@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { captureEdgeException } from "../_shared/sentry.ts";
 import {
   optionsResponse,
   safeJsonError,
@@ -209,6 +210,7 @@ export async function handleMetaSocial(
 
     return safeJsonError("Unknown action", 400, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "meta-social", req });
     console.error("meta-social error:", err);
     return safeJsonError(
       "Internal server error",
