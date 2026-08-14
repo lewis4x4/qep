@@ -9,8 +9,9 @@ const closeoutSql = readText("supabase", "migrations", "749_f13_lane_classifier_
 const streamFSeed = readText("supabase", "migrations", "597_qep_stream_f_decision_velocity.sql");
 const plan = readText("QEP (1)", "QEP_DECISION_INBOX_MOONSHOT_V2.md");
 const logic = readText("supabase", "functions", "lane-classifier", "logic.ts");
-const endpoint = readText("supabase", "functions", "lane-classifier", "index.ts");
+const endpoint = readText("supabase", "functions", "lane-classifier", "handler.ts");
 const logicTest = readText("supabase", "functions", "lane-classifier", "logic.test.ts");
+const handlerTest = readText("supabase", "functions", "lane-classifier", "handler.test.ts");
 const config = readText("supabase", "config.toml");
 
 const compactCloseout = compact(closeoutSql);
@@ -19,6 +20,7 @@ const compactPlan = compact(plan);
 const compactLogic = compact(logic);
 const compactEndpoint = compact(endpoint);
 const compactLogicTest = compact(logicTest);
+const compactHandlerTest = compact(handlerTest);
 const compactConfig = compact(config);
 
 describe("749_f13_lane_classifier_closeout.sql contract", () => {
@@ -72,6 +74,7 @@ describe("749_f13_lane_classifier_closeout.sql contract", () => {
     expect(compactEndpoint).toContain("if (body.apply_update === true)");
     expect(compactEndpoint).toContain("updated_decision: updateddecision");
     expect(compactEndpoint).toContain("matched_keywords: classification.matchedkeywords");
+    expect(compactEndpoint).toContain("isservicerolecaller");
     expect(compactConfig).toContain("[functions.lane-classifier]");
   });
 
@@ -81,6 +84,9 @@ describe("749_f13_lane_classifier_closeout.sql contract", () => {
     expect(compactLogicTest).toContain("classifies ratify for mid-reversibility policy/integration choices");
     expect(compactLogicTest).toContain("authorize takes precedence over auto keywords");
     expect(compactLogicTest).toContain("merged persisted payload is used for classification when request is sparse");
+    expect(compactHandlerTest).toContain("rejects unauthenticated post without db access");
+    expect(compactHandlerTest).toContain("accepts bearer service caller for classify-only");
+    expect(compactHandlerTest).toContain("accepts internal secret caller and can apply_update");
 
     expect(compactCloseout).toContain("does not mark f1.4");
     expect(compactCloseout).toContain("no live supabase edge invocation");
