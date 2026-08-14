@@ -53,7 +53,6 @@ const RECOGNIZED_APPLICATION_PATH_PREFIXES = [
   "/crm",
   "/quote",
   "/quotes",
-  "/quote-v2",
   "/voice-quote",
   "/login",
 ] as const;
