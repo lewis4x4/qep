@@ -4435,33 +4435,6 @@ type ApprovalBypassInventorySignals = {
   hotList: boolean;
 };
 
-const APPROVAL_BYPASS_INVENTORY_SOURCE_CATALOGS = new Set([
-  "catalog_entries",
-  "crm_equipment",
-  "qrm_equipment",
-]);
-
-function inventorySourceFromLine(line: {
-  catalog_entry_id?: unknown;
-  metadata?: Record<string, unknown>;
-}): {
-  catalogEntryId: string | null;
-  sourceCatalog: string | null;
-  sourceId: string | null;
-} {
-  const metadata = line.metadata && typeof line.metadata === "object" && !Array.isArray(line.metadata)
-    ? line.metadata
-    : {};
-  const catalogEntryId = lineString(line.catalog_entry_id, 80);
-  const sourceCatalog = lineString(metadata.source_catalog, 80);
-  const sourceId = lineString(metadata.source_id, 80);
-  return {
-    catalogEntryId: catalogEntryId && UUID_RE.test(catalogEntryId) ? catalogEntryId : null,
-    sourceCatalog,
-    sourceId: sourceId && UUID_RE.test(sourceId) ? sourceId : null,
-  };
-}
-
 function firstInventoryIsoDate(...values: unknown[]): string | null {
   for (const value of values) {
     if (typeof value === "string" && value.trim().length > 0) return value.trim();
@@ -4474,10 +4447,18 @@ function bypassSignalsFromQrmEquipmentRow(row: Record<string, unknown>): Approva
     ? row.metadata as Record<string, unknown>
     : {};
   const availability = String(row.availability ?? "").toLowerCase();
-  const inStock = availability === "available"
-    || Boolean(row.stock_number)
+  const notInStockAvailability = availability === "sold"
+    || availability === "rented"
+    || availability === "reserved"
+    || availability === "decommissioned"
+    || availability === "on_order"
+    || availability === "in_service"
+    || availability === "in_transit";
+  const inStock = !notInStockAvailability && (
+    availability === "available"
     || row.in_out_state === "in"
-    || row.readiness_status === "ready";
+    || row.readiness_status === "ready"
+  );
   const receivedAt = firstInventoryIsoDate(
     metadata.received_at,
     metadata.date_received_to_yard,
@@ -4521,7 +4502,7 @@ async function loadApprovalBypassInventorySignals(input: {
 
   const { data: equipmentLine, error: lineErr } = await input.admin
     .from("quote_package_line_items")
-    .select("catalog_entry_id, metadata")
+    .select("catalog_entry_id")
     .eq("quote_package_id", input.quotePackageId)
     .eq("line_type", "equipment")
     .order("display_order", { ascending: true })
@@ -4529,34 +4510,28 @@ async function loadApprovalBypassInventorySignals(input: {
     .maybeSingle();
   if (lineErr || !equipmentLine) return empty;
 
-  const line = equipmentLine as { catalog_entry_id?: unknown; metadata?: Record<string, unknown> };
-  const { catalogEntryId, sourceCatalog, sourceId } = inventorySourceFromLine(line);
+  const catalogEntryId = lineString(
+    (equipmentLine as { catalog_entry_id?: unknown }).catalog_entry_id,
+    80,
+  );
+  if (!catalogEntryId || !UUID_RE.test(catalogEntryId)) return empty;
 
-  const candidateIds = [...new Set([
-    sourceCatalog && APPROVAL_BYPASS_INVENTORY_SOURCE_CATALOGS.has(sourceCatalog) ? sourceId : null,
-    catalogEntryId,
-  ].filter((id): id is string => typeof id === "string" && UUID_RE.test(id)))];
+  const { data: qrmRow } = await input.admin
+    .from("qrm_equipment")
+    .select("id, workspace_id, availability, stock_number, in_out_state, readiness_status, delivery_date, supplier_invoice_date, purchase_date, sale_ready_at, metadata")
+    .eq("id", catalogEntryId)
+    .eq("workspace_id", input.workspaceId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (qrmRow) return bypassSignalsFromQrmEquipmentRow(qrmRow as Record<string, unknown>);
 
-  for (const candidateId of candidateIds) {
-    const { data: qrmRow } = await input.admin
-      .from("qrm_equipment")
-      .select("id, workspace_id, availability, stock_number, in_out_state, readiness_status, delivery_date, supplier_invoice_date, purchase_date, sale_ready_at, metadata")
-      .eq("id", candidateId)
-      .eq("workspace_id", input.workspaceId)
-      .is("deleted_at", null)
-      .maybeSingle();
-    if (qrmRow) return bypassSignalsFromQrmEquipmentRow(qrmRow as Record<string, unknown>);
-  }
-
-  if (catalogEntryId) {
-    const { data: catalogRow } = await input.admin
-      .from("catalog_entries")
-      .select("id, workspace_id, acquired_at, is_yard_stock, source_location, stock_number, is_available")
-      .eq("id", catalogEntryId)
-      .eq("workspace_id", input.workspaceId)
-      .maybeSingle();
-    if (catalogRow) return bypassSignalsFromCatalogEntryRow(catalogRow as Record<string, unknown>);
-  }
+  const { data: catalogRow } = await input.admin
+    .from("catalog_entries")
+    .select("id, workspace_id, acquired_at, is_yard_stock, source_location, stock_number, is_available")
+    .eq("id", catalogEntryId)
+    .eq("workspace_id", input.workspaceId)
+    .maybeSingle();
+  if (catalogRow) return bypassSignalsFromCatalogEntryRow(catalogRow as Record<string, unknown>);
 
   return empty;
 }
@@ -7198,9 +7173,6 @@ Deno.serve(async (req) => {
       if (taxOverrideAmount != null && !taxOverrideReason) {
         return safeJsonError("tax_override_reason is required when tax_override_amount is provided", 400, origin);
       }
-      if (taxOverrideAmount != null && !canPublish) {
-        return safeJsonError("Tax override requires manager, admin, or owner role", 403, origin);
-      }
 
       // Slice 20e: win-probability snapshot. We store the client-computed
       // rule-based scorer result alongside the quote. Defensive validation:
@@ -7236,7 +7208,7 @@ Deno.serve(async (req) => {
       const { data: existingQuoteById, error: existingQuoteByIdErr } = requestedQuotePackageId
         ? await admin
           .from("quote_packages")
-          .select("id, workspace_id, status, updated_at, created_by, deal_id, metadata")
+          .select("id, workspace_id, status, updated_at, created_by, deal_id, metadata, tax_override_amount, tax_override_reason")
           .eq("id", requestedQuotePackageId)
           .eq("workspace_id", userWorkspaceId)
           .maybeSingle()
@@ -7298,7 +7270,7 @@ Deno.serve(async (req) => {
         ? { data: null, error: null }
         : await admin
           .from("quote_packages")
-          .select("id, workspace_id, status, updated_at, created_by, deal_id, metadata")
+          .select("id, workspace_id, status, updated_at, created_by, deal_id, metadata, tax_override_amount, tax_override_reason")
           .eq("deal_id", resolvedDealId)
           .eq("workspace_id", userWorkspaceId)
           .maybeSingle();
@@ -7306,6 +7278,21 @@ Deno.serve(async (req) => {
         return safeJsonError(existingQuoteErr.message, 500, origin);
       }
       const existingQuote = existingQuoteById?.id ? existingQuoteById : existingQuoteByDealId;
+      if (taxOverrideAmount != null && !canPublish) {
+        const existingOverrideAmount = existingQuote?.tax_override_amount == null || existingQuote.tax_override_amount === ""
+          ? null
+          : clampCurrency(existingQuote.tax_override_amount);
+        const existingOverrideReason = typeof existingQuote?.tax_override_reason === "string"
+          && existingQuote.tax_override_reason.trim().length > 0
+          ? existingQuote.tax_override_reason.trim()
+          : null;
+        const preservingExistingOverride = existingQuote?.id
+          && taxOverrideAmount === existingOverrideAmount
+          && taxOverrideReason === existingOverrideReason;
+        if (!preservingExistingOverride) {
+          return safeJsonError("Tax override requires manager, admin, or owner role", 403, origin);
+        }
+      }
       // Derive prospect state server-side. A client cannot falsely suppress the
       // send-time lifecycle or mark a CRM-linked quote as a prospect.
       const isProspectQuote = !contactId && !companyId;
