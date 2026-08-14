@@ -6,8 +6,10 @@
  */
 
 import { useCallback, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   AlertTriangle,
+  ArrowUpRight,
   ClipboardList,
   Loader2,
   ShieldAlert,
@@ -25,6 +27,11 @@ import type {
   RecommendationCardPayload,
 } from "../api/commandCenter.types";
 import { useCommandCenter } from "../hooks/useCommandCenter";
+import {
+  deriveCommandCenterRiskIfIgnored,
+  getNextMoveActionLabel,
+  getNextMoveTargetHref,
+} from "../lib/commandBrief";
 import { getRoleHeadline } from "../lib/roleVariant";
 import { RoleVariantShell } from "./RoleVariantShell";
 
@@ -107,20 +114,24 @@ export function QrmCommandCenterPage({
       ].filter((bullet): bullet is string => Boolean(bullet))
     : [];
 
+  const bestMove = aiChiefOfStaff?.bestMove ?? null;
+
   const nextMoveHeadline = query.isLoading
     ? "Preparing the next move."
-    : aiChiefOfStaff?.bestMove
-      ? aiChiefOfStaff.bestMove.headline
+    : bestMove
+      ? bestMove.headline
       : blockedDeals > 0
         ? `Clear ${blockedDeals} blocked deal${blockedDeals === 1 ? "" : "s"} before scanning lower-priority work.`
         : "Use this pass to confirm the board is quiet and keep the next action lane clean.";
-  const nextMoveDetail =
-    aiChiefOfStaff?.bestMove?.rationale?.[0] ?? null;
+  const nextMoveDetail = bestMove?.rationale?.[0] ?? null;
+  const nextMoveHref = getNextMoveTargetHref(bestMove);
+  const nextMoveActionLabel = getNextMoveActionLabel(bestMove);
 
-  const riskIfIgnored =
-    commandStrip && (blockedDeals > 0 || overdueFollowUps > 0 || atRiskRevenue > 0)
-      ? "If this page becomes a dashboard instead of a command lane, urgent work will hide in plain sight."
-      : "Without a clear top brief, operators spend time scanning instead of deciding.";
+  const riskIfIgnored = deriveCommandCenterRiskIfIgnored({
+    commandStrip,
+    bestMove,
+    nextMoveDetailLine: nextMoveDetail,
+  });
 
   const handleAccept = useCallback((card: RecommendationCardPayload) => {
     // Phase 0 P0.8 — log trace_id for telemetry. Full event emission in Phase 2.
@@ -147,9 +158,6 @@ export function QrmCommandCenterPage({
           <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-qep-orange bg-qep-orange/10 px-3 py-1 rounded-full">
             {ironRoleInfo.display}
             {dominantWeightLabel}
-          </span>
-          <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-slate-500 bg-white/5 px-3 py-1 rounded-full">
-            Slice 1 · spine
           </span>
         </div>
       </header>
@@ -179,24 +187,54 @@ export function QrmCommandCenterPage({
           </div>
         </article>
 
-        <article className="flex gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/25 text-[#f6a53a]">
-            <Target className="h-5 w-5" aria-hidden="true" />
-          </span>
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
-              Next move
-            </p>
-            <p className="mt-1.5 text-sm font-semibold leading-snug text-white">
-              {nextMoveHeadline}
-            </p>
-            {nextMoveDetail ? (
-              <p className="mt-1.5 text-[12px] leading-snug text-slate-400">
-                {nextMoveDetail}
+        {nextMoveHref ? (
+          <Link
+            to={nextMoveHref}
+            className="group flex gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-5 transition-colors hover:border-[#f6a53a]/40 hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f6a53a]"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/25 text-[#f6a53a]">
+              <Target className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                Next move
               </p>
-            ) : null}
-          </div>
-        </article>
+              <p className="mt-1.5 text-sm font-semibold leading-snug text-white group-hover:text-[#f6a53a]">
+                {nextMoveHeadline}
+              </p>
+              {nextMoveDetail ? (
+                <p className="mt-1.5 text-[12px] leading-snug text-slate-400">
+                  {nextMoveDetail}
+                </p>
+              ) : null}
+              {nextMoveActionLabel ? (
+                <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-[#f28a07] px-3 py-1 text-[11px] font-semibold text-[#15100a]">
+                  {nextMoveActionLabel}
+                  <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
+              ) : null}
+            </div>
+          </Link>
+        ) : (
+          <article className="flex gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/25 text-[#f6a53a]">
+              <Target className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                Next move
+              </p>
+              <p className="mt-1.5 text-sm font-semibold leading-snug text-white">
+                {nextMoveHeadline}
+              </p>
+              {nextMoveDetail ? (
+                <p className="mt-1.5 text-[12px] leading-snug text-slate-400">
+                  {nextMoveDetail}
+                </p>
+              ) : null}
+            </div>
+          </article>
+        )}
 
         <article className="flex gap-3 rounded-2xl border border-rose-500/30 bg-rose-500/[0.06] p-5">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/20 text-rose-300">
