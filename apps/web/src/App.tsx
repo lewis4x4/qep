@@ -17,7 +17,9 @@ import {
   canAccessMachineRecords,
   canAccessManagerAdminRoute,
   canAccessManagerAdminSurface,
+  canAccessPartsSurface as canAccessPartsSurfaceByRole,
   canAccessQrmSurface,
+  canAccessServiceSurface as canAccessServiceSurfaceByRole,
   resolveManagerAdminRouteRedirect,
   resolveHomeRoute,
 } from "./lib/home-route";
@@ -1028,11 +1030,11 @@ function App() {
   const canAccessPartsHeader = canAccessPrimaryHeaderForIronRole(profile.iron_role, "parts");
   const canAccessRentalsHeader = canAccessPrimaryHeaderForIronRole(profile.iron_role, "rentals");
   const canAccessWorkforceSurface = canAccessWorkforceRole(profile.role) && canAccessWorkforceHeader;
-  const canAccessServiceSurface = hasRepOrAboveRole && canAccessServiceHeader;
+  const canAccessServiceSurface = canAccessServiceSurfaceByRole(profile.role) && canAccessServiceHeader;
   const canAccessServiceManagedSurface = hasManagerOrAboveRole && canAccessServiceHeader;
   const canAccessServiceMetricsSurface = ["admin", "manager", "owner", "service_writer", "finance_admin"].includes(profile.role) && canAccessServiceHeader;
   const canAccessGrappleProductionSurface = canAccessGrappleProductionRole(profile.role) && canAccessServiceHeader;
-  const canAccessPartsSurface = hasRepOrAboveRole && canAccessPartsHeader;
+  const canAccessPartsSurface = canAccessPartsSurfaceByRole(profile.role) && canAccessPartsHeader;
   const canAccessPartsManagedSurface = hasManagerOrAboveRole && canAccessPartsHeader;
   const canAccessRentalsSurface = hasRepOrAboveRole && canAccessRentalsHeader;
   const canAccessAccountModule = (moduleKey: string) =>

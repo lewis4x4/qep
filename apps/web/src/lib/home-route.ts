@@ -115,6 +115,28 @@ export function canAccessFloorSurface(userRole: string | null | undefined): bool
   return normalizeRole(userRole) !== "rep";
 }
 
+export function canAccessServiceSurface(userRole: string | null | undefined): boolean {
+  const normalizedRole = normalizeRole(userRole);
+  return (
+    normalizedRole === "rep" ||
+    normalizedRole === "admin" ||
+    normalizedRole === "manager" ||
+    normalizedRole === "owner" ||
+    normalizedRole === "service"
+  );
+}
+
+export function canAccessPartsSurface(userRole: string | null | undefined): boolean {
+  const normalizedRole = normalizeRole(userRole);
+  return (
+    normalizedRole === "rep" ||
+    normalizedRole === "admin" ||
+    normalizedRole === "manager" ||
+    normalizedRole === "owner" ||
+    normalizedRole === "parts"
+  );
+}
+
 /** Machine-record surfaces: /fleet (map) and /qrm/equipment/:id (detail).
  *
  *  Deliberately limited to the core sales/management roles because the
