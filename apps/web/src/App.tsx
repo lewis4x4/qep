@@ -9,6 +9,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { supabase } from "./lib/supabase";
 import {
   hasStoredSupabaseAuthToken,
+  resolveSignedInAuthEntryRedirect,
   shouldShowProtectedRouteBootstrap,
 } from "./lib/auth-route-bootstrap";
 import { hasCachedAuthProfile } from "./lib/auth-recovery";
@@ -971,6 +972,7 @@ function App() {
               <Route path="/portal/login" element={<PortalLoginPage authError={error} />} />
               <Route path="/portal/*" element={<Navigate to="/portal/login" replace />} />
               <Route path="/login" element={<LoginPage authError={error} />} />
+              <Route path="/forgot-password" element={<LoginPage authError={error} />} />
               <Route path="/quote" element={<RedirectPreserveSearch to="/sales/quotes/new" />} />
               <Route path="/quotes" element={<RedirectPreserveSearch to="/sales/quotes" />} />
               <Route path="/quote-v2" element={<RedirectPreserveSearch to="/sales/quotes/new" />} />
@@ -1020,6 +1022,8 @@ function App() {
     profile.audience,
     profile.floor_mode,
   );
+  const signedInAuthEntryRedirect = (pathname: string) =>
+    resolveSignedInAuthEntryRedirect(pathname, homeRoute);
   const hasRepOrAboveRole = ["rep", "admin", "manager", "owner"].includes(profile.role);
   const hasManagerOrAboveRole = ["admin", "manager", "owner"].includes(profile.role);
   const canAccessNavHref = (href: string) => canAccessNavHrefForIronRole(profile.iron_role, href);
@@ -1079,6 +1083,18 @@ function App() {
                 >
                   <AnimatedRoutes>
               <Route path="/" element={<Navigate to={homeRoute} replace />} />
+              <Route
+                path="/login"
+                element={<Navigate to={signedInAuthEntryRedirect("/login")} replace />}
+              />
+              <Route
+                path="/portal/login"
+                element={<Navigate to={signedInAuthEntryRedirect("/portal/login")} replace />}
+              />
+              <Route
+                path="/forgot-password"
+                element={<Navigate to={signedInAuthEntryRedirect("/forgot-password")} replace />}
+              />
               <Route
                 path="/dashboard"
                 element={<Navigate to={homeRoute} replace />}
@@ -3007,7 +3023,7 @@ function App() {
                   <PartsCompanionRoutes />
                 </Suspense>
               } />
-                    <Route path="*" element={<NotFoundPage />} />
+                    <Route path="*" element={<NotFoundPage homeHref={homeRoute} />} />
                   </AnimatedRoutes>
                 </SalesOrAppLayout>
                 <IronShellMount />

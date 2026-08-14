@@ -32,6 +32,19 @@ describe("UnauthenticatedCatchAll", () => {
     expect(screen.queryByTestId("not-found-page")).toBeNull();
   });
 
+  test("shows sign-in for forgot-password", () => {
+    render(
+      <MemoryRouter initialEntries={["/forgot-password"]}>
+        <Routes>
+          <Route path="*" element={<UnauthenticatedCatchAll />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("login-page")).toBeTruthy();
+    expect(screen.queryByTestId("not-found-page")).toBeNull();
+  });
+
   test("shows public 404 for unknown routes", () => {
     render(
       <MemoryRouter initialEntries={["/zzz-not-a-page"]}>

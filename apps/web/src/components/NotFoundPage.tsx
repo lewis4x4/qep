@@ -6,8 +6,10 @@ type NotFoundAudience = "authenticated" | "public";
 
 export function NotFoundPage({
   audience = "authenticated",
+  homeHref = "/dashboard",
 }: {
   audience?: NotFoundAudience;
+  homeHref?: string;
 }): React.ReactElement {
   const isPublic = audience === "public";
 
@@ -53,7 +55,7 @@ export function NotFoundPage({
             Sign in
           </Link>
         ) : (
-          <Link to="/dashboard">
+          <Link to={homeHref}>
             <ArrowLeft className="w-4 h-4 mr-2" aria-hidden="true" />
             Back to Dashboard
           </Link>

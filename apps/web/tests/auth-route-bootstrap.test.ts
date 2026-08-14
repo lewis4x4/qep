@@ -1,8 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import {
+  AUTH_ENTRY_PATHS,
   hasStoredSupabaseAuthToken,
+  isAuthEntryPath,
   isAuthenticatedAppPath,
   isRecognizedApplicationPath,
+  resolveSignedInAuthEntryRedirect,
   shouldShowLoginForUnauthenticatedPath,
   shouldShowProtectedRouteBootstrap,
 } from "../src/lib/auth-route-bootstrap";
@@ -29,9 +32,11 @@ describe("isAuthenticatedAppPath", () => {
 });
 
 describe("isRecognizedApplicationPath", () => {
-  it("treats the login entry and dashboard as recognized app paths", () => {
+  it("treats auth entry routes and dashboard as recognized app paths", () => {
     expect(isRecognizedApplicationPath("/")).toBe(true);
     expect(isRecognizedApplicationPath("/login")).toBe(true);
+    expect(isRecognizedApplicationPath("/portal/login")).toBe(true);
+    expect(isRecognizedApplicationPath("/forgot-password")).toBe(true);
     expect(isRecognizedApplicationPath("/dashboard")).toBe(true);
     expect(isRecognizedApplicationPath("/sales/today")).toBe(true);
   });
@@ -45,7 +50,28 @@ describe("isRecognizedApplicationPath", () => {
 describe("shouldShowLoginForUnauthenticatedPath", () => {
   it("prompts sign-in for real app URLs and 404s for unknown paths", () => {
     expect(shouldShowLoginForUnauthenticatedPath("/dashboard")).toBe(true);
+    expect(shouldShowLoginForUnauthenticatedPath("/forgot-password")).toBe(true);
     expect(shouldShowLoginForUnauthenticatedPath("/zzz-not-a-page")).toBe(false);
+  });
+});
+
+describe("isAuthEntryPath", () => {
+  it("covers the public auth entry routes", () => {
+    for (const path of AUTH_ENTRY_PATHS) {
+      expect(isAuthEntryPath(path)).toBe(true);
+    }
+    expect(isAuthEntryPath("/dashboard")).toBe(false);
+  });
+});
+
+describe("resolveSignedInAuthEntryRedirect", () => {
+  it("sends signed-in login and forgot-password visitors to role home", () => {
+    expect(resolveSignedInAuthEntryRedirect("/login", "/sales/today")).toBe("/sales/today");
+    expect(resolveSignedInAuthEntryRedirect("/forgot-password", "/qrm")).toBe("/qrm");
+  });
+
+  it("sends signed-in portal login visitors to portal home", () => {
+    expect(resolveSignedInAuthEntryRedirect("/portal/login", "/sales/today")).toBe("/portal");
   });
 });
 
