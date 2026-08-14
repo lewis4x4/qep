@@ -94,6 +94,10 @@ function createMockAdmin(seed: {
           if (table === "parts_orders") {
             insertAttempts += 1;
             if (seed.insertConflict) {
+              partsOrders.push({
+                id: "raced-order-id",
+                quote_package_id: rows[0].quote_package_id,
+              });
               return {
                 select: () => ({
                   single: () => Promise.resolve({
@@ -295,10 +299,6 @@ Deno.test("materializePartsOrderFromQuote treats unique-index race as already ma
       display_order: 0,
     }],
     insertConflict: true,
-  });
-  mock.partsOrders.push({
-    id: racedOrderId,
-    quote_package_id: QUOTE_ID,
   });
 
   const result = await materializePartsOrderFromQuote(mock.admin, QUOTE_ID);

@@ -221,6 +221,18 @@ export async function materializePartsOrderFromQuote(
     }
   }
 
+  if (quote.contact_id) {
+    const { data: contact } = await admin
+      .from("qrm_contacts")
+      .select("workspace_id")
+      .eq("id", quote.contact_id as string)
+      .maybeSingle();
+    const contactWorkspaceId = typeof contact?.workspace_id === "string" ? contact.workspace_id : null;
+    if (contactWorkspaceId && contactWorkspaceId !== workspaceId) {
+      return { status: "skipped", reason: "workspace_mismatch" };
+    }
+  }
+
   const { data: partLines } = await admin
     .from("quote_package_line_items")
     .select("id, line_type, description, quantity, unit_price, extended_price, metadata, display_order")
@@ -233,15 +245,28 @@ export async function materializePartsOrderFromQuote(
 
   const crmCompanyId = await resolveQuoteCompanyId(admin, quote);
   if (!crmCompanyId) {
-    await admin.rpc("enqueue_exception", {
-      p_source: "data_quality",
-      p_title: "Accepted quote has part lines but no company — counter order not staged",
-      p_severity: "warn",
-      p_detail: `Quote package ${quotePackageId} accepted with ${partLines.length} part line(s) but its deal carries no company; parts order materialization skipped.`,
-      p_payload: { quote_package_id: quotePackageId },
-      p_entity_table: "quote_packages",
-      p_entity_id: quotePackageId,
-    });
+    const exceptionTitle = "Accepted quote has part lines but no company — counter order not staged";
+    const { data: existingException } = await admin
+      .from("exception_queue")
+      .select("id")
+      .eq("entity_table", "quote_packages")
+      .eq("entity_id", quotePackageId)
+      .eq("source", "data_quality")
+      .eq("title", exceptionTitle)
+      .in("status", ["open", "in_progress"])
+      .limit(1)
+      .maybeSingle();
+    if (!existingException) {
+      await admin.rpc("enqueue_exception", {
+        p_source: "data_quality",
+        p_title: exceptionTitle,
+        p_severity: "warn",
+        p_detail: `Quote package ${quotePackageId} accepted with ${partLines.length} part line(s) but its deal carries no company; parts order materialization skipped.`,
+        p_payload: { quote_package_id: quotePackageId },
+        p_entity_table: "quote_packages",
+        p_entity_id: quotePackageId,
+      });
+    }
     return { status: "skipped", reason: "no_company" };
   }
 
