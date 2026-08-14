@@ -5,11 +5,53 @@ import {
   readJsonBody,
   safeText,
 } from "../_shared/crm-router-http.ts";
-import { createAdminClient, resolveCallerContext } from "../_shared/dge-auth.ts";
+import {
+  createAdminClient,
+  resolveCallerContext,
+  type CallerContext,
+} from "../_shared/dge-auth.ts";
 import { runPlaysEngine, type RunPlaysInput, type RunPlaysResult } from "./service.ts";
 
 export interface RunPlaysService {
   run(input: RunPlaysInput): Promise<RunPlaysResult>;
+}
+
+export interface RunRequestDependencies {
+  createAdminClient: typeof createAdminClient;
+  resolveCallerContext: typeof resolveCallerContext;
+}
+
+const defaultRunRequestDependencies: RunRequestDependencies = {
+  createAdminClient,
+  resolveCallerContext,
+};
+
+export function resolveDocumentPlaysRunWorkspace(params: {
+  isServiceRole: boolean;
+  callerWorkspaceId: string | null;
+  requestedWorkspaceId: string | null;
+}):
+  | { ok: true; workspaceId: string | null }
+  | { ok: false; status: 403; code: "FORBIDDEN"; message: string } {
+  const callerWorkspaceId = safeText(params.callerWorkspaceId);
+  const requestedWorkspaceId = safeText(params.requestedWorkspaceId);
+
+  if (params.isServiceRole) {
+    return { ok: true, workspaceId: callerWorkspaceId ?? requestedWorkspaceId };
+  }
+
+  if (!callerWorkspaceId) {
+    return {
+      ok: false,
+      status: 403,
+      code: "FORBIDDEN",
+      message: "Caller is not authorized for plays run.",
+    };
+  }
+
+  // JWT callers are bound to profiles.active_workspace_id; forged body.workspaceId
+  // must never steer tenant selection.
+  return { ok: true, workspaceId: callerWorkspaceId };
 }
 
 function normalizePath(pathname: string): string {
@@ -49,18 +91,20 @@ async function defaultService(): Promise<RunPlaysService> {
 export async function handleRunRequest(
   req: Request,
   serviceOverride?: RunPlaysService,
+  dependencyOverrides: Partial<RunRequestDependencies> = {},
 ): Promise<Response> {
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") return crmOptionsResponse(origin);
 
   const service = serviceOverride ?? await defaultService();
+  const deps = { ...defaultRunRequestDependencies, ...dependencyOverrides };
 
   try {
     const url = new URL(req.url);
     const path = normalizePath(url.pathname);
 
-    const admin = createAdminClient();
-    const caller = await resolveCallerContext(req, admin);
+    const admin = deps.createAdminClient();
+    const caller: CallerContext = await deps.resolveCallerContext(req, admin);
     const isServiceRole = caller.isServiceRole;
     const isAdminCaller =
       !!caller.userId && ["admin", "manager", "owner"].includes(caller.role ?? "");
@@ -72,7 +116,20 @@ export async function handleRunRequest(
     if (req.method === "POST" && (path === "/" || path === "/run" || path === "")) {
       const body = await readJsonBody<{ documentId?: string; workspaceId?: string }>(req);
       const documentId = safeText(body.documentId);
-      const workspaceId = safeText(body.workspaceId) ?? caller.workspaceId;
+      const workspaceResolution = resolveDocumentPlaysRunWorkspace({
+        isServiceRole,
+        callerWorkspaceId: caller.workspaceId,
+        requestedWorkspaceId: safeText(body.workspaceId),
+      });
+      if (!workspaceResolution.ok) {
+        return crmFail({
+          origin,
+          status: workspaceResolution.status,
+          code: workspaceResolution.code,
+          message: workspaceResolution.message,
+        });
+      }
+      const workspaceId = workspaceResolution.workspaceId;
       if (!documentId && !workspaceId) throw new Error("VALIDATION_ERROR");
 
       const result = await service.run({
