@@ -406,7 +406,7 @@ Deno.serve(async (req) => {
     const profileRole = (profile as { role: string | null }).role;
     if (scope === "team" && !isTeamScopeAllowed(profileRole, effectiveBlend)) {
       return safeJsonError(
-        "Team scope requires manager/admin privileges or Iron Manager blend weight ≥ 0.5",
+        "You don't have access to the shop-wide Command Center view. Ask a manager.",
         403,
         origin,
       );

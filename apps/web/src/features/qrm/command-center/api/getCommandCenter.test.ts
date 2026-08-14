@@ -65,10 +65,11 @@ describe("getCommandCenter", () => {
     expect(invokeCalls[0].options.body).toEqual({ scope: "team" });
   });
 
-  test("surfaces server JSON error body on non-2xx instead of generic SDK message", async () => {
+  test("maps team-scope 403 to dealership English instead of privilege formulas", async () => {
     const ctx = new Response(
       JSON.stringify({
-        error: "Team scope requires manager/admin privileges or Iron Manager blend weight ≥ 0.5",
+        error:
+          "Team scope requires manager/admin privileges or Iron Manager blend weight ≥ 0.5",
       }),
       { status: 403, headers: { "Content-Type": "application/json" } },
     );
@@ -81,7 +82,46 @@ describe("getCommandCenter", () => {
     };
 
     await expect(getCommandCenter("team")).rejects.toThrow(
-      /Team scope requires manager\/admin privileges.*403/,
+      "You don't have access to the shop-wide Command Center view. Ask a manager.",
+    );
+  });
+
+  test("maps legacy deployed team-scope 403 formula to dealership English", async () => {
+    const ctx = new Response(
+      JSON.stringify({
+        error:
+          "Team scope requires Iron Manager privileges (blend weight ≥ 0.5)",
+      }),
+      { status: 403, headers: { "Content-Type": "application/json" } },
+    );
+    nextInvokeResponse = {
+      data: null,
+      error: {
+        message: "Edge Function returned a non-2xx status code",
+        context: ctx,
+      },
+    };
+
+    await expect(getCommandCenter("team")).rejects.toThrow(
+      "You don't have access to the shop-wide Command Center view. Ask a manager.",
+    );
+  });
+
+  test("preserves non-privilege outage errors with HTTP context", async () => {
+    const ctx = new Response(
+      JSON.stringify({ error: "Upstream signal query timed out" }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    );
+    nextInvokeResponse = {
+      data: null,
+      error: {
+        message: "Edge Function returned a non-2xx status code",
+        context: ctx,
+      },
+    };
+
+    await expect(getCommandCenter("team")).rejects.toThrow(
+      /Upstream signal query timed out \(HTTP 503\)/,
     );
   });
 });
