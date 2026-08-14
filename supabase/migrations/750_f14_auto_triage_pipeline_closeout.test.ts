@@ -9,8 +9,9 @@ const closeoutSql = readText("supabase", "migrations", "750_f14_auto_triage_pipe
 const streamFSeed = readText("supabase", "migrations", "597_qep_stream_f_decision_velocity.sql");
 const plan = readText("QEP (1)", "QEP_DECISION_INBOX_MOONSHOT_V2.md");
 const logic = readText("supabase", "functions", "auto-triage-pipeline", "logic.ts");
-const endpoint = readText("supabase", "functions", "auto-triage-pipeline", "index.ts");
+const endpoint = readText("supabase", "functions", "auto-triage-pipeline", "handler.ts");
 const logicTest = readText("supabase", "functions", "auto-triage-pipeline", "logic.test.ts");
+const handlerTest = readText("supabase", "functions", "auto-triage-pipeline", "handler.test.ts");
 const config = readText("supabase", "config.toml");
 
 const compactCloseout = compact(closeoutSql);
@@ -19,6 +20,7 @@ const compactPlan = compact(plan);
 const compactLogic = compact(logic);
 const compactEndpoint = compact(endpoint);
 const compactLogicTest = compact(logicTest);
+const compactHandlerTest = compact(handlerTest);
 const compactConfig = compact(config);
 
 describe("750_f14_auto_triage_pipeline_closeout.sql contract", () => {
@@ -73,6 +75,7 @@ describe("750_f14_auto_triage_pipeline_closeout.sql contract", () => {
     expect(compactEndpoint).toContain(".upsert(");
     expect(compactEndpoint).toContain("upserted_decision");
 
+    expect(compactEndpoint).toContain("isservicerolecaller");
     expect(compactConfig).toContain("[functions.auto-triage-pipeline]");
   });
 
@@ -84,6 +87,8 @@ describe("750_f14_auto_triage_pipeline_closeout.sql contract", () => {
     expect(compactLogicTest).toContain("findbestprecedentmatch returns match when similarity exceeds threshold");
     expect(compactLogicTest).toContain("buildautotriagedraft reuses lane-classifier and composes triage packet");
     expect(compactLogicTest).toContain("applyprecedentrecommendation injects precedent evidence");
+    expect(compactHandlerTest).toContain("rejects unauthenticated post without db access");
+    expect(compactHandlerTest).toContain("accepts bearer service caller and reads precedents");
 
     expect(compactCloseout).toContain("does not mark f1.5");
     expect(compactCloseout).toContain("brian triage ui approval is f1.5");
