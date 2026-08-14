@@ -1,12 +1,6 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { captureEdgeException } from "../_shared/sentry.ts";
+import { handleDemoAdminRequest } from "./handler.ts";
 import { resetServicePartsDemoData, seedServicePartsDemoData } from "./service-parts-demo.ts";
-
-const ALLOWED_ORIGINS = [
-  "https://qualityequipmentparts.netlify.app",
-  "https://qep.blackrockai.co",
-  "http://localhost:5173",
-];
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -19,10 +13,6 @@ const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 
 type Role = "rep" | "admin" | "manager" | "owner";
-
-type RequestBody = {
-  action?: "seed" | "reset";
-};
 
 type StageDef = {
   id: string;
@@ -165,37 +155,6 @@ const IDS = {
     utilitySms: "71000000-0000-4000-8000-000000000018",
   },
 };
-
-function corsHeaders(origin: string | null) {
-  return {
-    "Access-Control-Allow-Origin": origin && ALLOWED_ORIGINS.includes(origin) ? origin : "",
-    "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type, x-demo-admin-secret",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Vary": "Origin",
-  };
-}
-
-function jsonResponse(payload: Record<string, unknown>, status: number, headers: Record<string, string>) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { ...headers, "Content-Type": "application/json" },
-  });
-}
-
-function describeError(error: unknown) {
-  if (error instanceof Error) return error.message;
-  if (error && typeof error === "object") {
-    const record = error as Record<string, unknown>;
-    return JSON.stringify({
-      message: record.message ?? null,
-      details: record.details ?? null,
-      hint: record.hint ?? null,
-      code: record.code ?? null,
-    });
-  }
-  return String(error);
-}
 
 function buildTimestamp(offset: { days?: number; hours?: number; minutes?: number }) {
   const value = new Date();
@@ -1127,108 +1086,8 @@ async function seedDemoData() {
   };
 }
 
-Deno.serve(async (req) => {
-  const ch = corsHeaders(req.headers.get("origin"));
-
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: ch });
-  }
-
-  if (req.method !== "POST") {
-    return jsonResponse({ error: "Method not allowed" }, 405, ch);
-  }
-
-  if (!DEMO_ADMIN_SECRET) {
-    return jsonResponse({ error: "DEMO_ADMIN_SECRET is not configured." }, 500, ch);
-  }
-
-  const providedSecret = req.headers.get("x-demo-admin-secret");
-  if (!providedSecret || providedSecret !== DEMO_ADMIN_SECRET) {
-    return jsonResponse({ error: "Unauthorized" }, 401, ch);
-  }
-
-  try {
-    const body = await req.json() as RequestBody;
-    const action = body.action ?? "seed";
-
-    if (action !== "seed" && action !== "reset") {
-      return jsonResponse({ error: "Unsupported action" }, 400, ch);
-    }
-
-    if (action === "seed") {
-      return jsonResponse(
-        {
-          error: "Demo seeding is disabled for live environments. Use imported source data only.",
-        },
-        410,
-        ch,
-      );
-    }
-
-    const voiceSummary = await purgeVoiceCaptures();
-    await resetDemoData();
-
-    if (action === "reset") {
-      return jsonResponse(
-        {
-          ok: true,
-          action,
-          batchId: DEMO_BATCH_ID,
-          voiceSummary,
-          demoSummary: {
-            companies: 0,
-            contacts: 0,
-            equipment: 0,
-            deals: 0,
-            activities: 0,
-          },
-          servicePartsSummary: {
-            partsInventory: 0,
-            serviceJobs: 0,
-            requirements: 0,
-          },
-        },
-        200,
-        ch,
-      );
-    }
-
-    const demoSummary = await seedDemoData();
-    const assignees = await resolveAssignees();
-    const servicePartsSummary = await seedServicePartsDemoData(admin, {
-      companies: {
-        apexHoldings: IDS.companies.apexHoldings,
-        apexLakeCity: IDS.companies.apexLakeCity,
-        gulfCoast: IDS.companies.gulfCoast,
-        pineRiver: IDS.companies.pineRiver,
-      },
-      contacts: {
-        mason: IDS.contacts.mason,
-        hannah: IDS.contacts.hannah,
-        jordan: IDS.contacts.jordan,
-        elena: IDS.contacts.elena,
-      },
-      equipment: {
-        apexDozer: IDS.equipment.apexDozer,
-        apexMulcher: IDS.equipment.apexMulcher,
-        pineSkidSteer: IDS.equipment.pineSkidSteer,
-      },
-    }, assignees);
-    return jsonResponse({
-      ok: true,
-      action,
-      batchId: DEMO_BATCH_ID,
-      voiceSummary,
-      demoSummary,
-      servicePartsSummary,
-    }, 200, ch);
-  } catch (error) {
-    captureEdgeException(error, { fn: "demo-admin", req });
-    console.error("[demo-admin] failed:", error);
-    return jsonResponse(
-      { error: describeError(error) },
-      500,
-      ch,
-    );
-  }
-});
+Deno.serve((req) =>
+  handleDemoAdminRequest(req, {
+    demoAdminSecret: DEMO_ADMIN_SECRET,
+  })
+);
