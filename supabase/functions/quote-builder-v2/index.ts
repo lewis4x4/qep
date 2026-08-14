@@ -2812,6 +2812,23 @@ async function handlePublicDepositCheckout(
   }, origin);
 }
 
+// N2.1: accepted part lines become a staged counter order. Best-effort —
+// acceptance never blocks on materialization; idempotent per package.
+async function stageAcceptedQuotePartsOrder(
+  admin: ReturnType<typeof createAdminClient>,
+  quotePackageId: string,
+  source: string,
+): Promise<void> {
+  try {
+    const staged = await materializePartsOrderFromQuote(admin, quotePackageId);
+    if (staged.status === "created") {
+      console.log(`quote ${quotePackageId}: staged parts order ${staged.partsOrderId} (${staged.lineCount} lines) via ${source}`);
+    }
+  } catch (err) {
+    console.error(`quote parts materialization (${source}):`, err);
+  }
+}
+
 async function handlePublicAccept(
   req: Request,
   url: URL,
@@ -2878,6 +2895,7 @@ async function handlePublicAccept(
       documentHash: typeof latestSig?.document_hash === "string" ? latestSig.document_hash : null,
       repUserId: resolvedRepUserId,
     });
+    await stageAcceptedQuotePartsOrder(admin, quote.id, "public accept retry");
     return safeJsonOk({
       signature_id: latestSig?.id ?? null,
       signed_at: latestSig?.signed_at ?? null,
@@ -2965,17 +2983,8 @@ async function handlePublicAccept(
     repUserId: resolvedRepUserId,
   });
 
-  // N2.1: accepted part lines become a staged counter order. Best-effort —
-  // acceptance never blocks on materialization; idempotent per package (the
-  // retry short-circuit above never reaches this point twice with a create).
-  try {
-    const staged = await materializePartsOrderFromQuote(admin, quote.id);
-    if (staged.status === "created") {
-      console.log(`quote ${quote.id}: staged parts order ${staged.partsOrderId} (${staged.lineCount} lines)`);
-    }
-  } catch (err) {
-    console.error("quote parts materialization (public accept):", err);
-  }
+  // N2.1: accepted part lines become a staged counter order.
+  await stageAcceptedQuotePartsOrder(admin, quote.id, "public accept");
 
   return safeJsonOk({
     signature_id: signatureId,
@@ -8697,11 +8706,7 @@ Deno.serve(async (req) => {
       });
 
       // N2.1: staff-signed acceptance stages the counter order too.
-      try {
-        await materializePartsOrderFromQuote(admin, String(body.quote_package_id));
-      } catch (err) {
-        console.error("quote parts materialization (staff sign):", err);
-      }
+      await stageAcceptedQuotePartsOrder(admin, String(body.quote_package_id), "staff sign");
 
       return safeJsonOk({
         signature: {
