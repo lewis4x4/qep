@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { AuthError } from "@supabase/supabase-js";
 import {
   AlertTriangle,
@@ -22,10 +22,21 @@ import {
   type LoginSurfaceMode,
 } from "@/lib/login-page-copy";
 import {
+  forgotPasswordPath,
+  isForgotPasswordPath,
+  isResetPasswordPath,
+  hasRecoveryQueryFlag,
+  looksLikeRecoveryLanding,
+  passwordResetRedirectUrl,
+  resetPasswordPath,
+} from "@/lib/password-recovery";
+import {
   resetPasswordForEmailWithRetry,
   signInWithOtpWithRetry,
   signInWithPasswordWithRetry,
+  updatePasswordWithRetry,
 } from "@/lib/supabase-auth-retry";
+import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,32 +63,104 @@ function signInErrorDescription(error: AuthError): ReactNode {
   );
 }
 
-function passwordResetRedirect(mode: LoginSurfaceMode): string {
-  const path = mode === "portal" ? "/portal/login" : "/login";
-  return `${window.location.origin}${path}?recovery=1`;
-}
-
-function isForgotPasswordPath(pathname: string): boolean {
-  return pathname === "/forgot-password";
-}
-
 export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
-  const { pathname } = useLocation();
+  const { pathname, search, hash } = useLocation();
+  const navigate = useNavigate();
   const { toast, dismiss } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
+  const [updatePasswordLoading, setUpdatePasswordLoading] = useState(false);
+  const [recoveryReady, setRecoveryReady] = useState<boolean | null>(null);
 
   const isPortal = mode === "portal";
-  const showForgotPasswordFlow = isForgotPasswordPath(pathname);
+  const showForgotPasswordFlow = isForgotPasswordPath(pathname, mode);
+  const showResetPasswordFlow = isResetPasswordPath(pathname, mode);
   const signInPath = isPortal ? "/portal/login" : "/login";
+  const forgotPasswordHref = forgotPasswordPath(mode);
   const formCopy = loginFormCopy(mode);
   const marketing = loginMarketingCopy(mode);
 
   useEffect(() => {
     dismiss();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!showResetPasswordFlow && pathname === signInPath && hasRecoveryQueryFlag(search)) {
+      navigate(`${resetPasswordPath(mode)}${search}${hash}`, { replace: true });
+    }
+  }, [showResetPasswordFlow, pathname, signInPath, search, hash, mode, navigate]);
+
+  useEffect(() => {
+    if (!showResetPasswordFlow) {
+      return;
+    }
+
+    let cancelled = false;
+    let sawPasswordRecoveryEvent = false;
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled) {
+        return;
+      }
+      if (event === "PASSWORD_RECOVERY" && session) {
+        sawPasswordRecoveryEvent = true;
+        setRecoveryReady(true);
+      }
+    });
+
+    async function resolveRecoverySession(): Promise<void> {
+      const recoveryLanding = looksLikeRecoveryLanding(search, hash);
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (cancelled) {
+          return;
+        }
+
+        if (session && (sawPasswordRecoveryEvent || recoveryLanding)) {
+          setRecoveryReady(true);
+          return;
+        }
+
+        if (recoveryLanding) {
+          // Supabase may still be parsing hash tokens on first paint.
+          await new Promise((resolve) => {
+            window.setTimeout(resolve, 350);
+          });
+          if (cancelled) {
+            return;
+          }
+          const { data: { session: delayedSession } } = await supabase.auth.getSession();
+          if (delayedSession) {
+            setRecoveryReady(true);
+            return;
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setRecoveryReady(false);
+        }
+        return;
+      }
+
+      if (!cancelled) {
+        setRecoveryReady(false);
+      }
+    }
+
+    void resolveRecoverySession();
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, [showResetPasswordFlow, search, hash]);
 
   async function handlePasswordLogin(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -129,7 +212,7 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
     setResetLoading(true);
     const { error } = await resetPasswordForEmailWithRetry({
       email: trimmedEmail,
-      redirectTo: passwordResetRedirect(mode),
+      redirectTo: passwordResetRedirectUrl(mode),
     });
     if (error) {
       toast({
@@ -145,6 +228,61 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
     }
     setResetLoading(false);
   }
+
+  async function handleUpdatePassword(event: React.FormEvent): Promise<void> {
+    event.preventDefault();
+
+    if (newPassword.length < 8) {
+      toast({
+        variant: "destructive",
+        title: "Password too short",
+        description: "Use at least 8 characters for your new password.",
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        variant: "destructive",
+        title: "Passwords do not match",
+        description: "Enter the same password in both fields.",
+      });
+      return;
+    }
+
+    setUpdatePasswordLoading(true);
+    const { error } = await updatePasswordWithRetry(newPassword);
+    if (error) {
+      toast({
+        variant: "destructive",
+        title: "Couldn't update password",
+        description: signInErrorDescription(error),
+      });
+      setUpdatePasswordLoading(false);
+      return;
+    }
+
+    await supabase.auth.signOut();
+    toast({
+      title: "Password updated",
+      description: "Sign in with your new password.",
+    });
+    navigate(signInPath, { replace: true });
+    setUpdatePasswordLoading(false);
+  }
+
+  const authCardHeading = showResetPasswordFlow
+    ? "Set a new password"
+    : showForgotPasswordFlow
+      ? "Reset your password"
+      : formCopy.headline;
+  const authCardSubcopy = showResetPasswordFlow
+    ? "Choose a new password for your account. You'll sign in again when you're done."
+    : showForgotPasswordFlow
+      ? isPortal
+        ? "Enter the email tied to your portal account and we'll send a reset link."
+        : "Enter your work email and we'll send a password reset link."
+      : formCopy.subcopy;
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(232,119,34,0.14),_transparent_28%),linear-gradient(135deg,_#08111F_0%,_#101A2C_52%,_#162134_100%)] px-4 py-4 sm:px-6 lg:px-8">
@@ -262,14 +400,10 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
 
                 <div>
                   <h2 className="text-4xl font-semibold tracking-tight text-white sm:text-[2.9rem] sm:leading-[1.02]">
-                    {showForgotPasswordFlow ? "Reset your password" : formCopy.headline}
+                    {authCardHeading}
                   </h2>
                   <p className="mt-3 max-w-md text-base leading-7 text-slate-400">
-                    {showForgotPasswordFlow
-                      ? isPortal
-                        ? "Enter the email tied to your portal account and we'll send a reset link."
-                        : "Enter your work email and we'll send a password reset link."
-                      : formCopy.subcopy}
+                    {authCardSubcopy}
                   </p>
                 </div>
 
@@ -286,7 +420,97 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
 
               <Card className="border-white/10 bg-white/[0.04] shadow-[0_30px_80px_rgba(0,0,0,0.28)] backdrop-blur">
                 <CardContent className="p-5 sm:p-6">
-                  {showForgotPasswordFlow ? (
+                  {showResetPasswordFlow ? (
+                    recoveryReady === null ? (
+                      <div
+                        className="flex min-h-[12rem] items-center justify-center"
+                        data-testid="reset-password-loading"
+                      >
+                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                      </div>
+                    ) : recoveryReady ? (
+                      <form
+                        data-testid="reset-password-form"
+                        onSubmit={(event) => {
+                          void handleUpdatePassword(event);
+                        }}
+                        className="space-y-4"
+                      >
+                        <div className="space-y-2">
+                          <Label htmlFor="new-password" className="text-sm font-medium text-slate-200">
+                            New password
+                          </Label>
+                          <div className="relative">
+                            <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                            <Input
+                              id="new-password"
+                              type="password"
+                              autoComplete="new-password"
+                              value={newPassword}
+                              onChange={(event) => setNewPassword(event.target.value)}
+                              placeholder="At least 8 characters"
+                              required
+                              minLength={8}
+                              className="h-12 border-white/10 bg-[#09111D] pl-10 text-white placeholder:text-slate-500"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="confirm-password" className="text-sm font-medium text-slate-200">
+                            Confirm password
+                          </Label>
+                          <div className="relative">
+                            <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                            <Input
+                              id="confirm-password"
+                              type="password"
+                              autoComplete="new-password"
+                              value={confirmPassword}
+                              onChange={(event) => setConfirmPassword(event.target.value)}
+                              placeholder="Re-enter your new password"
+                              required
+                              minLength={8}
+                              className="h-12 border-white/10 bg-[#09111D] pl-10 text-white placeholder:text-slate-500"
+                            />
+                          </div>
+                        </div>
+
+                        <Button
+                          type="submit"
+                          className="h-12 w-full gap-2 bg-qep-orange-accessible text-base font-semibold text-white hover:bg-[#D96C1D]"
+                          disabled={updatePasswordLoading}
+                        >
+                          {updatePasswordLoading ? "Saving password…" : "Save new password"}
+                          {!updatePasswordLoading && <ArrowRight className="h-4 w-4" />}
+                        </Button>
+                      </form>
+                    ) : (
+                      <div className="space-y-4" data-testid="reset-password-expired">
+                        <p className="text-sm leading-7 text-slate-300">
+                          This reset link is expired or was already used. Request a fresh link and we&apos;ll email you
+                          again if that address has an account.
+                        </p>
+                        <Button
+                          asChild
+                          className="h-12 w-full gap-2 bg-qep-orange-accessible text-base font-semibold text-white hover:bg-[#D96C1D]"
+                        >
+                          <Link to={forgotPasswordHref}>
+                            Request a new reset link
+                            <ArrowRight className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                        <p className="text-center text-sm text-slate-400">
+                          <Link
+                            to={signInPath}
+                            className="font-medium text-primary hover:text-[#D96C1D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[#0C1524]"
+                          >
+                            Back to sign in
+                          </Link>
+                        </p>
+                      </div>
+                    )
+                  ) : showForgotPasswordFlow ? (
                     <form
                       data-testid="forgot-password-form"
                       onSubmit={(event) => {
@@ -378,14 +602,12 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
                             <Label htmlFor="password" className="text-sm font-medium text-slate-200">
                               Password
                             </Label>
-                            <button
-                              type="button"
-                              onClick={() => void handleForgotPassword()}
-                              disabled={resetLoading || loading}
-                              className="text-sm font-medium text-primary hover:text-[#D96C1D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[#0C1524] disabled:opacity-60"
+                            <Link
+                              to={forgotPasswordHref}
+                              className="text-sm font-medium text-primary hover:text-[#D96C1D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[#0C1524]"
                             >
-                              {resetLoading ? "Sending reset…" : "Forgot password?"}
-                            </button>
+                              Forgot password?
+                            </Link>
                           </div>
                           <div className="relative">
                             <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />

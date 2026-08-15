@@ -37,6 +37,9 @@ describe("isRecognizedApplicationPath", () => {
     expect(isRecognizedApplicationPath("/login")).toBe(true);
     expect(isRecognizedApplicationPath("/portal/login")).toBe(true);
     expect(isRecognizedApplicationPath("/forgot-password")).toBe(true);
+    expect(isRecognizedApplicationPath("/reset-password")).toBe(true);
+    expect(isRecognizedApplicationPath("/portal/forgot-password")).toBe(true);
+    expect(isRecognizedApplicationPath("/portal/reset-password")).toBe(true);
     expect(isRecognizedApplicationPath("/dashboard")).toBe(true);
     expect(isRecognizedApplicationPath("/sales/today")).toBe(true);
   });
@@ -59,6 +62,7 @@ describe("shouldShowLoginForUnauthenticatedPath", () => {
   it("prompts sign-in for real app URLs and 404s for unknown paths", () => {
     expect(shouldShowLoginForUnauthenticatedPath("/dashboard")).toBe(true);
     expect(shouldShowLoginForUnauthenticatedPath("/forgot-password")).toBe(true);
+    expect(shouldShowLoginForUnauthenticatedPath("/reset-password")).toBe(true);
     expect(shouldShowLoginForUnauthenticatedPath("/zzz-not-a-page")).toBe(false);
   });
 });
@@ -76,10 +80,13 @@ describe("resolveSignedInAuthEntryRedirect", () => {
   it("sends signed-in login and forgot-password visitors to role home", () => {
     expect(resolveSignedInAuthEntryRedirect("/login", "/sales/today")).toBe("/sales/today");
     expect(resolveSignedInAuthEntryRedirect("/forgot-password", "/qrm")).toBe("/qrm");
+    expect(resolveSignedInAuthEntryRedirect("/reset-password", "/qrm")).toBe("/qrm");
   });
 
   it("sends signed-in portal login visitors to portal home", () => {
     expect(resolveSignedInAuthEntryRedirect("/portal/login", "/sales/today")).toBe("/portal");
+    expect(resolveSignedInAuthEntryRedirect("/portal/forgot-password", "/sales/today")).toBe("/portal");
+    expect(resolveSignedInAuthEntryRedirect("/portal/reset-password", "/sales/today")).toBe("/portal");
   });
 });
 

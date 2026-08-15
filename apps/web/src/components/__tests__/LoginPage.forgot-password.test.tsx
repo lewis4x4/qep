@@ -17,6 +17,7 @@ mock.module("@/lib/supabase-auth-retry", () => ({
   signInWithPasswordWithRetry: mock(() => Promise.resolve({ error: null })),
   signInWithOtpWithRetry: mock(() => Promise.resolve({ error: null })),
   resetPasswordForEmailWithRetry: mock(() => Promise.resolve({ error: null })),
+  updatePasswordWithRetry: mock(() => Promise.resolve({ error: null })),
 }));
 
 const { LoginPage } = await import("@/components/LoginPage");
@@ -53,5 +54,19 @@ describe("LoginPage forgot-password route", () => {
     expect(screen.queryByTestId("forgot-password-form")).toBeNull();
     expect(screen.getByPlaceholderText("Enter your password")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Sign In" })).toBeTruthy();
+  });
+
+  test("links forgot password to the dedicated reset route", () => {
+    render(
+      <MemoryRouter initialEntries={["/login"]}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<LoginPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const forgotPasswordLink = screen.getByRole("link", { name: "Forgot password?" });
+    expect(forgotPasswordLink.getAttribute("href")).toBe("/forgot-password");
   });
 });
