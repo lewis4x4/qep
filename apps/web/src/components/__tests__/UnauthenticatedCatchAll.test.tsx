@@ -13,6 +13,7 @@ mock.module("@/lib/supabase-auth-retry", () => ({
   signInWithPasswordWithRetry: mock(() => Promise.resolve({ error: null })),
   signInWithOtpWithRetry: mock(() => Promise.resolve({ error: null })),
   resetPasswordForEmailWithRetry: mock(() => Promise.resolve({ error: null })),
+  updatePasswordWithRetry: mock(() => Promise.resolve({ error: null })),
 }));
 
 const { UnauthenticatedCatchAll } = await import("@/components/UnauthenticatedCatchAll");

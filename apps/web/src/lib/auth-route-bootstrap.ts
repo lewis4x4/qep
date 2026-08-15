@@ -1,5 +1,10 @@
 /** Public auth entry points — never 404 when a session exists. */
-export const AUTH_ENTRY_PATHS = ["/login", "/portal/login", "/forgot-password"] as const;
+export const AUTH_ENTRY_PATHS = [
+  "/login",
+  "/portal/login",
+  "/forgot-password",
+  "/reset-password",
+] as const;
 
 const AUTHENTICATED_APP_PATH_PREFIXES = [
   "/dashboard",

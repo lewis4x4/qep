@@ -37,6 +37,7 @@ describe("isRecognizedApplicationPath", () => {
     expect(isRecognizedApplicationPath("/login")).toBe(true);
     expect(isRecognizedApplicationPath("/portal/login")).toBe(true);
     expect(isRecognizedApplicationPath("/forgot-password")).toBe(true);
+    expect(isRecognizedApplicationPath("/reset-password")).toBe(true);
     expect(isRecognizedApplicationPath("/dashboard")).toBe(true);
     expect(isRecognizedApplicationPath("/sales/today")).toBe(true);
   });
@@ -59,6 +60,7 @@ describe("shouldShowLoginForUnauthenticatedPath", () => {
   it("prompts sign-in for real app URLs and 404s for unknown paths", () => {
     expect(shouldShowLoginForUnauthenticatedPath("/dashboard")).toBe(true);
     expect(shouldShowLoginForUnauthenticatedPath("/forgot-password")).toBe(true);
+    expect(shouldShowLoginForUnauthenticatedPath("/reset-password")).toBe(true);
     expect(shouldShowLoginForUnauthenticatedPath("/zzz-not-a-page")).toBe(false);
   });
 });

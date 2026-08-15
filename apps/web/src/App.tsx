@@ -799,8 +799,9 @@ function SalesOrAppLayout({
   );
   const isSalesRoute = location.pathname.startsWith("/sales") && !hasSharedSalesChrome;
   const isPartsCompanionRoute = location.pathname.startsWith("/parts/companion");
+  const isPublicAuthSurface = location.pathname === "/reset-password";
 
-  if (isSalesRoute || isPartsCompanionRoute) {
+  if (isSalesRoute || isPartsCompanionRoute || isPublicAuthSurface) {
     // Companion apps render their own shell; skip AppLayout.
     return <>{children}</>;
   }
@@ -973,6 +974,7 @@ function App() {
               <Route path="/portal/*" element={<Navigate to="/portal/login" replace />} />
               <Route path="/login" element={<LoginPage authError={error} />} />
               <Route path="/forgot-password" element={<LoginPage authError={error} />} />
+              <Route path="/reset-password" element={<LoginPage authError={error} />} />
               <Route path="/quote" element={<RedirectPreserveSearch to="/sales/quotes/new" />} />
               <Route path="/quotes" element={<RedirectPreserveSearch to="/sales/quotes" />} />
               <Route path="/quote-v2" element={<RedirectPreserveSearch to="/sales/quotes/new" />} />
@@ -1094,6 +1096,10 @@ function App() {
               <Route
                 path="/forgot-password"
                 element={<Navigate to={signedInAuthEntryRedirect("/forgot-password")} replace />}
+              />
+              <Route
+                path="/reset-password"
+                element={<LoginPage authError={error} />}
               />
               <Route
                 path="/dashboard"
