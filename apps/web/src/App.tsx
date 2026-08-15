@@ -799,8 +799,9 @@ function SalesOrAppLayout({
   );
   const isSalesRoute = location.pathname.startsWith("/sales") && !hasSharedSalesChrome;
   const isPartsCompanionRoute = location.pathname.startsWith("/parts/companion");
+  const isPublicAuthSurface = location.pathname === "/reset-password";
 
-  if (isSalesRoute || isPartsCompanionRoute) {
+  if (isSalesRoute || isPartsCompanionRoute || isPublicAuthSurface) {
     // Companion apps render their own shell; skip AppLayout.
     return <>{children}</>;
   }
@@ -1098,7 +1099,7 @@ function App() {
               />
               <Route
                 path="/reset-password"
-                element={<Navigate to={signedInAuthEntryRedirect("/reset-password")} replace />}
+                element={<LoginPage authError={error} />}
               />
               <Route
                 path="/dashboard"

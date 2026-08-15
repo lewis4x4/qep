@@ -109,6 +109,30 @@ describe("LoginPage reset-password route", () => {
     expect(screen.queryByRole("button", { name: "Sign In" })).toBeNull();
   });
 
+  test("keeps recovery landings on the set-password surface when a session already exists", async () => {
+    getSession.mockImplementation(() =>
+      Promise.resolve({
+        data: {
+          session: { user: { id: "user-1" } },
+        },
+      }),
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/reset-password?recovery=1#access_token=abc&type=recovery"]}>
+        <Routes>
+          <Route path="/reset-password" element={<LoginPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("reset-password-form")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("reset-password-loading")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Sign In" })).toBeNull();
+  });
+
   test("shows an expired-link state instead of 404 when recovery is missing", async () => {
     render(
       <MemoryRouter initialEntries={["/reset-password"]}>
