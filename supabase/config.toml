@@ -262,8 +262,8 @@ verify_jwt = false
 [functions.decision-audit-artifact]
 verify_jwt = false
 
-# Nightly cron + occasional manager/owner manual POST; cron-auth for service,
-# requireServiceUser for ES256-safe JWT (manager/owner only).
+# Nightly cron + occasional manager/owner/admin manual POST; resolveCallerContext
+# for ES256-safe JWT (admin/manager/owner only) and unscoped service-role cron.
 [functions.qrm-absence-engine-nightly]
 verify_jwt = false
 
