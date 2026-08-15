@@ -81,6 +81,32 @@ describe("LoginPage reset-password route", () => {
     expect(screen.getByRole("heading", { name: "Set a new password" })).toBeTruthy();
     expect(screen.getByLabelText("New password")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Save new password" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Sign In" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Password" })).toBeNull();
+  });
+
+  test("redirects /login?recovery=1 to the set-new-password surface", async () => {
+    getSession.mockImplementation(() =>
+      Promise.resolve({
+        data: {
+          session: { user: { id: "user-1" } },
+        },
+      }),
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/login?recovery=1"]}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/reset-password" element={<LoginPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("reset-password-form")).toBeTruthy();
+    });
+    expect(screen.queryByRole("button", { name: "Sign In" })).toBeNull();
   });
 
   test("shows an expired-link state instead of 404 when recovery is missing", async () => {

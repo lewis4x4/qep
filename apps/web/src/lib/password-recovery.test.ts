@@ -1,27 +1,27 @@
 import { describe, expect, test } from "bun:test";
 import {
-  forgotPasswordPath,
+  FORGOT_PASSWORD_PATH,
   hasRecoveryHashType,
   hasRecoveryQueryFlag,
   isForgotPasswordPath,
   isResetPasswordPath,
   looksLikeRecoveryLanding,
-  resetPasswordPath,
+  passwordResetRedirectUrl,
+  RESET_PASSWORD_PATH,
 } from "./password-recovery";
 
 describe("password-recovery paths", () => {
-  test("uses internal auth paths by default", () => {
-    expect(forgotPasswordPath()).toBe("/forgot-password");
-    expect(resetPasswordPath()).toBe("/reset-password");
+  test("uses shared auth paths for internal and portal surfaces", () => {
+    expect(FORGOT_PASSWORD_PATH).toBe("/forgot-password");
+    expect(RESET_PASSWORD_PATH).toBe("/reset-password");
     expect(isForgotPasswordPath("/forgot-password")).toBe(true);
     expect(isResetPasswordPath("/reset-password")).toBe(true);
+    expect(isForgotPasswordPath("/portal/forgot-password")).toBe(false);
+    expect(isResetPasswordPath("/portal/reset-password")).toBe(false);
   });
 
-  test("uses portal auth paths in portal mode", () => {
-    expect(forgotPasswordPath("portal")).toBe("/portal/forgot-password");
-    expect(resetPasswordPath("portal")).toBe("/portal/reset-password");
-    expect(isForgotPasswordPath("/portal/forgot-password", "portal")).toBe(true);
-    expect(isResetPasswordPath("/portal/reset-password", "portal")).toBe(true);
+  test("builds reset email redirect URLs to /reset-password", () => {
+    expect(passwordResetRedirectUrl()).toBe(`${window.location.origin}${RESET_PASSWORD_PATH}`);
   });
 });
 

@@ -3,9 +3,7 @@ export const AUTH_ENTRY_PATHS = [
   "/login",
   "/portal/login",
   "/forgot-password",
-  "/portal/forgot-password",
   "/reset-password",
-  "/portal/reset-password",
 ] as const;
 
 const AUTHENTICATED_APP_PATH_PREFIXES = [
@@ -117,11 +115,7 @@ export function resolveSignedInAuthEntryRedirect(
   homeRoute: string,
   portalHomeRoute = "/portal",
 ): string {
-  if (
-    pathname === "/portal/login" ||
-    pathname === "/portal/forgot-password" ||
-    pathname === "/portal/reset-password"
-  ) {
+  if (pathname === "/portal/login") {
     return portalHomeRoute;
   }
 

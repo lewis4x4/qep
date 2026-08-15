@@ -38,8 +38,6 @@ describe("isRecognizedApplicationPath", () => {
     expect(isRecognizedApplicationPath("/portal/login")).toBe(true);
     expect(isRecognizedApplicationPath("/forgot-password")).toBe(true);
     expect(isRecognizedApplicationPath("/reset-password")).toBe(true);
-    expect(isRecognizedApplicationPath("/portal/forgot-password")).toBe(true);
-    expect(isRecognizedApplicationPath("/portal/reset-password")).toBe(true);
     expect(isRecognizedApplicationPath("/dashboard")).toBe(true);
     expect(isRecognizedApplicationPath("/sales/today")).toBe(true);
   });
@@ -85,8 +83,6 @@ describe("resolveSignedInAuthEntryRedirect", () => {
 
   it("sends signed-in portal login visitors to portal home", () => {
     expect(resolveSignedInAuthEntryRedirect("/portal/login", "/sales/today")).toBe("/portal");
-    expect(resolveSignedInAuthEntryRedirect("/portal/forgot-password", "/sales/today")).toBe("/portal");
-    expect(resolveSignedInAuthEntryRedirect("/portal/reset-password", "/sales/today")).toBe("/portal");
   });
 });
 

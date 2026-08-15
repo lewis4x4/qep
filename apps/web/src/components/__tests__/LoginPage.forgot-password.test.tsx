@@ -69,4 +69,17 @@ describe("LoginPage forgot-password route", () => {
     const forgotPasswordLink = screen.getByRole("link", { name: "Forgot password?" });
     expect(forgotPasswordLink.getAttribute("href")).toBe("/forgot-password");
   });
+
+  test("links portal login forgot password to /forgot-password", () => {
+    render(
+      <MemoryRouter initialEntries={["/portal/login"]}>
+        <Routes>
+          <Route path="/portal/login" element={<LoginPage mode="portal" />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const forgotPasswordLink = screen.getByRole("link", { name: "Forgot password?" });
+    expect(forgotPasswordLink.getAttribute("href")).toBe("/forgot-password");
+  });
 });

@@ -22,13 +22,13 @@ import {
   type LoginSurfaceMode,
 } from "@/lib/login-page-copy";
 import {
-  forgotPasswordPath,
+  FORGOT_PASSWORD_PATH,
   isForgotPasswordPath,
   isResetPasswordPath,
   hasRecoveryQueryFlag,
   looksLikeRecoveryLanding,
   passwordResetRedirectUrl,
-  resetPasswordPath,
+  RESET_PASSWORD_PATH,
 } from "@/lib/password-recovery";
 import {
   resetPasswordForEmailWithRetry,
@@ -77,10 +77,9 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
   const [recoveryReady, setRecoveryReady] = useState<boolean | null>(null);
 
   const isPortal = mode === "portal";
-  const showForgotPasswordFlow = isForgotPasswordPath(pathname, mode);
-  const showResetPasswordFlow = isResetPasswordPath(pathname, mode);
+  const showForgotPasswordFlow = isForgotPasswordPath(pathname);
+  const showResetPasswordFlow = isResetPasswordPath(pathname);
   const signInPath = isPortal ? "/portal/login" : "/login";
-  const forgotPasswordHref = forgotPasswordPath(mode);
   const formCopy = loginFormCopy(mode);
   const marketing = loginMarketingCopy(mode);
 
@@ -89,10 +88,12 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!showResetPasswordFlow && pathname === signInPath && hasRecoveryQueryFlag(search)) {
-      navigate(`${resetPasswordPath(mode)}${search}${hash}`, { replace: true });
+    if (!showResetPasswordFlow && hasRecoveryQueryFlag(search)) {
+      if (pathname === "/login" || pathname === "/portal/login") {
+        navigate(`${RESET_PASSWORD_PATH}${search}${hash}`, { replace: true });
+      }
     }
-  }, [showResetPasswordFlow, pathname, signInPath, search, hash, mode, navigate]);
+  }, [showResetPasswordFlow, pathname, search, hash, navigate]);
 
   useEffect(() => {
     if (!showResetPasswordFlow) {
@@ -212,7 +213,7 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
     setResetLoading(true);
     const { error } = await resetPasswordForEmailWithRetry({
       email: trimmedEmail,
-      redirectTo: passwordResetRedirectUrl(mode),
+      redirectTo: passwordResetRedirectUrl(),
     });
     if (error) {
       toast({
@@ -495,7 +496,7 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
                           asChild
                           className="h-12 w-full gap-2 bg-qep-orange-accessible text-base font-semibold text-white hover:bg-[#D96C1D]"
                         >
-                          <Link to={forgotPasswordHref}>
+                          <Link to={FORGOT_PASSWORD_PATH}>
                             Request a new reset link
                             <ArrowRight className="h-4 w-4" />
                           </Link>
@@ -603,7 +604,7 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
                               Password
                             </Label>
                             <Link
-                              to={forgotPasswordHref}
+                              to={FORGOT_PASSWORD_PATH}
                               className="text-sm font-medium text-primary hover:text-[#D96C1D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[#0C1524]"
                             >
                               Forgot password?

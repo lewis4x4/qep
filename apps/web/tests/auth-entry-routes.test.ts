@@ -15,8 +15,9 @@ describe("auth entry route wiring", () => {
     expect(appSource).toContain('path="/portal/login"');
     expect(appSource).toContain('path="/forgot-password"');
     expect(appSource).toContain('path="/reset-password"');
-    expect(appSource).toContain('path="/portal/forgot-password"');
-    expect(appSource).toContain('path="/portal/reset-password"');
+    expect(appSource).toContain('signedInAuthEntryRedirect("/reset-password")');
+    expect(appSource).not.toContain('path="/portal/forgot-password"');
+    expect(appSource).not.toContain('path="/portal/reset-password"');
     expect(appSource).toContain("resolveSignedInAuthEntryRedirect");
     expect(appSource).toContain("signedInAuthEntryRedirect");
     expect(appSource).toContain("<NotFoundPage homeHref={homeRoute} />");

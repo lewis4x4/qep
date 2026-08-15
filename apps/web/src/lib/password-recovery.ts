@@ -1,26 +1,19 @@
-import type { LoginSurfaceMode } from "@/lib/login-page-copy";
+export const FORGOT_PASSWORD_PATH = "/forgot-password";
+export const RESET_PASSWORD_PATH = "/reset-password";
 
-export function forgotPasswordPath(mode: LoginSurfaceMode = "internal"): string {
-  return mode === "portal" ? "/portal/forgot-password" : "/forgot-password";
-}
-
-export function resetPasswordPath(mode: LoginSurfaceMode = "internal"): string {
-  return mode === "portal" ? "/portal/reset-password" : "/reset-password";
-}
-
-export function passwordResetRedirectUrl(mode: LoginSurfaceMode = "internal"): string {
+export function passwordResetRedirectUrl(): string {
   if (typeof window === "undefined") {
-    return resetPasswordPath(mode);
+    return RESET_PASSWORD_PATH;
   }
-  return `${window.location.origin}${resetPasswordPath(mode)}`;
+  return `${window.location.origin}${RESET_PASSWORD_PATH}`;
 }
 
-export function isForgotPasswordPath(pathname: string, mode: LoginSurfaceMode = "internal"): boolean {
-  return pathname === forgotPasswordPath(mode);
+export function isForgotPasswordPath(pathname: string): boolean {
+  return pathname === FORGOT_PASSWORD_PATH;
 }
 
-export function isResetPasswordPath(pathname: string, mode: LoginSurfaceMode = "internal"): boolean {
-  return pathname === resetPasswordPath(mode);
+export function isResetPasswordPath(pathname: string): boolean {
+  return pathname === RESET_PASSWORD_PATH;
 }
 
 export function hasRecoveryQueryFlag(search: string): boolean {

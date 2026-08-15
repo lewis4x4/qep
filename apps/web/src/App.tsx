@@ -970,8 +970,6 @@ function App() {
               <Route path="/q/:token" element={<DealRoomPage />} />
               <Route path="/rq/:token" element={<RentalQuotePublicPage />} />
               <Route path="/portal/login" element={<PortalLoginPage authError={error} />} />
-              <Route path="/portal/forgot-password" element={<PortalLoginPage authError={error} />} />
-              <Route path="/portal/reset-password" element={<PortalLoginPage authError={error} />} />
               <Route path="/portal/*" element={<Navigate to="/portal/login" replace />} />
               <Route path="/login" element={<LoginPage authError={error} />} />
               <Route path="/forgot-password" element={<LoginPage authError={error} />} />
@@ -1101,14 +1099,6 @@ function App() {
               <Route
                 path="/reset-password"
                 element={<Navigate to={signedInAuthEntryRedirect("/reset-password")} replace />}
-              />
-              <Route
-                path="/portal/forgot-password"
-                element={<Navigate to={signedInAuthEntryRedirect("/portal/forgot-password")} replace />}
-              />
-              <Route
-                path="/portal/reset-password"
-                element={<Navigate to={signedInAuthEntryRedirect("/portal/reset-password")} replace />}
               />
               <Route
                 path="/dashboard"
