@@ -161,6 +161,14 @@ export function eligibleDealsRpcWorkspace(scope: PlaybookWorkspaceScope): string
   return scope.mode === "scoped" ? scope.workspaceId : null;
 }
 
+/** JWT callers scope parts grounding to their shop; cron/service-role stays unscoped. */
+export function partsHybridRpcWorkspace(
+  callerWorkspace: string | null,
+  callerRole: string | null,
+): string | null {
+  return callerWorkspace !== null && callerRole !== null ? callerWorkspace : null;
+}
+
 export async function authenticatePostSalePlaybook(
   req: Request,
   adminClient: SupabaseClient,
@@ -392,23 +400,34 @@ export async function generateOne(
     .is("deleted_at", null)
     .maybeSingle();
 
+  const jwtScoped = callerWorkspace !== null && callerRole !== null;
+
+  let equipmentQuery = supabase.from("qrm_equipment")
+    .select("id, make, model, year, category, engine_hours, condition, workspace_id")
+    .eq("id", equipmentId);
+  if (jwtScoped) {
+    equipmentQuery = equipmentQuery.eq("workspace_id", callerWorkspace);
+  }
+
   const [dealRes, eqRes] = await Promise.all([
     supabase.from("qrm_deals")
       .select("id, name, workspace_id, company_id, assigned_rep_id, closed_at, amount")
       .eq("id", dealId).maybeSingle(),
-    supabase.from("qrm_equipment")
-      .select("id, make, model, year, category, engine_hours, condition, workspace_id")
-      .eq("id", equipmentId).maybeSingle(),
+    equipmentQuery.maybeSingle(),
   ]);
   if (dealRes.error || !dealRes.data) throw new Error("deal not found");
   if (eqRes.error || !eqRes.data) throw new Error("equipment not found");
   const deal = dealRes.data as Record<string, unknown>;
   const eq = eqRes.data as Record<string, unknown>;
 
-  if (callerWorkspace !== null && callerRole !== null) {
+  if (jwtScoped) {
     const dealWs = (deal.workspace_id as string | null) ?? "default";
     if (dealWs !== callerWorkspace) {
       throw new Error("forbidden: deal belongs to another workspace");
+    }
+    const eqWs = (eq.workspace_id as string | null) ?? "default";
+    if (eqWs !== callerWorkspace) {
+      throw new Error("equipment not found");
     }
     if (callerRole === "rep" && callerId) {
       const dealRep = (deal.assigned_rep_id as string | null) ?? null;
@@ -446,6 +465,7 @@ export async function generateOne(
 
   const groundedWindows: Array<Record<string, unknown>> = [];
   let grandTotal = 0;
+  const partsWorkspace = partsHybridRpcWorkspace(callerWorkspace, callerRole);
   for (const w of parsed.windows) {
     const hints = w.parts.map((p) => ({
       part: p,
@@ -460,7 +480,7 @@ export async function generateOne(
           const { data } = await supabase.rpc("match_parts_hybrid", {
             p_query_embedding: vectorLiteral,
             p_query_text: hint,
-            p_workspace: null,
+            p_workspace: partsWorkspace,
             p_manufacturer: (eq.make as string) ?? null,
             p_category: null,
             p_alpha: 0.6,
