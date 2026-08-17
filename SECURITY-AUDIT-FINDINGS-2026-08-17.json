@@ -1,0 +1,157 @@
+[
+  {
+    "id": "SEC-2026-001",
+    "severity": "HIGH",
+    "location": "supabase/functions/admin-users/index.ts",
+    "title": "Missing role value validation in update-role action allows arbitrary role assignment",
+    "description": "The admin-users edge function's 'update-role' action (line 573) validates that the caller is an owner and that the target user belongs to the workspace, but does NOT validate the incoming body.role against any allowlist. An owner can set an arbitrary role string (e.g., 'service_role', 'superadmin', or any custom value) on any user's profile. While the invite and create actions validate against an explicit allowlist ['rep', 'admin', 'manager', 'owner'], the update-role action blindly passes body.role to the database update.",
+    "impact": "An authenticated owner could set a user's role to an unexpected value. If downstream RLS policies, edge function auth checks, or application logic grants elevated privileges based on role strings that are not in the standard allowlist (or if future code introduces such checks), this could lead to privilege escalation. Even without exploiting a specific downstream check, it corrupts the role integrity of the profiles table.",
+    "attack_path": "1. Authenticate as a user with 'owner' role. 2. POST to /functions/v1/admin-users with {action: 'update-role', userId: '<target-user-id>', role: '<any-arbitrary-string>'}. 3. The role is written directly to the profiles.role column without validation. 4. If any downstream code checks for non-standard role strings, the attacker has created a user with that role.",
+    "evidence": [
+      "supabase/functions/admin-users/index.ts:573-622 (update-role has no role allowlist check)",
+      "supabase/functions/admin-users/index.ts:398-406 (invite action validates body.role against allowedRoles)",
+      "supabase/functions/admin-users/index.ts:488-496 (create action validates body.role against allowedRoles)",
+      "supabase/functions/admin-users/index.ts:619-621 (body.role written directly to DB)"
+    ],
+    "remediation": "Add the same allowedRoles validation used by the 'invite' and 'create' actions to the 'update-role' action. Validate body.role against ['rep', 'admin', 'manager', 'owner'] before executing the update.",
+    "poc_video_notes": "Use curl or Postman as an owner-role user. POST {action: 'update-role', userId: '<id>', role: 'superadmin'} to admin-users. Verify the profiles.role column now contains 'superadmin'."
+  },
+  {
+    "id": "SEC-2026-002",
+    "severity": "HIGH",
+    "location": "supabase/functions/rental-quote-public/index.ts",
+    "title": "No rate limiting on public rental quote endpoint allows share_token brute-force",
+    "description": "The rental-quote-public edge function (verify_jwt=false) uses a share_token as the SOLE authorization mechanism for reading rental contract details and submitting legally-binding signatures. The endpoint has no rate limiting, no CAPTCHA, and no IP-based throttling. The token validation only checks length >= 16 characters. Unlike service-public-job-status (which implements per-IP rate limiting with a 10-request/minute window), this endpoint allows unlimited attempts.",
+    "impact": "An attacker can brute-force share_tokens to access customer rental quotes (including pricing, contract terms, equipment details, company names) and potentially forge signatures on rental contracts, triggering the lifecycle_state transition from 'quoted' to 'reserved' with an arbitrary signer name.",
+    "attack_path": "1. Enumerate share_token values by sending POST {action: 'read', token: '<candidate>'} to /functions/v1/rental-quote-public. 2. No rate limit exists — attacker can send thousands of requests per second. 3. On valid token hit, read full quote details including rates, equipment, company name. 4. Optionally, POST {action: 'sign', token: '<valid-token>', signer_name: 'Attacker', signature_data_url: '<valid-png-data-url>'} to forge a contract signature.",
+    "evidence": [
+      "supabase/functions/rental-quote-public/index.ts:96-306 (entire handler, no rate limit code)",
+      "supabase/functions/rental-quote-public/index.ts:107-108 (only checks token.length >= 16)",
+      "supabase/functions/service-public-job-status/index.ts:14-36 (comparison: this public endpoint DOES have rate limiting)",
+      "supabase/config.toml:638 (verify_jwt = false)"
+    ],
+    "remediation": "Implement per-IP rate limiting similar to service-public-job-status (10 attempts per 60s window). Consider using higher-entropy tokens (e.g., 64+ character UUIDs). Add timing-safe comparison on the token lookup to prevent timing-based enumeration.",
+    "poc_video_notes": "Write a script that sends 1000+ POST requests to rental-quote-public with random 16-char tokens. Observe no 429 responses. Compare with service-public-job-status which returns 429 after 10 attempts."
+  },
+  {
+    "id": "SEC-2026-003",
+    "severity": "MEDIUM",
+    "location": "supabase/functions/_shared/hubspot-client.ts:97",
+    "title": "HubSpot OAuth tokens queryable by manager-role users via RLS policy despite encryption",
+    "description": "While HubSpot tokens are encrypted at the application layer (migration 008), the hubspot_connections table's RLS policy (migration 009) allows ANY user whose get_my_role() returns 'owner' or 'manager' to SELECT all columns including access_token and refresh_token. The encrypted ciphertext is exposed to these users. The HUBSPOT_ENCRYPTION_KEY is an environment variable available to all edge functions, meaning any edge function code with a bug (SSRF, injection) could decrypt these tokens. The encryption key is a shared secret — a single leaked env var compromises all connections.",
+    "impact": "A manager-role user with database access (via Supabase client or any query interface) can read encrypted HubSpot tokens. Combined with any env var leak or SSRF in an edge function, these tokens can be decrypted to obtain full HubSpot API access for all connected portals.",
+    "attack_path": "1. Authenticate as manager role. 2. Query hubspot_connections table — RLS allows full read access. 3. Obtain encrypted access_token and refresh_token ciphertext. 4. If HUBSPOT_ENCRYPTION_KEY leaks via any mechanism, decrypt to obtain plaintext HubSpot OAuth tokens. 5. Use tokens to access HubSpot API with full portal permissions.",
+    "evidence": [
+      "supabase/migrations/009_fix_rls_recursion.sql:23-28 (RLS allows owner/manager full access)",
+      "supabase/functions/_shared/hubspot-client.ts:97 (selects access_token, refresh_token)",
+      "supabase/functions/_shared/hubspot-crypto.ts:24-39 (single shared key for all encryptions)",
+      "supabase/migrations/008_encrypt_hubspot_tokens.sql:1-31 (encryption scheme documentation)"
+    ],
+    "remediation": "Restrict the RLS policy on hubspot_connections to owner-only, or exclude access_token and refresh_token columns from the selectable set for non-service-role queries. Consider using Supabase Vault for token storage instead of application-layer encryption with a shared env var.",
+    "poc_video_notes": "Sign in as a manager user. Use the Supabase JS client to query hubspot_connections and observe that encrypted token values are returned."
+  },
+  {
+    "id": "SEC-2026-004",
+    "severity": "MEDIUM",
+    "location": "apps/web/src/features/deal-room/pages/DealRoomPage.tsx:84-105",
+    "title": "Math.random fallback for client submission ID generation creates predictable identifiers",
+    "description": "The DealRoomPage's generateClientSubmissionId() function has a three-tier fallback: crypto.randomUUID() → crypto.getRandomValues() → Math.random(). The final Math.random() fallback produces cryptographically weak UUIDs. While modern browsers always have crypto.getRandomValues(), older WebView environments, SSR contexts, or test runners may hit the Math.random() path. The generated ID is used as client_submission_id for quote feedback submissions and deduplication.",
+    "impact": "If a client hits the Math.random() fallback, the submission IDs become predictable. An attacker could predict or collide with legitimate submission IDs, potentially overwriting or interfering with genuine customer feedback submissions. This also affects the idempotency guarantee — two users could generate colliding IDs.",
+    "attack_path": "1. Identify a browser or WebView environment where crypto.randomUUID and crypto.getRandomValues are unavailable. 2. The Math.random() path generates predictable UUIDs. 3. Predict the next submission ID and pre-submit feedback for a valid share token. 4. When the legitimate customer submits, their feedback is deduplicated against the attacker's pre-submitted entry.",
+    "evidence": [
+      "apps/web/src/features/deal-room/pages/DealRoomPage.tsx:84-105 (generateClientSubmissionId with Math.random fallback)",
+      "apps/web/src/features/deal-room/pages/DealRoomPage.tsx:1276-1280 (used for client submission dedup)"
+    ],
+    "remediation": "Remove the Math.random() fallback entirely. If crypto.getRandomValues is unavailable, throw an error or use a server-generated ID instead. Both crypto.randomUUID() and crypto.getRandomValues() are available in all modern browsers (IE11 is EOL).",
+    "poc_video_notes": "Mock globalThis.crypto to undefined in a test environment. Observe that Math.random() is used. Seed Math.random() and demonstrate predictable UUID generation."
+  },
+  {
+    "id": "SEC-2026-005",
+    "severity": "MEDIUM",
+    "location": "supabase/functions/quote-builder-v2/index.ts:8731,8831",
+    "title": "Share token exposed in quote-builder-v2 query responses to authenticated users",
+    "description": "The quote-builder-v2 edge function's /ensure-share-token and /send-package actions select share_token from the quote_packages table and include it in the function's working data. While the share_token is the sole authorization credential for the public quote page (/q/:token), it is selected alongside other quote data in queries scoped to authenticated users. Any rep, admin, manager, or owner in the workspace can access the share_token for any quote in their workspace, even if they should not have permission to share that particular quote externally.",
+    "impact": "A lower-privilege user (rep) can extract the share_token of quotes they can view, then share or leak the public URL without going through the intended send/share workflow (which has margin gates, requote checks, and OEM authorization fences). This bypasses all quote-sharing governance controls.",
+    "attack_path": "1. Authenticate as a rep user. 2. Call quote-builder-v2 ensure-share-token or send-package with a quote_package_id visible to the user. 3. Extract the share_token from the query response or debug the network traffic. 4. Construct the public URL /q/<share_token> and share it externally, bypassing margin and approval gates.",
+    "evidence": [
+      "supabase/functions/quote-builder-v2/index.ts:8731 (share_token selected in ensure-share-token action)",
+      "supabase/functions/quote-builder-v2/index.ts:8831 (share_token selected in send-package action)",
+      "supabase/migrations/818_quote_send_oem_authorization_fence.sql:29-80 (issue_quote_share_token_if_requote_resolved function with gates)"
+    ],
+    "remediation": "Avoid selecting share_token in user-facing query results. Only issue the token via the controlled send/share workflow. If the frontend needs to know whether a share token exists, return a boolean has_share_token instead of the token value.",
+    "poc_video_notes": "As a rep user, call the ensure-share-token action. Intercept the network response and extract the share_token. Use it to access the public quote page directly."
+  },
+  {
+    "id": "SEC-2026-006",
+    "severity": "MEDIUM",
+    "location": "supabase/config.toml:35",
+    "title": "Email change double-confirmation disabled allows account takeover via email change",
+    "description": "The supabase config.toml sets double_confirm_changes = false under [auth.email]. This means that when a user changes their email address, the change takes effect immediately without requiring confirmation from the NEW email address. Only the old email (current session) authorizes the change. This setting is a Supabase Auth configuration that controls whether email changes require verification from both the old and new email addresses.",
+    "impact": "If an attacker gains temporary access to a user session (via XSS, session hijacking, or a stolen device), they can change the account email to one they control without the new email being verified. Once the email is changed, the attacker owns the account and can reset the password. The original user loses access with no recovery path through the old email.",
+    "attack_path": "1. Gain temporary access to a user's session (XSS, stolen JWT, physical device access). 2. Call supabase.auth.updateUser({email: 'attacker@evil.com'}). 3. The email changes immediately (no confirmation required on attacker@evil.com). 4. Sign out the user. 5. Use 'forgot password' with attacker@evil.com to gain permanent access.",
+    "evidence": [
+      "supabase/config.toml:35 (double_confirm_changes = false)",
+      "supabase/config.toml:36 (enable_confirmations = true, but only for initial signup)"
+    ],
+    "remediation": "Set double_confirm_changes = true in supabase/config.toml. This requires confirmation from BOTH the old email (to authorize the change) and the new email (to verify ownership) before the email is updated.",
+    "poc_video_notes": "As a logged-in user, call supabase.auth.updateUser({email: 'new@example.com'}). Verify the email changes without requiring confirmation at the new address."
+  },
+  {
+    "id": "SEC-2026-007",
+    "severity": "MEDIUM",
+    "location": "supabase/functions/portal-stripe/index.ts:242-273",
+    "title": "Stripe webhook signature verification uses non-constant-time hex comparison",
+    "description": "The verifyStripeSignature() function in portal-stripe computes the expected HMAC-SHA256 and then compares the hex-encoded result character-by-character using XOR accumulation (lines 267-271). While the XOR loop itself is constant-time for equal-length strings, the hex encoding step (line 264) uses Array.from().map().join() which may produce varying-length output if there's a bug, and more critically, the length check on line 267 is an early-return that leaks length information. However, this is mitigated by the fact that valid Stripe signatures are always 64 hex characters. The more significant issue is that the function converts the HMAC output to hex for comparison instead of comparing raw bytes, which is less robust.",
+    "impact": "In theory, a sophisticated attacker could use timing side-channels on the length check or hex comparison to incrementally determine valid webhook signatures. In practice, the attack is difficult due to network jitter, but the pattern diverges from security best practices.",
+    "attack_path": "1. Send crafted Stripe webhook payloads with progressively longer matching signature prefixes. 2. Measure response times to detect when more characters match. 3. Incrementally reconstruct the valid HMAC signature. 4. Use the reconstructed signature to forge webhook events.",
+    "evidence": [
+      "supabase/functions/portal-stripe/index.ts:242-273 (verifyStripeSignature function)",
+      "supabase/functions/portal-stripe/index.ts:267 (early return on length mismatch)"
+    ],
+    "remediation": "Use the Web Crypto API's timingSafeEqual equivalent, or compare raw HMAC byte arrays instead of hex strings. Use Deno's or Node's timingSafeEqual for the comparison. Alternatively, use the official Stripe SDK which handles signature verification correctly.",
+    "poc_video_notes": "This is difficult to demonstrate in a PoC due to network jitter masking timing differences. Code review is sufficient to confirm the pattern."
+  },
+  {
+    "id": "SEC-2026-008",
+    "severity": "LOW",
+    "location": "apps/web/src/components/IntegrationPanel.tsx:611",
+    "title": "OAuth state parameter fallback to Math.random when crypto.randomUUID unavailable",
+    "description": "The OneDrive OAuth connect handler in IntegrationPanel.tsx generates the OAuth state parameter with a fallback to Math.random() when crypto.randomUUID is unavailable (line 611). The OAuth state parameter is a CSRF protection mechanism — if it's predictable, an attacker can craft a malicious OAuth callback URL that binds their OneDrive account to the victim's QEP session.",
+    "impact": "If a browser lacks crypto.randomUUID (unlikely in modern browsers but possible in older WebViews), the OAuth state becomes predictable. An attacker could predict the state parameter and perform an OAuth CSRF attack, binding their own OneDrive account to the victim's QEP workspace, potentially exfiltrating documents synced to OneDrive.",
+    "attack_path": "1. Identify a browser environment where crypto.randomUUID is unavailable. 2. Predict the Math.random()-based state parameter. 3. Craft a malicious OAuth callback URL with the predicted state. 4. Trick the victim into clicking the crafted URL. 5. The attacker's OneDrive account is bound to the victim's QEP workspace.",
+    "evidence": [
+      "apps/web/src/components/IntegrationPanel.tsx:611 (state = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()...}`)",
+      "apps/web/src/components/IntegrationPanel.tsx:619 (state is set as url.searchParams)"
+    ],
+    "remediation": "Remove the Math.random fallback. If crypto.randomUUID is unavailable, use crypto.getRandomValues to generate the state, or block the OAuth flow with an error message.",
+    "poc_video_notes": "Mock crypto.randomUUID to undefined. Initiate OneDrive connect. Observe the state parameter is derived from Date.now() and Math.random(), both predictable."
+  },
+  {
+    "id": "SEC-2026-009",
+    "severity": "LOW",
+    "location": "supabase/functions/rental-quote-public/index.ts:272",
+    "title": "Internal error message leaked to unauthenticated callers on signature write failure",
+    "description": "When the rental_contract_signatures insert fails (and the race condition check also fails), the function returns the raw insertError.message to the unauthenticated caller on line 272. This can leak internal database schema details, constraint names, or Supabase internals to anyone with a valid share_token.",
+    "impact": "Information disclosure to unauthenticated users. The error message may reveal table names, column names, constraint names, or RLS policy details that aid in further attacks.",
+    "attack_path": "1. Obtain a valid share_token. 2. Attempt to sign a contract in a state that triggers a database constraint violation. 3. The raw error message from Supabase is returned in the response. 4. Use the leaked schema information to plan further attacks.",
+    "evidence": [
+      "supabase/functions/rental-quote-public/index.ts:272 (returns insertError?.message directly)"
+    ],
+    "remediation": "Return a generic error message ('signature write failed') to the caller. Log the detailed error server-side for debugging.",
+    "poc_video_notes": "Send a sign request with a valid token but intentionally trigger a constraint violation (e.g., invalid data types). Observe the raw error message in the response."
+  },
+  {
+    "id": "SEC-2026-010",
+    "severity": "LOW",
+    "location": "supabase/functions/rental-quote-public/index.ts:293-298",
+    "title": "Reservation failure leaks signature_id to unauthenticated caller",
+    "description": "When the rental contract update to 'reserved' state fails after a successful signature write, the error response (line 296-297) includes both the raw reserveError.message and the internal signature_id. The signature_id is a database UUID that should not be exposed to unauthenticated callers.",
+    "impact": "Leaks an internal database identifier (signature UUID) and raw error messages to unauthenticated users. The signature_id could be used in combination with other vulnerabilities to manipulate signature records.",
+    "attack_path": "1. Obtain a valid share_token for a quote in 'quoted' state. 2. Sign the contract. 3. If the reservation step fails (e.g., due to a lifecycle guard), the response includes the signature_id and raw error details.",
+    "evidence": [
+      "supabase/functions/rental-quote-public/index.ts:293-298 (leaks signature_id and reserveError.message)"
+    ],
+    "remediation": "Return a generic error message without the signature_id. Log the details server-side.",
+    "poc_video_notes": "Trigger a reservation failure after successful signature (e.g., by having a database trigger reject the state transition). Observe the leaked signature_id in the response."
+  }
+]
