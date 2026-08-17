@@ -1,0 +1,109 @@
+[
+  {
+    "severity": "HIGH",
+    "location": "supabase/functions/sop-suggest/index.ts:61",
+    "title": "PostgREST Filter Injection via Direct HTTP Input in sop-suggest",
+    "description": "The `department` field from the POST body is interpolated directly into a PostgREST `.or()` filter without any sanitization of PostgREST DSL metacharacters (commas, parentheses, dots). Unlike the known chat-tools.ts vulnerability (LLM-mediated), this is exploitable via direct HTTP input from any authenticated user.",
+    "impact": "An authenticated user can inject arbitrary PostgREST filter predicates, potentially reading SOP templates across workspace boundaries, enumerating table structure, or bypassing intended query scoping. The filter runs against `sop_templates` with columns exposed via `.select()`.",
+    "attack_path": "1. Authenticated user sends POST to sop-suggest with body: {\"entity_type\": \"deal\", \"department\": \"sales),id.not.is.null,workspace_id.neq.victim-ws-id\"} → 2. `effectiveDept` = user-supplied string (truthy, so fallback map is skipped) → 3. `.or()` call constructs: `department.eq.sales),id.not.is.null,workspace_id.neq.victim-ws-id,department.eq.all` → 4. PostgREST parses the injected predicates, breaking out of the intended OR clause → 5. Attacker can filter/enumerate data outside their workspace or across unintended columns.",
+    "evidence": [
+      "supabase/functions/sop-suggest/index.ts:42 — `const department: string | undefined = body.department;`",
+      "supabase/functions/sop-suggest/index.ts:51 — `const effectiveDept = department || departmentMap[entityType] || \"all\";`",
+      "supabase/functions/sop-suggest/index.ts:61 — `query = query.or(\\`department.eq.${effectiveDept},department.eq.all\\`);`"
+    ],
+    "remediation": "Validate `effectiveDept` against an allowlist of known department values before interpolation. Alternatively, use PostgREST's parameterized `.eq()` chain instead of `.or()` string interpolation: `query = query.or('department.eq.' + sanitize(effectiveDept) + ',department.eq.all')` where `sanitize` strips `,().*` characters.",
+    "poc_video_notes": "Send authenticated POST to /functions/v1/sop-suggest with JSON body containing department field with PostgREST metacharacters. Observe the response includes data outside the intended filter scope."
+  },
+  {
+    "severity": "HIGH",
+    "location": "supabase/functions/_shared/iron/tools.ts:382,392",
+    "title": "PostgREST Filter Injection in Iron AI Tool Layer (toolLookupPartInventory)",
+    "description": "The `partNumber` parameter from Iron AI orchestrator tool calls is injected into `.or()` PostgREST filters with NO sanitization of PostgREST metacharacters. While the toolSearchPlatform function strips `%` and `_`, toolLookupPartInventory performs only `.trim().toUpperCase()` before interpolation. This is distinct from the known chat-tools.ts vulnerability as it operates through the Iron AI orchestrator pipeline.",
+    "impact": "An attacker who can influence the Iron AI orchestrator's tool arguments (via crafted prompts or poisoned context) can inject arbitrary PostgREST filter predicates into parts_catalog and parts_inventory queries using the admin client, bypassing workspace scoping already enforced by `.eq('workspace_id')` through injected OR conditions.",
+    "attack_path": "1. Attacker crafts input to Iron AI that causes it to call lookup_part_inventory with part_number containing PostgREST metacharacters (e.g., `ABC,workspace_id.neq.target`) → 2. Line 373: `trimmed = partNumber.trim().toUpperCase()` (no metachar strip) → 3. Line 382: `.or(\\`part_number.ilike.${trimmed},part_number.ilike.${trimmed}%,...\\`)` → 4. PostgREST interprets injected predicates → 5. Query returns data outside intended scope.",
+    "evidence": [
+      "supabase/functions/_shared/iron/tools.ts:373 — `const trimmed = partNumber.trim().toUpperCase();` (no metachar sanitization)",
+      "supabase/functions/_shared/iron/tools.ts:382 — `.or(\\`part_number.ilike.${trimmed},part_number.ilike.${trimmed}%,part_number.ilike.%${trimmed}%\\`)`",
+      "supabase/functions/_shared/iron/tools.ts:392 — `.or(\\`part_number.eq.${trimmed},part_number.ilike.${trimmed}%\\`)`",
+      "supabase/functions/_shared/iron/tools.ts:752 — toolSearchPlatform strips only %_ but NOT PostgREST metachars ,()"
+    ],
+    "remediation": "Apply comprehensive PostgREST filter sanitization: strip or escape `,`, `(`, `)`, `.`, `*` characters from all user/LLM-controlled values before interpolation into `.or()` strings. Prefer using PostgREST's type-safe filter methods (`.ilike()`, `.eq()`) with separate chained calls instead of string-interpolated `.or()` where possible.",
+    "poc_video_notes": "Trigger iron-orchestrator with a prompt designed to produce a tool call with a part_number containing commas/parentheses. Observe the resulting query returns broader data than expected."
+  },
+  {
+    "severity": "HIGH",
+    "location": "supabase/functions/_shared/portal-stripe-reconcile.ts:400-457",
+    "title": "TOCTOU Race Condition in Invoice Payment Reconciliation Allows Double-Credit",
+    "description": "The `reconcileSucceededPayment` function reads the invoice's current `amount_paid`, computes the remaining balance, and writes back the new `amount_paid` without any optimistic concurrency control (no version check, no conditional update, no SELECT FOR UPDATE). Two concurrent webhook events for different payment intents against the same invoice will both read the same `amount_paid`, compute the same balance, and the last write wins — causing one payment to be silently lost.",
+    "impact": "When a customer has multiple payment intents against the same invoice (e.g., partial payments, retried checkout sessions), concurrent Stripe webhook deliveries can cause payment under-crediting (customer pays but invoice doesn't fully reflect it) or state corruption where the invoice is marked 'paid' prematurely. In the reverse direction, a malicious actor who can trigger webhook replays could create accounting inconsistencies.",
+    "attack_path": "1. Invoice has total=$1000, amount_paid=$0 → 2. Customer creates two checkout sessions (both for $500) or Stripe retries with a new payment_intent → 3. Both webhook events arrive at portal-stripe/webhook simultaneously → 4. Both calls in reconcileSucceededPayment read amount_paid=0, compute balance=$1000 → 5. Payment A: appliedAmount=min(1000,500)=500, nextAmountPaid=500 → 6. Payment B: appliedAmount=min(1000,500)=500, nextAmountPaid=500 → 7. Last write wins: amount_paid=$500, but $1000 was actually collected → 8. $500 of customer payments silently lost from AR tracking.",
+    "evidence": [
+      "supabase/functions/_shared/portal-stripe-reconcile.ts:401-407 — Read invoice without lock",
+      "supabase/functions/_shared/portal-stripe-reconcile.ts:411 — `const currentAmountPaid = Number(invoice.amount_paid ?? 0);`",
+      "supabase/functions/_shared/portal-stripe-reconcile.ts:413 — `const balance = Math.max(invoiceTotal - currentAmountPaid, 0);`",
+      "supabase/functions/_shared/portal-stripe-reconcile.ts:434 — `const nextAmountPaid = currentAmountPaid + appliedAmount;`",
+      "supabase/functions/_shared/portal-stripe-reconcile.ts:435-451 — `.update({amount_paid: nextAmountPaid, ...}).eq('id', invoice.id)` — no CAS/version check"
+    ],
+    "remediation": "Use an atomic increment pattern: replace the read-compute-write with a single RPC that performs `UPDATE customer_invoices SET amount_paid = LEAST(total, amount_paid + $1) WHERE id = $2 AND amount_paid = $3 RETURNING *` (optimistic lock on amount_paid). Alternatively, use a database-level advisory lock on the invoice_id during reconciliation, or add an `updated_at` version check to the WHERE clause.",
+    "poc_video_notes": "Create two Stripe checkout sessions for the same invoice. Use a tool to deliver both webhook events concurrently. Observe that only one payment is reflected in the invoice amount_paid."
+  },
+  {
+    "severity": "MEDIUM",
+    "location": "supabase/functions/quote-builder-v2/index.ts:8285-8454",
+    "title": "TOCTOU Race in Quote Approval Decision Allows Conflicting Concurrent Decisions",
+    "description": "The `decide-approval-case` action reads the approval case status at line 8285, validates it is 'pending' or 'escalated' at line 8301, then updates the decision at line 8445 with only `.eq('id', caseRow.id)` — no optimistic lock on the status column. Two managers can simultaneously read the same case as 'pending' and both successfully submit conflicting decisions (e.g., one approves, one rejects), with the last database write silently winning.",
+    "impact": "A quote could be marked 'approved' in the database while the rejection notification was already sent to the rep (or vice versa). This creates an inconsistent audit trail, triggers incorrect downstream side effects (auto-send on approval, status change on rejection), and violates the business invariant that exactly one decision applies to a pending case.",
+    "attack_path": "1. Quote approval case is in 'pending' status → 2. Manager A opens the approval and clicks 'Approve' → 3. Manager B opens the same approval and clicks 'Reject' (within the same second) → 4. Both requests pass the check at line 8301 (`['pending', 'escalated'].includes(status)`) → 5. Both proceed to update at line 8445: `.update({status: nextCaseStatus, decided_by: user.id, ...}).eq('id', caseRow.id)` → 6. Both updates succeed (no WHERE on current status) → 7. Last write wins; first decision's side-effects (notifications, flow_approvals update) are already committed and cannot be rolled back.",
+    "evidence": [
+      "supabase/functions/quote-builder-v2/index.ts:8285-8291 — Case fetched without FOR UPDATE",
+      "supabase/functions/quote-builder-v2/index.ts:8301 — Status check: `if (!['pending', 'escalated'].includes(String(caseRow.status ?? '')))`",
+      "supabase/functions/quote-builder-v2/index.ts:8445-8454 — Update: `.update({status: nextCaseStatus, ...}).eq('id', caseRow.id)` — no `.eq('status', 'pending')` guard"
+    ],
+    "remediation": "Add an optimistic concurrency guard to the update: `.update({...}).eq('id', caseRow.id).eq('status', caseRow.status)` and check the returned row count. If zero rows were updated, return 409 Conflict. This ensures only the first decision is applied.",
+    "poc_video_notes": "Open the same pending approval case in two browser windows logged in as different managers. Click approve in one and reject in the other simultaneously. Observe both return success but the final state is indeterminate."
+  },
+  {
+    "severity": "MEDIUM",
+    "location": "supabase/functions/parts-order-manager/index.ts:997-1050",
+    "title": "TOCTOU Race in Parts Order Status Advancement",
+    "description": "The `advance_status` action reads the order status at line 997-1001, validates the transition at line 1007, then updates the status at line 1045-1050 without any optimistic concurrency control. Two concurrent requests to advance the same order can both pass validation and execute conflicting transitions.",
+    "impact": "An order could be simultaneously advanced to 'shipped' and 'cancelled' by concurrent requests, with the last write winning. The event audit trail would record both transitions. If the 'delivered' transition fires (triggering invoice generation at line 1072-1098), the invoice could be generated for an order that was concurrently cancelled, creating phantom invoices in the accounting system.",
+    "attack_path": "1. Parts order is in 'confirmed' status → 2. Staff member A sends advance_status with new_status='processing' → 3. Staff member B (or automated cron) sends advance_status with new_status='cancelled' → 4. Both read status='confirmed' and both pass VALID_TRANSITIONS check → 5. Both updates succeed with `.eq('id', orderId)` (no status guard) → 6. If processing wins, the order was meant to be cancelled but proceeds. If cancelled wins, emitOrderEvent already recorded the 'processing' transition.",
+    "evidence": [
+      "supabase/functions/parts-order-manager/index.ts:997-1001 — `await supabase.from('parts_orders').select('id, status, ...').eq('id', orderId)`",
+      "supabase/functions/parts-order-manager/index.ts:1007-1013 — Validates transition against VALID_TRANSITIONS map",
+      "supabase/functions/parts-order-manager/index.ts:1045-1050 — `.update(patch).eq('id', orderId)` — no `.eq('status', row.status)` guard"
+    ],
+    "remediation": "Add `.eq('status', row.status)` to the update WHERE clause and check the result count. If zero rows updated, re-read the current status and return a 409 conflict error explaining the status changed.",
+    "poc_video_notes": "Send two concurrent advance_status requests for the same order with different target statuses. Verify both succeed and the audit trail is inconsistent."
+  },
+  {
+    "severity": "MEDIUM",
+    "location": "supabase/functions/quote-builder-v2/index.ts:7750-7883",
+    "title": "Race Condition in Quote Approval Submission Creates Duplicate Workflow Runs",
+    "description": "The `submit-approval` action checks for an existing pending/escalated approval case at line 7745-7748, and if none exists, creates a new flow_workflow_run + flow_approval + quote_approval_case. Two concurrent submission requests can both pass the 'no existing case' check and create duplicate approval workflows for the same quote.",
+    "impact": "Duplicate approval workflows cause confusion: the same quote appears twice in the manager's approval queue. If one is approved and the other rejected, the quote status becomes indeterminate. The quote's status is set to 'pending_approval' by both paths, but two independent flow_approvals exist, and downstream notification logic fires twice.",
+    "attack_path": "1. Rep saves a quote → 2. Rep rapidly double-clicks 'Submit for Approval' (or frontend retry fires) → 3. Both requests pass the check at line 7750: `latestCase` is null for both → 4. Both proceed past `body.status === 'sent'` check → 5. Both insert into flow_workflow_runs at line 7854 → 6. Both insert into flow_approvals → 7. Both insert into quote_approval_cases → 8. Two independent approval workflows now exist for the same quote.",
+    "evidence": [
+      "supabase/functions/quote-builder-v2/index.ts:7745-7748 — `const latestCase = await getLatestQuoteApprovalCase({admin, quotePackageId: pkgRow.id})`",
+      "supabase/functions/quote-builder-v2/index.ts:7750 — Early return ONLY if case is pending/escalated",
+      "supabase/functions/quote-builder-v2/index.ts:7854-7883 — Creates flow_workflow_run without uniqueness constraint"
+    ],
+    "remediation": "Add a unique partial index on `quote_approval_cases(quote_package_id) WHERE status IN ('pending', 'escalated')` to enforce at most one active case per quote at the database level. Wrap the check-and-insert in a transaction or use an INSERT ... ON CONFLICT pattern.",
+    "poc_video_notes": "Use a script to fire two submit-approval POST requests for the same quote_package_id within milliseconds. Observe two quote_approval_cases rows are created."
+  },
+  {
+    "severity": "MEDIUM",
+    "location": "supabase/functions/quote-builder-v2/index.ts:6850-6853",
+    "title": "PostgREST Filter Injection via Unsanitized Date in Promotions Query",
+    "description": "The promotions/incentives query at line 6850-6853 interpolates a computed `today` string into `.or()` filters. While `today` itself is server-generated (safe), the pattern establishes a dangerous code convention. More critically, at line 3631, the `primaryId` variable (derived from equipment catalog lookup which can be influenced by user input) is interpolated into a `.or()` filter with `{curly brace}` array syntax without validation.",
+    "impact": "If `primaryId` at line 3631 is influenced by attacker input (via the recommend/inventory-first flow's equipment selection), the `.or()` filter `compatible_model_ids.cs.{${primaryId}}` could be injected with PostgREST array predicates to expand the query scope.",
+    "attack_path": "1. User submits a quote recommendation request → 2. Equipment catalog lookup returns a row whose ID the user influenced → 3. `primaryId` used in `.or(\\`universal.eq.true,compatible_model_ids.cs.{${primaryId}}\\`)` → 4. If primaryId contains `}` followed by PostgREST predicates, filter is corrupted.",
+    "evidence": [
+      "supabase/functions/quote-builder-v2/index.ts:3631 — `.or(\\`universal.eq.true,compatible_model_ids.cs.{${primaryId}}\\`)`",
+      "supabase/functions/quote-builder-v2/index.ts:6852-6853 — `.or(\\`start_date.is.null,start_date.lte.${today}\\`).or(\\`end_date.is.null,end_date.gte.${today}\\`)`"
+    ],
+    "remediation": "Validate that `primaryId` matches a strict UUID format before interpolation. For date filters, continue using server-generated ISO strings but add a regex validation gate.",
+    "poc_video_notes": "Trace the data flow from user equipment selection to the primaryId variable used in the attachments query. If a non-UUID value can reach this point, the filter is injectable."
+  }
+]
