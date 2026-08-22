@@ -19,6 +19,8 @@ import {
   notifyPromisedDateChanged,
 } from "../_shared/service-lifecycle-notify.ts";
 import { generateInvoiceForServiceJob } from "../_shared/service-invoice.ts";
+import { executeServiceJobCloseout } from "../_shared/service-closeout.ts";
+import { assembleWarrantyClaimForJob } from "../_shared/service-warranty-assembler.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import {
   populatePartsFromJobCode,
@@ -1123,6 +1125,17 @@ async function handleTransition(
   if (to_stage === "invoice_ready") {
     const inv = await generateInvoiceForServiceJob(supabase, id);
     if (inv.error) console.warn("generateInvoiceForServiceJob:", inv.error);
+  }
+
+  if (to_stage === "invoiced" || to_stage === "paid_closed") {
+    const closeout = await executeServiceJobCloseout(supabase, {
+      job: updated as Record<string, unknown>,
+      actorId,
+      stage: to_stage,
+    });
+    if (closeout.warnings.length > 0) {
+      console.warn("executeServiceJobCloseout:", closeout.warnings.join("; "));
+    }
   }
 
   if (to_stage === "diagnosis_selected" && updated.selected_job_code_id) {
@@ -2653,320 +2666,38 @@ async function handleAssembleWarrantyClaim(
     return safeJsonError("job_id must be a valid UUID", 400, origin);
   }
 
-  const { data: job, error: jErr } = await supabase
-    .from("service_jobs")
-    .select(
-      "id, workspace_id, customer_id, machine_id, original_service_job_id, complaint, cause, correction",
-    )
-    .eq("id", job_id)
-    .single();
-  if (jErr || !job) return safeJsonError("Service job not found", 404, origin);
-
-  let claim = null as Record<string, unknown> | null;
-  let createdClaim = false;
-  const requestedClaimId = optionalString(
-    body.warranty_claim_id ?? body.claim_id,
-  );
-  if (requestedClaimId) {
-    if (!isUuidString(requestedClaimId)) {
-      return safeJsonError(
-        "warranty_claim_id must be a valid UUID",
-        400,
-        origin,
-      );
-    }
-    const { data, error } = await supabase
-      .from("service_warranty_claims")
-      .select("*")
-      .eq("id", requestedClaimId)
-      .single();
-    if (error || !data) {
-      return safeJsonError("Warranty claim not found", 404, origin);
-    }
-    if (
-      data.workspace_id !== job.workspace_id || data.service_job_id !== job.id
-    ) {
-      return safeJsonError(
-        "Warranty claim does not belong to this service job",
-        422,
-        origin,
-      );
-    }
-    claim = data as Record<string, unknown>;
-  } else {
-    const { data } = await supabase
-      .from("service_warranty_claims")
-      .select("*")
-      .eq("service_job_id", job_id)
-      .neq("status", "cancelled")
-      .is("deleted_at", null)
-      .maybeSingle();
-    claim = data as Record<string, unknown> | null;
-  }
-
-  const claimFields: Record<string, unknown> = {
-    workspace_id: job.workspace_id,
-    service_job_id: job.id,
-    machine_id: job.machine_id,
-    customer_id: job.customer_id,
-    original_service_job_id: job.original_service_job_id,
-    claim_number: optionalString(body.claim_number) ?? claim?.claim_number ??
-      null,
-    oem_name: optionalString(body.oem_name) ?? claim?.oem_name ?? null,
-    oem_reference: optionalString(body.oem_reference) ?? claim?.oem_reference ??
-      null,
-    complaint: optionalString(body.complaint) ?? job.complaint ?? null,
-    cause: optionalString(body.cause) ?? job.cause ?? null,
-    correction: optionalString(body.correction) ?? job.correction ?? null,
-    updated_by: actorId,
-    metadata: typeof body.metadata === "object" && body.metadata !== null
-      ? body.metadata
-      : claim?.metadata ?? {},
-  };
-
-  if (claim?.id) {
-    const { data, error } = await supabase
-      .from("service_warranty_claims")
-      .update(claimFields)
-      .eq("id", claim.id as string)
-      .select()
-      .single();
-    if (error) return safeJsonError(error.message, 400, origin);
-    claim = data as Record<string, unknown>;
-  } else {
-    const { data, error } = await supabase
-      .from("service_warranty_claims")
-      .insert({ ...claimFields, status: "draft", created_by: actorId })
-      .select()
-      .single();
-    if (error) return safeJsonError(error.message, 400, origin);
-    claim = data as Record<string, unknown>;
-    createdClaim = true;
-  }
-
-  const ws = job.workspace_id as string;
-  const claimId = claim.id as string;
-  const claimRows: Record<string, unknown>[] = [];
-
-  await supabase
-    .from("service_warranty_claim_lines")
-    .update({ included: false })
-    .eq("warranty_claim_id", claimId);
-
-  const { data: quoteIds } = await supabase.from("service_quotes").select("id")
-    .eq("job_id", job_id);
-  const quoteIdList = (quoteIds ?? []).map((q) => q.id as string);
-  if (quoteIdList.length > 0) {
-    const { data: quoteLines } = await supabase
-      .from("service_quote_lines")
-      .select(
-        "id, workspace_id, line_type, description, quantity, extended_price",
-      )
-      .in("quote_id", quoteIdList)
-      .eq("payer_type", "warranty_claim");
-    for (const line of quoteLines ?? []) {
-      claimRows.push({
-        workspace_id: ws,
-        warranty_claim_id: claimId,
-        service_job_id: job_id,
-        service_quote_line_id: line.id,
-        source_table: "service_quote_lines",
-        source_id: line.id,
-        line_type: line.line_type ?? "quote_line",
-        description: line.description,
-        quantity: line.quantity ?? 1,
-        amount_cents: centsFromMoney(line.extended_price),
-        cost_cents: 0,
-        payer_type: "warranty_claim",
-        included: true,
-        metadata: { source: "quote_line" },
-      });
-    }
-  }
-
-  const { data: laborRows } = await supabase
-    .from("service_labor_ledger")
-    .select(
-      "id, service_job_segment_id, actual_hours, billable_hours, labor_sale_cents, labor_cost_cents, notes",
-    )
-    .eq("service_job_id", job_id)
-    .is("deleted_at", null)
-    .or("payer_type.eq.warranty_claim,revenue_type.eq.warranty");
-  for (const row of laborRows ?? []) {
-    claimRows.push({
-      workspace_id: ws,
-      warranty_claim_id: claimId,
-      service_job_id: job_id,
-      service_job_segment_id: row.service_job_segment_id,
-      service_labor_ledger_id: row.id,
-      source_table: "service_labor_ledger",
-      source_id: row.id,
-      line_type: "labor",
-      description: row.notes ?? "Warranty labor",
-      quantity: row.billable_hours ?? row.actual_hours ?? 1,
-      amount_cents: row.labor_sale_cents ?? 0,
-      cost_cents: row.labor_cost_cents ?? 0,
-      payer_type: "warranty_claim",
-      included: true,
-      metadata: {
-        actual_hours: row.actual_hours,
-        billable_hours: row.billable_hours,
-      },
-    });
-  }
-
-  const { data: billingRows } = await supabase
-    .from("service_billing_rows")
-    .select(
-      "id, service_job_segment_id, row_type, description, quantity, extended_price_cents, extended_cost_cents, metadata",
-    )
-    .eq("service_job_id", job_id)
-    .is("deleted_at", null)
-    .or("payer_type.eq.warranty_claim,revenue_type.eq.warranty");
-  for (const row of billingRows ?? []) {
-    claimRows.push({
-      workspace_id: ws,
-      warranty_claim_id: claimId,
-      service_job_id: job_id,
-      service_job_segment_id: row.service_job_segment_id,
-      service_billing_row_id: row.id,
-      source_table: "service_billing_rows",
-      source_id: row.id,
-      line_type: row.row_type ?? "billing_row",
-      description: row.description,
-      quantity: row.quantity ?? 1,
-      amount_cents: row.extended_price_cents ?? 0,
-      cost_cents: row.extended_cost_cents ?? 0,
-      payer_type: "warranty_claim",
-      included: true,
-      metadata: row.metadata ?? {},
-    });
-  }
-
-  const { data: turnInSegments } = await supabase
-    .from("service_job_segments")
-    .select(
-      "id, segment_number, description, warranty_parts_turn_in_required, warranty_parts_turn_in_completed, warranty_parts_label, warranty_parts_turn_in_completed_at, warranty_parts_turn_in_notes",
-    )
-    .eq("service_job_id", job_id)
-    .is("deleted_at", null)
-    .eq("warranty_parts_turn_in_required", true);
-  for (const segment of turnInSegments ?? []) {
-    claimRows.push({
-      workspace_id: ws,
-      warranty_claim_id: claimId,
-      service_job_id: job_id,
-      service_job_segment_id: segment.id,
-      source_table: "service_job_segments",
-      source_id: segment.id,
-      line_type: "warranty_part_turn_in",
-      description: segment.description ??
-        `Warranty parts turn-in segment ${segment.segment_number}`,
-      quantity: 1,
-      amount_cents: 0,
-      cost_cents: 0,
-      payer_type: "warranty_claim",
-      included: true,
-      metadata: {
-        warranty_parts_turn_in_completed:
-          segment.warranty_parts_turn_in_completed,
-        warranty_parts_label: segment.warranty_parts_label,
-        warranty_parts_turn_in_completed_at:
-          segment.warranty_parts_turn_in_completed_at,
-        warranty_parts_turn_in_notes: segment.warranty_parts_turn_in_notes,
-      },
-    });
-  }
-
-  if (claimRows.length > 0) {
-    const { error } = await supabase
-      .from("service_warranty_claim_lines")
-      .upsert(claimRows, {
-        onConflict: "warranty_claim_id,source_table,source_id",
-      });
-    if (error) return safeJsonError(error.message, 400, origin);
-
-    const quoteLineIds = claimRows.filter((r) =>
-      r.source_table === "service_quote_lines"
-    ).map((r) => r.source_id as string);
-    if (quoteLineIds.length > 0) {
-      await supabase.from("service_quote_lines").update({
-        warranty_claim_id: claimId,
-        payer_type: "warranty_claim",
-      }).in("id", quoteLineIds);
-    }
-    const laborIds = claimRows.filter((r) =>
-      r.source_table === "service_labor_ledger"
-    ).map((r) => r.source_id as string);
-    if (laborIds.length > 0) {
-      await supabase.from("service_labor_ledger").update({
-        warranty_claim_id: claimId,
-        payer_type: "warranty_claim",
-        revenue_type: "warranty",
-        billing_basis: "warranty",
-      }).in("id", laborIds);
-    }
-    const billingIds = claimRows.filter((r) =>
-      r.source_table === "service_billing_rows"
-    ).map((r) => r.source_id as string);
-    if (billingIds.length > 0) {
-      await supabase.from("service_billing_rows").update({
-        warranty_claim_id: claimId,
-        payer_type: "warranty_claim",
-        revenue_type: "warranty",
-        billing_basis: "warranty",
-      }).in("id", billingIds);
-    }
-  }
-
-  const requestedAmountCents = claimRows.reduce(
-    (sum, row) => sum + Number(row.amount_cents ?? 0),
-    0,
-  );
-  const { data: refreshed, error: refreshErr } = await supabase
-    .from("service_warranty_claims")
-    .update({
-      requested_amount_cents: requestedAmountCents,
-      updated_by: actorId,
-    })
-    .eq("id", claimId)
-    .select()
-    .single();
-  if (refreshErr) return safeJsonError(refreshErr.message, 400, origin);
-
-  await insertWarrantyClaimEvent(supabase, {
-    workspaceId: ws,
-    claimId,
+  const assembled = await assembleWarrantyClaimForJob(supabase, {
     jobId: job_id,
     actorId,
-    eventType: "assembled",
-    metadata: {
-      included_line_count: claimRows.length,
-      requested_amount_cents: requestedAmountCents,
-    },
+    claimNumber: optionalString(body.claim_number),
+    oemName: optionalString(body.oem_name),
+    oemReference: optionalString(body.oem_reference),
+    complaint: optionalString(body.complaint),
+    cause: optionalString(body.cause),
+    correction: optionalString(body.correction),
+    metadata: typeof body.metadata === "object" && body.metadata !== null
+      ? body.metadata as Record<string, unknown>
+      : undefined,
   });
-  await supabase.from("service_job_events").insert({
-    workspace_id: ws,
-    job_id,
-    event_type: "h8_warranty_claim_assembled",
-    actor_id: actorId,
-    metadata: {
-      warranty_claim_id: claimId,
-      included_line_count: claimRows.length,
-      requested_amount_cents: requestedAmountCents,
-    },
-  });
+  if (!assembled.claim_id) {
+    return safeJsonError(assembled.error ?? "Warranty claim assembly failed", 400, origin);
+  }
 
+  const { data: claim } = await supabase
+    .from("service_warranty_claims")
+    .select("*")
+    .eq("id", assembled.claim_id)
+    .single();
   const { data: lines } = await supabase
     .from("service_warranty_claim_lines")
     .select("*")
-    .eq("warranty_claim_id", claimId)
+    .eq("warranty_claim_id", assembled.claim_id)
     .eq("included", true);
 
   return safeJsonOk(
-    { claim: refreshed, lines: lines ?? [] },
+    { claim: claim ?? { id: assembled.claim_id }, lines: lines ?? [] },
     origin,
-    createdClaim ? 201 : 200,
+    assembled.created ? 201 : 200,
   );
 }
 

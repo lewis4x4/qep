@@ -37,7 +37,8 @@ import { Link } from "react-router-dom";
 import { getPublicServiceStatus } from "../lib/publicServiceStatus";
 import { shouldBlockStageTransition } from "../lib/service-wo-gates";
 import { useAuth } from "@/hooks/useAuth";
-import { Check, Copy, X } from "lucide-react";
+import { Check, Copy, Receipt, X } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 interface Props {
   jobId: string | null;
@@ -238,6 +239,25 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
     return new Map(nextStages.map((next) => [next, shouldBlockStageTransition(job, next)]));
   }, [job, nextStages]);
   const technicianSuggestions = sched.data?.suggestions ?? [];
+  const billingCloseoutStages = new Set<ServiceStage>([
+    "invoice_ready",
+    "invoiced",
+    "paid_closed",
+  ]);
+  const showCloseoutPanel = billingCloseoutStages.has(stage);
+  const { data: jobInvoice } = useQuery({
+    queryKey: ["service-job-invoice", jobId],
+    enabled: !!jobId && showCloseoutPanel,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("customer_invoices")
+        .select("id, invoice_number, status, total, balance_due")
+        .eq("service_job_id", jobId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
 
   if (!jobId) return null;
 
@@ -889,6 +909,45 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
             {/* Completion Feedback — show at quality_check stage */}
             {stage === "quality_check" && (
               <CompletionFeedbackForm jobId={job.id} />
+            )}
+
+            {/* Cashier closeout — invoice send + warranty/AR on close */}
+            {showCloseoutPanel && (
+              <section className="rounded-lg border border-primary/25 bg-primary/5 p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Receipt className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-medium text-foreground">Close &amp; send invoice</h3>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Advancing to <strong>Invoiced</strong> sends the bill to the customer portal and notification path.
+                  <strong> Paid / Closed</strong> also queues warranty claims and posts open AR for sales — no accounting retype.
+                </p>
+                {jobInvoice ? (
+                  <div className="rounded-md border bg-background/80 p-2 text-xs space-y-1">
+                    <p>
+                      Invoice <span className="font-mono">{jobInvoice.invoice_number}</span>
+                      {" · "}
+                      <span className="capitalize">{jobInvoice.status}</span>
+                    </p>
+                    <p className="text-muted-foreground">
+                      Total ${Number(jobInvoice.total ?? 0).toLocaleString()}
+                      {Number(jobInvoice.balance_due ?? 0) > 0
+                        ? ` · Balance $${Number(jobInvoice.balance_due).toLocaleString()}`
+                        : ""}
+                    </p>
+                    <Link
+                      to={`/service/shop-invoice/${jobInvoice.id}`}
+                      className="inline-flex text-primary font-medium hover:underline"
+                    >
+                      Open shop invoice
+                    </Link>
+                  </div>
+                ) : (
+                  <p className="text-xs text-amber-700 dark:text-amber-200">
+                    No customer invoice yet — advance to Invoice Ready first, or close will create one when billable.
+                  </p>
+                )}
+              </section>
             )}
 
             {/* Stage Transitions */}

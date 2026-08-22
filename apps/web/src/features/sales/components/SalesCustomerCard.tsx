@@ -220,10 +220,9 @@ export function SalesCustomerCard({
         {/* Stats grid */}
         <div className="mx-3.5 grid grid-cols-4 gap-0 py-2.5 bg-foreground/[0.03] rounded-xl">
           <StatCell
-            value={formatMoney(customer.open_deals > 0 ? undefined : 0)}
-            label="Active"
-            accent
-            fallback={`${customer.open_deals}`}
+            value={customer.open_ar_balance > 0 ? formatMoney(customer.open_ar_balance) : "$0"}
+            label="AR Due"
+            accent={customer.open_ar_balance > 0}
           />
           <StatCell
             value={`${customer.active_quotes}`}

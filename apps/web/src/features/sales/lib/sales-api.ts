@@ -194,6 +194,7 @@ function mapCompanyPickerRow(row: CompanyPickerRow): RepCustomer {
     days_since_contact: null,
     opportunity_score: 0,
     equipment_summary: [],
+    open_ar_balance: 0,
   };
 }
 
@@ -286,6 +287,7 @@ export async function fetchCustomerByCompanyId(
     days_since_contact: null,
     opportunity_score: 0,
     equipment_summary: [],
+    open_ar_balance: 0,
   };
 }
 

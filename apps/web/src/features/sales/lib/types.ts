@@ -148,6 +148,8 @@ export interface RepCustomer {
   days_since_contact: number | null;
   opportunity_score: number;
   equipment_summary: CustomerEquipmentSummary[];
+  /** Open service/parts AR from customer_invoices — visible after RO close. */
+  open_ar_balance: number;
 }
 
 export interface CustomerEquipment {

@@ -221,6 +221,20 @@ export function CustomerDetailPage() {
           </div>
         </div>
 
+        {selectedCustomer.open_ar_balance > 0 && (
+          <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5">
+            <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-amber-300">
+              Open service balance
+            </p>
+            <p className="text-lg font-extrabold text-amber-100 mt-0.5">
+              {formatMoney(selectedCustomer.open_ar_balance)}
+            </p>
+            <p className="text-[11px] text-amber-200/80 mt-1">
+              Posted when the last RO closed — no need to ask the office.
+            </p>
+          </div>
+        )}
+
         {/* Action row */}
         <div className="grid grid-cols-4 gap-1.5">
           {(() => {

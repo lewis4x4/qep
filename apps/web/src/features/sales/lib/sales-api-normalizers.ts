@@ -302,6 +302,7 @@ export function normalizeRepCustomers(rows: unknown): RepCustomer[] {
       days_since_contact: finiteNumberOrNull(row.days_since_contact),
       opportunity_score: finiteNumberOrDefault(row.opportunity_score),
       equipment_summary: normalizeEquipmentSummary(row.equipment_summary),
+      open_ar_balance: finiteNumberOrDefault(row.open_ar_balance),
     }];
   });
 
