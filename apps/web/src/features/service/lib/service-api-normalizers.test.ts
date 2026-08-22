@@ -10,6 +10,8 @@ import {
   normalizeSearchPortalOrdersResponse,
   normalizeServiceJobResponse,
   normalizeServiceListResponse,
+  normalizeServiceCloseoutResult,
+  normalizeServiceTransitionResponse,
   normalizeTechnicianSuggestionsResult,
 } from "./service-api-normalizers";
 
@@ -25,6 +27,27 @@ const job = {
 describe("service API normalizers", () => {
   test("normalizes service job and list responses", () => {
     expect(normalizeServiceJobResponse({ job })).toBe(job);
+    expect(normalizeServiceTransitionResponse({
+      job,
+      closeout: {
+        invoice_id: "inv-1",
+        invoice_finalized: true,
+        warranty_claim_id: null,
+        warranty_queued: false,
+        ar_synced: true,
+        warnings: ["partial"],
+      },
+    })).toEqual({
+      job,
+      closeout: {
+        invoice_id: "inv-1",
+        invoice_finalized: true,
+        warranty_claim_id: null,
+        warranty_queued: false,
+        ar_synced: true,
+        warnings: ["partial"],
+      },
+    });
     expect(normalizeServiceListResponse({
       jobs: [job, { id: "bad" }],
       total: "4",

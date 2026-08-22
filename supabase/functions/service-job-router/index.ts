@@ -1127,15 +1127,13 @@ async function handleTransition(
     if (inv.error) console.warn("generateInvoiceForServiceJob:", inv.error);
   }
 
+  let closeoutResult: Awaited<ReturnType<typeof executeServiceJobCloseout>> | undefined;
   if (to_stage === "invoiced" || to_stage === "paid_closed") {
-    const closeout = await executeServiceJobCloseout(supabase, {
+    closeoutResult = await executeServiceJobCloseout(supabase, {
       job: updated as Record<string, unknown>,
       actorId,
       stage: to_stage,
     });
-    if (closeout.warnings.length > 0) {
-      console.warn("executeServiceJobCloseout:", closeout.warnings.join("; "));
-    }
   }
 
   if (to_stage === "diagnosis_selected" && updated.selected_job_code_id) {
@@ -1153,7 +1151,10 @@ async function handleTransition(
     .eq("id", id)
     .single();
 
-  return safeJsonOk({ job: refreshed ?? updated }, origin);
+  return safeJsonOk({
+    job: refreshed ?? updated,
+    ...(closeoutResult ? { closeout: closeoutResult } : {}),
+  }, origin);
 }
 
 async function handleGet(

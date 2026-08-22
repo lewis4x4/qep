@@ -200,6 +200,21 @@ export interface ServiceJobWithRelations extends ServiceJob {
   segments?: ServiceJobSegment[];
 }
 
+/** Closeout bundle returned when transitioning to invoiced or paid_closed. */
+export interface ServiceCloseoutResult {
+  invoice_id: string | null;
+  invoice_finalized: boolean;
+  warranty_claim_id: string | null;
+  warranty_queued: boolean;
+  ar_synced: boolean;
+  warnings: string[];
+}
+
+export interface ServiceTransitionResult {
+  job: ServiceJobWithRelations;
+  closeout?: ServiceCloseoutResult | null;
+}
+
 export interface H8WarrantyClaim {
   id: string;
   service_job_id: string;

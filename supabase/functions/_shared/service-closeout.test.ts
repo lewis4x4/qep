@@ -23,15 +23,38 @@ Deno.test("service closeout finalizes pending invoices to sent", () => {
   }
 });
 
-Deno.test("service closeout queues warranty and syncs AR on paid_closed", () => {
+Deno.test("service closeout syncs AR when invoice exists on invoiced and paid_closed", () => {
   for (
     const expected of [
-      "executeServiceJobCloseout",
+      "syncArOpenItemForInvoice",
+      "finalize.invoice_id",
+      "service_sync_ar_open_item_for_invoice",
+      '"invoiced"',
+      '"paid_closed"',
+    ]
+  ) {
+    if (!closeoutSource.includes(expected)) {
+      throw new Error(`Expected service-closeout.ts to include ${expected}`);
+    }
+  }
+  if (
+    !closeoutSource.includes("if (finalize.invoice_id)") ||
+    closeoutSource.indexOf("if (finalize.invoice_id)") >
+      closeoutSource.indexOf('params.stage === "paid_closed"')
+  ) {
+    throw new Error(
+      "Expected AR sync from finalize.invoice_id before paid_closed-only warranty block",
+    );
+  }
+});
+
+Deno.test("service closeout queues warranty only on paid_closed", () => {
+  for (
+    const expected of [
       'params.stage === "paid_closed"',
       "jobHasWarrantyClaimLines",
       "assembleWarrantyClaimForJob",
       "autoQueued: true",
-      "service_sync_ar_open_item_for_invoice",
       "service_closeout",
     ]
   ) {
@@ -47,6 +70,7 @@ Deno.test("service-job-router wires closeout on invoiced and paid_closed", () =>
       "import { executeServiceJobCloseout }",
       'to_stage === "invoiced" || to_stage === "paid_closed"',
       "executeServiceJobCloseout(supabase",
+      "closeout: closeoutResult",
     ]
   ) {
     if (!routerSource.includes(expected)) {

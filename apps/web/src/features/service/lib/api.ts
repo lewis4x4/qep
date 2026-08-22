@@ -8,6 +8,7 @@ import type {
   ServiceJobWithRelations,
   ServiceListFilters,
   ServiceListResponse,
+  ServiceTransitionResult,
 } from "./types";
 import {
   normalizeBillingPostResult,
@@ -19,6 +20,7 @@ import {
   normalizeSearchPortalOrdersResponse,
   normalizeServiceJobResponse,
   normalizeServiceListResponse,
+  normalizeServiceTransitionResponse,
   normalizeTechnicianSuggestionsResult,
   type BillingPostResult,
   type CalendarSlotsResult,
@@ -62,14 +64,14 @@ export async function transitionServiceJob(
   id: string,
   toStage: string,
   blockerInfo?: { blocker_type: string; blocker_description?: string },
-): Promise<ServiceJobWithRelations> {
+): Promise<ServiceTransitionResult> {
   const result = await invokeServiceRouter({
     action: "transition",
     id,
     to_stage: toStage,
     ...blockerInfo,
   });
-  return normalizeServiceJobResponse(result);
+  return normalizeServiceTransitionResponse(result);
 }
 
 export async function getServiceJob(

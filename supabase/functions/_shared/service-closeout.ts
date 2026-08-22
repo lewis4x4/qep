@@ -113,6 +113,12 @@ export async function executeServiceJobCloseout(
   let warrantyQueued = false;
   let arSynced = false;
 
+  if (finalize.invoice_id) {
+    const ar = await syncArOpenItemForInvoice(supabase, finalize.invoice_id);
+    arSynced = ar.ok;
+    if (!ar.ok && ar.error) warnings.push(ar.error);
+  }
+
   if (params.stage === "paid_closed") {
     const eligible = await jobHasWarrantyClaimLines(supabase, jobId);
     if (eligible) {
@@ -127,12 +133,6 @@ export async function executeServiceJobCloseout(
       } else if (assembled.error) {
         warnings.push(assembled.error);
       }
-    }
-
-    if (finalize.invoice_id) {
-      const ar = await syncArOpenItemForInvoice(supabase, finalize.invoice_id);
-      arSynced = ar.ok;
-      if (!ar.ok && ar.error) warnings.push(ar.error);
     }
   }
 

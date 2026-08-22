@@ -32,6 +32,7 @@ import {
   STATUS_FLAG_LABELS,
 } from "../lib/constants";
 import type { ServiceStage } from "../lib/constants";
+import type { ServiceCloseoutResult } from "../lib/types";
 import type { TechnicianSuggestion } from "../lib/service-api-normalizers";
 import { Link } from "react-router-dom";
 import { getPublicServiceStatus } from "../lib/publicServiceStatus";
@@ -80,6 +81,7 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
   const [schedStartLocal, setSchedStartLocal] = useState("");
   const [schedEndLocal, setSchedEndLocal] = useState("");
   const [copiedHint, setCopiedHint] = useState<string | null>(null);
+  const [lastCloseout, setLastCloseout] = useState<ServiceCloseoutResult | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedOrderSearch(fulfillmentOrderSearch.trim()), 350);
@@ -919,9 +921,36 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                   <h3 className="text-sm font-medium text-foreground">Close &amp; send invoice</h3>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Advancing to <strong>Invoiced</strong> sends the bill to the customer portal and notification path.
-                  <strong> Paid / Closed</strong> also queues warranty claims and posts open AR for sales — no accounting retype.
+                  Advancing to <strong>Invoiced</strong> sends the bill and posts open AR for sales.
+                  <strong> Paid / Closed</strong> settles AR, queues warranty claims when applicable — no accounting retype.
                 </p>
+                {lastCloseout && (
+                  <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-2 text-xs space-y-1">
+                    <p className="font-semibold text-emerald-200">Last closeout</p>
+                    <ul className="space-y-0.5 text-foreground/90">
+                      {lastCloseout.invoice_finalized && (
+                        <li>Invoice sent to customer</li>
+                      )}
+                      {lastCloseout.ar_synced && (
+                        <li>AR posted for sales</li>
+                      )}
+                      {lastCloseout.warranty_queued && (
+                        <li>Warranty claim queued</li>
+                      )}
+                      {lastCloseout.warnings.map((warning) => (
+                        <li key={warning} className="text-amber-700 dark:text-amber-200">
+                          {warning}
+                        </li>
+                      ))}
+                      {!lastCloseout.invoice_finalized &&
+                        !lastCloseout.ar_synced &&
+                        !lastCloseout.warranty_queued &&
+                        lastCloseout.warnings.length === 0 && (
+                        <li className="text-muted-foreground">Closeout completed with no billable invoice.</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
                 {jobInvoice ? (
                   <div className="rounded-md border bg-background/80 p-2 text-xs space-y-1">
                     <p>
@@ -965,7 +994,19 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                       onClick={() => {
                         const currentBlock = transitionBlocks.get(s);
                         if (currentBlock) return;
-                        transition.mutate({ id: job.id, toStage: s });
+                        transition.mutate(
+                          { id: job.id, toStage: s },
+                          {
+                            onSuccess: (data) => {
+                              if (data.closeout) {
+                                setLastCloseout(data.closeout);
+                              }
+                              if (jobId) {
+                                qc.invalidateQueries({ queryKey: ["service-job-invoice", jobId] });
+                              }
+                            },
+                          },
+                        );
                       }}
                       className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
                         s === "blocked_waiting"
