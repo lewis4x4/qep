@@ -1,4 +1,9 @@
-import type { ServiceJobWithRelations, ServiceListResponse } from "./types";
+import type {
+  ServiceCloseoutResult,
+  ServiceJobWithRelations,
+  ServiceListResponse,
+  ServiceTransitionResult,
+} from "./types";
 
 export type PartsPopulateResult = { populated: number };
 export type BillingPostResult = {
@@ -102,11 +107,36 @@ export function isServiceJobWithRelations(value: unknown): value is ServiceJobWi
   );
 }
 
+export function normalizeServiceCloseoutResult(
+  value: unknown,
+): ServiceCloseoutResult | null {
+  if (!isRecord(value)) return null;
+  return {
+    invoice_id: stringOrNull(value.invoice_id),
+    invoice_finalized: value.invoice_finalized === true,
+    warranty_claim_id: stringOrNull(value.warranty_claim_id),
+    warranty_queued: value.warranty_queued === true,
+    ar_synced: value.ar_synced === true,
+    warnings: stringArray(value.warnings),
+  };
+}
+
 export function normalizeServiceJobResponse(value: unknown): ServiceJobWithRelations {
   if (!isRecord(value) || !isServiceJobWithRelations(value.job)) {
     throw new Error("Service router returned a malformed job payload.");
   }
   return value.job;
+}
+
+export function normalizeServiceTransitionResponse(
+  value: unknown,
+): ServiceTransitionResult {
+  return {
+    job: normalizeServiceJobResponse(value),
+    closeout: normalizeServiceCloseoutResult(
+      isRecord(value) ? value.closeout : null,
+    ),
+  };
 }
 
 export function normalizeServiceListResponse(value: unknown): ServiceListResponse {

@@ -32,12 +32,14 @@ import {
   STATUS_FLAG_LABELS,
 } from "../lib/constants";
 import type { ServiceStage } from "../lib/constants";
+import type { ServiceCloseoutResult } from "../lib/types";
 import type { TechnicianSuggestion } from "../lib/service-api-normalizers";
 import { Link } from "react-router-dom";
 import { getPublicServiceStatus } from "../lib/publicServiceStatus";
 import { shouldBlockStageTransition } from "../lib/service-wo-gates";
 import { useAuth } from "@/hooks/useAuth";
-import { Check, Copy, X } from "lucide-react";
+import { Check, Copy, Receipt, X } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 interface Props {
   jobId: string | null;
@@ -79,6 +81,7 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
   const [schedStartLocal, setSchedStartLocal] = useState("");
   const [schedEndLocal, setSchedEndLocal] = useState("");
   const [copiedHint, setCopiedHint] = useState<string | null>(null);
+  const [lastCloseout, setLastCloseout] = useState<ServiceCloseoutResult | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedOrderSearch(fulfillmentOrderSearch.trim()), 350);
@@ -238,6 +241,25 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
     return new Map(nextStages.map((next) => [next, shouldBlockStageTransition(job, next)]));
   }, [job, nextStages]);
   const technicianSuggestions = sched.data?.suggestions ?? [];
+  const billingCloseoutStages = new Set<ServiceStage>([
+    "invoice_ready",
+    "invoiced",
+    "paid_closed",
+  ]);
+  const showCloseoutPanel = billingCloseoutStages.has(stage);
+  const { data: jobInvoice } = useQuery({
+    queryKey: ["service-job-invoice", jobId],
+    enabled: !!jobId && showCloseoutPanel,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("customer_invoices")
+        .select("id, invoice_number, status, total, balance_due")
+        .eq("service_job_id", jobId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
 
   if (!jobId) return null;
 
@@ -891,6 +913,72 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
               <CompletionFeedbackForm jobId={job.id} />
             )}
 
+            {/* Cashier closeout — invoice send + warranty/AR on close */}
+            {showCloseoutPanel && (
+              <section className="rounded-lg border border-primary/25 bg-primary/5 p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Receipt className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-medium text-foreground">Close &amp; send invoice</h3>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Advancing to <strong>Invoiced</strong> sends the bill and posts open AR for sales.
+                  <strong> Paid / Closed</strong> settles AR, queues warranty claims when applicable — no accounting retype.
+                </p>
+                {lastCloseout && (
+                  <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-2 text-xs space-y-1">
+                    <p className="font-semibold text-emerald-200">Last closeout</p>
+                    <ul className="space-y-0.5 text-foreground/90">
+                      {lastCloseout.invoice_finalized && (
+                        <li>Invoice sent to customer</li>
+                      )}
+                      {lastCloseout.ar_synced && (
+                        <li>AR posted for sales</li>
+                      )}
+                      {lastCloseout.warranty_queued && (
+                        <li>Warranty claim queued</li>
+                      )}
+                      {lastCloseout.warnings.map((warning) => (
+                        <li key={warning} className="text-amber-700 dark:text-amber-200">
+                          {warning}
+                        </li>
+                      ))}
+                      {!lastCloseout.invoice_finalized &&
+                        !lastCloseout.ar_synced &&
+                        !lastCloseout.warranty_queued &&
+                        lastCloseout.warnings.length === 0 && (
+                        <li className="text-muted-foreground">Closeout completed with no billable invoice.</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+                {jobInvoice ? (
+                  <div className="rounded-md border bg-background/80 p-2 text-xs space-y-1">
+                    <p>
+                      Invoice <span className="font-mono">{jobInvoice.invoice_number}</span>
+                      {" · "}
+                      <span className="capitalize">{jobInvoice.status}</span>
+                    </p>
+                    <p className="text-muted-foreground">
+                      Total ${Number(jobInvoice.total ?? 0).toLocaleString()}
+                      {Number(jobInvoice.balance_due ?? 0) > 0
+                        ? ` · Balance $${Number(jobInvoice.balance_due).toLocaleString()}`
+                        : ""}
+                    </p>
+                    <Link
+                      to={`/service/shop-invoice/${jobInvoice.id}`}
+                      className="inline-flex text-primary font-medium hover:underline"
+                    >
+                      Open shop invoice
+                    </Link>
+                  </div>
+                ) : (
+                  <p className="text-xs text-amber-700 dark:text-amber-200">
+                    No customer invoice yet — advance to Invoice Ready first, or close will create one when billable.
+                  </p>
+                )}
+              </section>
+            )}
+
             {/* Stage Transitions */}
             {nextStages.length > 0 && (
               <section>
@@ -906,7 +994,19 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                       onClick={() => {
                         const currentBlock = transitionBlocks.get(s);
                         if (currentBlock) return;
-                        transition.mutate({ id: job.id, toStage: s });
+                        transition.mutate(
+                          { id: job.id, toStage: s },
+                          {
+                            onSuccess: (data) => {
+                              if (data.closeout) {
+                                setLastCloseout(data.closeout);
+                              }
+                              if (jobId) {
+                                qc.invalidateQueries({ queryKey: ["service-job-invoice", jobId] });
+                              }
+                            },
+                          },
+                        );
                       }}
                       className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
                         s === "blocked_waiting"
