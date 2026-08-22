@@ -793,6 +793,7 @@ export function SmartVoiceCapture({
           state: null,
           open_deals: 0,
           active_quotes: 0,
+          open_ar_balance: 0,
           last_interaction: null,
           days_since_contact: null,
           opportunity_score: 0,
