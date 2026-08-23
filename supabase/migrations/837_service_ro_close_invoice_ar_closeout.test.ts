@@ -9,6 +9,11 @@ const sql = readFileSync(
   "utf8",
 );
 const compact = sql.replace(/\s+/g, " ");
+const viewSql = readFileSync(
+  join(here, "838_rep_customers_ar_view_column_order.sql"),
+  "utf8",
+);
+const compactView = viewSql.replace(/\s+/g, " ");
 
 describe("837_service_ro_close_invoice_ar_closeout.sql contract", () => {
   it("defines tenant-bound AR sync RPC for service invoice closeout", () => {
@@ -20,8 +25,12 @@ describe("837_service_ro_close_invoice_ar_closeout.sql contract", () => {
   });
 
   it("extends v_rep_customers with open_ar_balance from customer_invoices", () => {
-    expect(compact).toContain("open_ar_balance");
-    expect(compact).toContain("customer_invoices ci");
-    expect(compact).toContain("equipment_summary");
+    expect(compact).not.toContain("create or replace view public.v_rep_customers");
+    expect(compactView).toContain("drop view if exists public.v_rep_customers cascade");
+    expect(compactView).toContain("open_ar_balance");
+    expect(compactView).toContain("customer_invoices ci");
+    expect(compactView.indexOf("equipment_summary")).toBeLessThan(
+      compactView.indexOf("open_ar_balance"),
+    );
   });
 });
