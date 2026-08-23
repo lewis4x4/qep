@@ -23,6 +23,7 @@
  *     fresh values; the supersedes_id chain preserves history.
  */
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -271,24 +272,50 @@ const COMPUTERS: Record<string, Computer> = {
 
 /* ─── Auth guard ──────────────────────────────────────────────────────── */
 
-async function isAuthorizedCaller(req: Request, admin: SupabaseClient): Promise<boolean> {
+type WorkspaceScope =
+  | { ok: true; workspaceIds: string[] | null }
+  | { ok: false; response: Response };
+
+async function resolveWorkspaceScope(
+  req: Request,
+  origin: string | null,
+): Promise<WorkspaceScope> {
   // Path 1: cron / internal callers
   const internalSecret = req.headers.get("x-internal-service-secret");
-  if (internalSecret && INTERNAL_SECRET && internalSecret === INTERNAL_SECRET) return true;
+  if (internalSecret && INTERNAL_SECRET && internalSecret === INTERNAL_SECRET) {
+    return { ok: true, workspaceIds: null };
+  }
 
   // Path 2: manual trigger from /exec page (owner JWT)
-  const auth = req.headers.get("authorization");
-  if (!auth?.startsWith("Bearer ")) return false;
-  const jwt = auth.slice(7);
-  try {
-    const { data: userRes } = await admin.auth.getUser(jwt);
-    const userId = userRes?.user?.id;
-    if (!userId) return false;
-    const { data: profile } = await admin.from("profiles").select("role").eq("id", userId).maybeSingle();
-    return profile?.role === "owner";
-  } catch {
-    return false;
+  const auth = await requireServiceUser(
+    req.headers.get("Authorization"),
+    origin,
+    ["owner"],
+  );
+  if (!auth.ok) return auth;
+
+  // requireServiceUser defaults a missing active_workspace_id to "default".
+  // This runner must instead prove that a manual caller has explicitly selected
+  // a workspace before any service-role metric computation can begin.
+  const { data: profile, error } = await auth.supabase
+    .from("profiles")
+    .select("active_workspace_id")
+    .eq("id", auth.userId)
+    .maybeSingle();
+  const workspaceId = typeof profile?.active_workspace_id === "string"
+    ? profile.active_workspace_id.trim()
+    : "";
+  if (error || !workspaceId) {
+    return {
+      ok: false,
+      response: new Response(JSON.stringify({ error: "active workspace required" }), {
+        status: 403,
+        headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
+      }),
+    };
   }
+
+  return { ok: true, workspaceIds: [workspaceId] };
 }
 
 /* ─── Workspaces to process ──────────────────────────────────────────── */
@@ -320,12 +347,8 @@ Deno.serve(async (req: Request) => {
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
-  if (!(await isAuthorizedCaller(req, admin))) {
-    return new Response(JSON.stringify({ error: "unauthorized" }), {
-      status: 401,
-      headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
-    });
-  }
+  const workspaceScope = await resolveWorkspaceScope(req, origin);
+  if (!workspaceScope.ok) return workspaceScope.response;
 
   const startedAt = new Date();
   const results: { workspace: string; metric: string; ok: boolean; skipped?: boolean; error?: string }[] = [];
@@ -348,7 +371,7 @@ Deno.serve(async (req: Request) => {
     const definitions = (defs ?? []) as MetricDefinitionRow[];
 
     // 3. Iterate workspaces × metrics
-    const workspaces = await listWorkspaces(admin);
+    const workspaces = workspaceScope.workspaceIds ?? await listWorkspaces(admin);
     const periodEnd = isoDate(startOfDay());
     const periodStart = isoDate(startOfMonth());
 
@@ -396,7 +419,7 @@ Deno.serve(async (req: Request) => {
     // Audit row in service_cron_runs (best-effort)
     try {
       await admin.from("service_cron_runs").insert({
-        workspace_id: "default",
+        workspace_id: workspaceScope.workspaceIds?.[0] ?? "default",
         job_name: "analytics-snapshot-runner",
         started_at: startedAt.toISOString(),
         finished_at: finishedAt.toISOString(),
