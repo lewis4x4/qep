@@ -123,7 +123,11 @@ describe("744_c51_telematics_adapter_contract_closeout.sql contract", () => {
     expect(compactSignalIngest).toContain(".from(\"telematics_feeds\")");
     expect(compactSignalIngest).toContain(".eq(\"device_id\", payload.deviceid)");
     expect(compactSignalIngest).toContain(".eq(\"provider\", providerfilter)");
-    expect(compactSignalIngest).toContain(".eq(\"workspace_id\", payload.workspaceid)");
+    expect(compactSignalIngest).toContain("if (!caller.workspaceid)");
+    expect(compactSignalIngest).toContain("active workspace required");
+    expect(compactSignalIngest).toContain("isservicerole ? payload.workspaceid : callerworkspaceid");
+    expect(compactSignalIngest).toContain(".eq(\"workspace_id\", requestedworkspaceid)");
+    expect(compactSignalIngest).toContain("workspaceid: signalworkspaceid");
     expect(compactSignalIngest).toContain("unknown_device");
     expect(compactSignalIngest).toContain("ambiguous_device");
     expect(compactSignalIngest).toContain("buildtelematicsdedupekey(payload)");

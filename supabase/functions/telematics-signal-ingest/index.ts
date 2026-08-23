@@ -81,12 +81,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const isServiceRole = isServiceRoleCaller(req);
   let callerUserId: string | null = null;
+  let callerWorkspaceId: string | null = null;
   if (!isServiceRole) {
     const caller = await resolveCallerContext(req, admin);
     if (!caller.role || !["admin", "manager", "owner"].includes(caller.role)) {
       return bad(403, "FORBIDDEN", "Elevated role required.", ch);
     }
+    if (!caller.workspaceId) {
+      return bad(403, "FORBIDDEN", "Active workspace required.", ch);
+    }
     callerUserId = caller.userId ?? null;
+    callerWorkspaceId = caller.workspaceId;
   }
 
   let raw: unknown;
@@ -113,6 +118,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
       typeof rawBody.source === "string"
     ? payload.provider
     : null;
+  // JWT callers are always bound to the active workspace resolved from their
+  // current profile. Only trusted service callers may select a workspace from
+  // the normalized request body.
+  const requestedWorkspaceId = isServiceRole
+    ? payload.workspaceId
+    : callerWorkspaceId;
 
   try {
     // Resolve device → equipment → workspace. If there is no active
@@ -127,8 +138,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (providerFilter) {
       feedQuery = feedQuery.eq("provider", providerFilter);
     }
-    if (payload.workspaceId) {
-      feedQuery = feedQuery.eq("workspace_id", payload.workspaceId);
+    if (requestedWorkspaceId) {
+      feedQuery = feedQuery.eq("workspace_id", requestedWorkspaceId);
     }
 
     const { data: feeds, error: feedErr } = await feedQuery.limit(2);
@@ -157,6 +168,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
       equipment_id: string;
       workspace_id: string;
     };
+    const signalWorkspaceId = isServiceRole
+      ? feedRow.workspace_id
+      : callerWorkspaceId!;
 
     const occurredAt = payload.occurredAt;
 
@@ -188,9 +202,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
         userId: callerUserId,
         role: isServiceRole ? null : "admin",
         isServiceRole,
-        workspaceId: feedRow.workspace_id,
+        workspaceId: signalWorkspaceId,
       },
-      workspaceId: feedRow.workspace_id,
+      workspaceId: signalWorkspaceId,
       requestId: crypto.randomUUID(),
       route: "/telematics-signal-ingest",
       method: "POST",
@@ -199,7 +213,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     } as unknown as RouterCtx;
 
     const signal = await ingestSignal(ctx, {
-      workspaceId: feedRow.workspace_id,
+      workspaceId: signalWorkspaceId,
       kind: signalKind,
       severity: payload.severity ?? defaultSeverity,
       source: payload.provider,
