@@ -37,10 +37,12 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
 
-    // Only create admin client when actually needed
-    let supabaseAdmin: SupabaseClient | null = null;
+    // Provider/service-role ingestion intentionally remains unscoped. JWT
+    // callers use their user client and are bound to their active workspace.
+    let supabase: SupabaseClient | null = null;
+    let callerWorkspace: string | null = null;
     if (isServiceRole) {
-      supabaseAdmin = createClient(
+      supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
         serviceRoleKey!,
       );
@@ -57,13 +59,22 @@ Deno.serve(async (req) => {
         );
       }
 
-      supabaseAdmin = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        serviceRoleKey!,
-      );
+      const { data: profile, error: profileError } = await auth.supabase
+        .from("profiles")
+        .select("active_workspace_id")
+        .eq("id", auth.userId)
+        .maybeSingle();
+      callerWorkspace = typeof profile?.active_workspace_id === "string"
+        ? profile.active_workspace_id.trim()
+        : "";
+      if (profileError || !callerWorkspace) {
+        return safeJsonError("Active workspace required", 403, origin);
+      }
+
+      supabase = auth.supabase;
     }
 
-    if (!supabaseAdmin) {
+    if (!supabase) {
       return safeJsonError("Server misconfiguration", 500, origin);
     }
 
@@ -72,11 +83,14 @@ Deno.serve(async (req) => {
 
     // GET /feeds
     if (req.method === "GET" && action === "feeds") {
-      const { data, error } = await supabaseAdmin
+      let feedsQuery = supabase
         .from("telematics_feeds")
         .select("*")
-        .eq("is_active", true)
-        .order("provider");
+        .eq("is_active", true);
+      if (callerWorkspace) {
+        feedsQuery = feedsQuery.eq("workspace_id", callerWorkspace);
+      }
+      const { data, error } = await feedsQuery.order("provider");
       if (error) return safeJsonError("Failed to load feeds", 500, origin);
       return safeJsonOk({ feeds: data }, origin);
     }
@@ -116,7 +130,7 @@ Deno.serve(async (req) => {
       // Find the feed for this provider/device. Workspace/provider fields are
       // optional for legacy callers, but when present they prevent cross-tenant
       // or cross-provider ambiguity under service-role ingestion.
-      let feedQuery = supabaseAdmin
+      let feedQuery = supabase
         .from("telematics_feeds")
         .select("id, equipment_id, subscription_id")
         .eq("device_id", reading.deviceId)
@@ -125,7 +139,9 @@ Deno.serve(async (req) => {
       if (providerFilter) {
         feedQuery = feedQuery.eq("provider", providerFilter);
       }
-      if (normalized.workspaceId) {
+      if (callerWorkspace) {
+        feedQuery = feedQuery.eq("workspace_id", callerWorkspace);
+      } else if (normalized.workspaceId) {
         feedQuery = feedQuery.eq("workspace_id", normalized.workspaceId);
       }
 
@@ -152,7 +168,7 @@ Deno.serve(async (req) => {
       const feed = feeds[0];
 
       // Update feed with latest reading
-      await supabaseAdmin
+      let feedUpdate = supabase
         .from("telematics_feeds")
         .update({
           last_reading_at: reading.readingAt,
@@ -162,13 +178,17 @@ Deno.serve(async (req) => {
           last_lng: reading.lng,
         })
         .eq("id", feed.id);
+      if (callerWorkspace) {
+        feedUpdate = feedUpdate.eq("workspace_id", callerWorkspace);
+      }
+      await feedUpdate;
 
       // If linked to EaaS subscription, update usage record
       if (feed.subscription_id && reading.hours != null) {
         const today = new Date().toISOString().split("T")[0];
         const monthStart = today.substring(0, 7) + "-01";
 
-        await supabaseAdmin
+        await supabase
           .from("eaas_usage_records")
           .upsert({
             subscription_id: feed.subscription_id,
