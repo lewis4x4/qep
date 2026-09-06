@@ -190,7 +190,7 @@ create table public.sales_offline_action_receipts(
 );
 alter table public.sales_offline_action_receipts enable row level security;
 create policy sales_offline_receipts_own on public.sales_offline_action_receipts for select to authenticated
- using(user_id=auth.uid() and workspace_id=public.get_my_workspace());
+ using(user_id=(select auth.uid()) and workspace_id=(select public.get_my_workspace()));
 grant select on public.sales_offline_action_receipts to authenticated;
 create or replace function public.apply_sales_offline_action(p_workspace_id text,p_user_id uuid,p_action_id uuid,p_action_type text,p_payload jsonb,p_queued_at timestamptz)
 returns jsonb language plpgsql security definer set search_path=''

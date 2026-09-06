@@ -324,6 +324,8 @@ await pushCheck({
   required: true,
 });
 
+await pushCheck({ id: "qa.rls-initplan-audit", command: "node scripts/check-rls-initplan.mjs", required: true });
+
 await pushCheck({
   id: "qa.web-build",
   command: "bun run build",
