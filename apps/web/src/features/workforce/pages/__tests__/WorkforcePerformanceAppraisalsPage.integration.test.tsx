@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { PropsWithChildren } from "react";
 
@@ -83,8 +83,10 @@ mock.module("@/lib/supabase", () => ({
 
 const { WorkforcePerformanceAppraisalsPage } = await import("../WorkforcePerformanceAppraisalsPage");
 
+let activeClient: QueryClient;
 function Providers({ children }: PropsWithChildren) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  activeClient = queryClient;
   return (
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>{children}</MemoryRouter>
@@ -110,4 +112,16 @@ describe("WorkforcePerformanceAppraisalsPage", () => {
     expect(screen.getByText(/Live rollup/)).toBeTruthy();
     expect(screen.getByText("Create appraisal")).toBeTruthy();
   });
+});
+
+
+test("server refresh cannot replace a manager's unsaved appraisal narrative", async () => {
+  localStorage.clear();
+  render(<Providers><WorkforcePerformanceAppraisalsPage /></Providers>);
+  await waitFor(() => expect(screen.getByLabelText("Manager summary")).toBeTruthy());
+  fireEvent.change(screen.getByLabelText("Manager summary"), { target: { value: "My unsaved review" } });
+  const records = activeClient.getQueryData<Array<Record<string, unknown>>>(["workforce", "appraisals"]);
+  act(() => activeClient.setQueryData(["workforce", "appraisal", "appraisal-1"], { ...records![0], manager_summary: "Changed by another manager", updated_at: "2026-06-01T00:00:00Z" }));
+  await waitFor(() => expect(screen.getByText("This appraisal changed on the server. Your draft is retained.")).toBeTruthy());
+  expect(screen.getByDisplayValue("My unsaved review")).toBeTruthy();
 });

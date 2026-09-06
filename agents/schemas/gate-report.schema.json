@@ -64,9 +64,18 @@
     "options": {
       "type": "object",
       "properties": {
-        "ui": { "type": "boolean" },
-        "chaos": { "type": "boolean" },
-        "design_advisory": { "type": "boolean" }
+        "ui": {
+          "type": "boolean"
+        },
+        "chaos": {
+          "type": "boolean"
+        },
+        "design_advisory": {
+          "type": "boolean"
+        },
+        "local_only": {
+          "type": "boolean"
+        }
       },
       "additionalProperties": false
     },
@@ -110,13 +119,27 @@
     "summary": {
       "type": "object",
       "properties": {
-        "total": { "type": "integer", "minimum": 0 },
-        "passed": { "type": "integer", "minimum": 0 },
-        "failed": { "type": "integer", "minimum": 0 },
-        "skipped": { "type": "integer", "minimum": 0 },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0
+        },
         "blocking_failures": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         }
       },
       "additionalProperties": false
@@ -155,7 +178,127 @@
       "items": {
         "type": "string"
       }
+    },
+    "local_only": {
+      "type": "boolean"
+    },
+    "operational_acceptance": {
+      "type": "boolean"
+    },
+    "isolation_manifest": {
+      "type": "string",
+      "minLength": 1
+    },
+    "isolation_cleanup_warning": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "verification_scope": {
+      "type": "object",
+      "required": [
+        "kind",
+        "local_only",
+        "operational_acceptance",
+        "label",
+        "exclusions"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "isolated_local_technical_verification",
+            "configured_registered_gate_chain"
+          ]
+        },
+        "local_only": {
+          "type": "boolean"
+        },
+        "operational_acceptance": {
+          "type": "boolean"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exclusions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "environment": {
+          "type": "object",
+          "properties": {
+            "inherited_variables": {
+              "type": "string",
+              "minLength": 1
+            },
+            "bun_dotenv": {
+              "type": "string",
+              "minLength": 1
+            },
+            "limitation": {
+              "type": "string",
+              "minLength": 1
+            },
+            "filesystem_sandbox": {
+              "type": "boolean"
+            },
+            "network_sandbox": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "local_only"
+        ],
+        "properties": {
+          "local_only": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "verification_scope",
+          "operational_acceptance"
+        ],
+        "properties": {
+          "verdict": {
+            "enum": [
+              "PASS",
+              "FAIL"
+            ]
+          },
+          "operational_acceptance": {
+            "const": false
+          },
+          "verification_scope": {
+            "properties": {
+              "kind": {
+                "const": "isolated_local_technical_verification"
+              },
+              "local_only": {
+                "const": true
+              },
+              "operational_acceptance": {
+                "const": false
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

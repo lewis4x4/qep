@@ -1,9 +1,11 @@
 import { NavLink, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { listQrmMoves, listQrmSignals } from "../lib/qrm-router-api";
 import { useEffect, useState } from "react";
 import { Activity, LayoutGrid, Radio, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
-import { LiveBadge, StatusDot } from "../components/command-deck";
+import { StatusDot } from "../components/command-deck";
 import {
   resolveSurface,
   SURFACE_LENSES,
@@ -46,21 +48,6 @@ const SURFACE_HINT: Record<SurfaceId, string> = {
   ask: "A",
 };
 
-/**
- * Live pulse counts per surface. These are placeholders wired to the shell
- * today; subsequent slices will subscribe to the actual signal counts from
- * the activity / pulse / inventory streams.
- */
-const SURFACE_SIGNAL: Record<
-  SurfaceId,
-  { count: number; tone: "active" | "live" | "hot" | "cool" }
-> = {
-  today: { count: 7, tone: "active" },
-  graph: { count: 0, tone: "cool" },
-  pulse: { count: 12, tone: "hot" },
-  ask: { count: 0, tone: "live" },
-};
-
 function useClock() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -83,11 +70,28 @@ export function QrmShellV2() {
   const lenses = SURFACE_LENSES[activeSurface].filter((lens) =>
     !lens.roles || (role ? lens.roles.includes(role) : false)
   );
+  const movesQuery = useQuery({
+    queryKey: ["qrm", "today-moves", "mine", profile?.id ?? "anon"],
+    queryFn: () => listQrmMoves({ statuses: ["suggested", "accepted"], limit: 100 }),
+    enabled: Boolean(profile?.id), staleTime: 30_000, refetchInterval: 60_000,
+  });
+  const signalsQuery = useQuery({
+    queryKey: ["qrm", "pulse-signals"],
+    queryFn: () => listQrmSignals({ limit: 200 }),
+    enabled: Boolean(profile?.id), staleTime: 30_000, refetchInterval: 60_000,
+  });
+  const counts: Partial<Record<SurfaceId, string>> = {};
+  if (movesQuery.isSuccess) counts.today = `${movesQuery.data.length}${movesQuery.data.length >= 100 ? "+" : ""}`;
+  if (signalsQuery.isSuccess) counts.pulse = `${signalsQuery.data.length}${signalsQuery.data.length >= 200 ? "+" : ""}`;
+  const feedFailed = movesQuery.isError || signalsQuery.isError;
+  const feedLoading = movesQuery.isPending || signalsQuery.isPending;
+  const updatedAt = Math.min(movesQuery.dataUpdatedAt, signalsQuery.dataUpdatedAt);
   const now = useClock();
   const clock = now.toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
     hour12: false,
+    timeZoneName: "short",
   });
 
   return (
@@ -100,9 +104,11 @@ export function QrmShellV2() {
           <span>Operator Deck</span>
         </p>
         <div className="flex items-center gap-3">
-          <LiveBadge />
+          <span className="text-[10px] text-muted-foreground" role="status">
+            {feedFailed ? "Queue counts unavailable" : feedLoading ? "Loading queues…" : `Updated ${new Date(updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}
+          </span>
           <span className="hidden font-mono text-[10px] tabular-nums text-muted-foreground sm:inline">
-            {clock} CT
+            {clock}
           </span>
           <span className="hidden font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground md:inline">
             ⌘K
@@ -114,12 +120,12 @@ export function QrmShellV2() {
       <div
         role="tablist"
         aria-label="QRM surfaces"
-        className="relative flex items-stretch border-b border-qep-deck-rule/70"
+        className="relative flex min-w-0 max-w-full items-stretch overflow-x-auto border-b border-qep-deck-rule/70"
       >
         {SURFACE_ORDER.map((surfaceId) => {
           const def = SURFACES[surfaceId];
           const Icon = SURFACE_ICONS[surfaceId];
-          const signal = SURFACE_SIGNAL[surfaceId];
+          const count = counts[surfaceId];
           const active = surfaceId === activeSurface;
           return (
             <NavLink
@@ -138,34 +144,19 @@ export function QrmShellV2() {
               <Icon
                 className={cn(
                   "h-3.5 w-3.5 shrink-0 transition-colors",
-                  active ? "text-qep-orange" : "text-muted-foreground",
+                  active ? "text-qep-orange-accessible" : "text-muted-foreground",
                 )}
                 aria-hidden="true"
               />
               <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em]">
                 {def.label}
               </span>
-              {signal.count > 0 && (
-                <span
-                  className={cn(
-                    "ml-1 inline-flex min-w-[1.25rem] items-center justify-center rounded-sm px-1 font-mono text-[10px] font-semibold tabular-nums",
-                    signal.tone === "hot"
-                      ? "bg-qep-hot/15 text-qep-hot"
-                      : signal.tone === "live"
-                      ? "bg-qep-live/15 text-qep-live"
-                      : signal.tone === "active"
-                      ? "bg-qep-orange/15 text-qep-orange"
-                      : "bg-muted text-muted-foreground",
-                  )}
-                >
-                  {signal.count}
-                </span>
-              )}
+              {count != null && <span className="ml-1 rounded-sm bg-muted px-1 font-mono text-[10px]" title="Matching items in the current queue; + indicates additional items may exist">{count}</span>}
               <span
                 className={cn(
                   "ml-1 hidden rounded-sm border px-1 font-mono text-[9px] font-semibold tabular-nums transition-colors md:inline-flex",
                   active
-                    ? "border-qep-orange/30 text-qep-orange/80"
+                    ? "border-qep-orange/30 text-qep-orange-accessible"
                     : "border-qep-deck-rule text-muted-foreground/60",
                 )}
               >
@@ -204,7 +195,7 @@ export function QrmShellV2() {
                 className={cn(
                   "group inline-flex items-center gap-1.5 whitespace-nowrap rounded-sm border px-2 py-1 font-mono text-[10.5px] font-medium uppercase tracking-[0.1em] transition-all duration-150",
                   active
-                    ? "border-qep-orange/60 bg-qep-orange/10 text-qep-orange shadow-[0_0_0_1px_hsl(var(--qep-orange)/0.3)_inset]"
+                    ? "border-qep-orange/60 bg-qep-orange/10 text-qep-orange-accessible shadow-[0_0_0_1px_hsl(var(--qep-orange)/0.3)_inset]"
                     : "border-qep-deck-rule/70 text-muted-foreground hover:border-qep-orange/40 hover:bg-qep-orange/5 hover:text-foreground",
                 )}
               >

@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 
 const SUB_NAV_LINKS = [
   { to: "/m/service", label: "Tech Mobile", icon: Smartphone },
+  { to: "/ops/traffic", label: "Dispatch", icon: Truck },
   { to: "/service/inspections", label: "Inspections", icon: ClipboardCheck },
   { to: "/service/agreements", label: "Agreements", icon: FileText },
   { to: "/service/wip", label: "WIP", icon: ChartColumnIncreasing },
@@ -66,7 +67,7 @@ const pillActive = cn(
   "text-[11px] font-semibold tracking-wide leading-none",
   "border transition-all duration-200 select-none",
   // light
-  "border-primary/30 text-primary",
+  "border-primary/30 text-qep-orange-accessible",
   "bg-gradient-to-b from-primary/[0.18] to-primary/[0.08]",
   "shadow-[inset_0_1px_0_0_rgba(232,119,34,0.25),0_2px_8px_rgba(232,119,34,0.15)]",
   // dark
@@ -97,7 +98,7 @@ function Divider() {
 export function ServiceSubNav() {
   const { profile } = useAuth();
   const location = useLocation();
-  const serviceSurfaceRoles = ["rep", "admin", "manager", "owner"];
+  const serviceSurfaceRoles = ["rep", "admin", "manager", "owner", "service_writer", "technician", "dispatch", "parts_counter", "finance_admin"];
   const isAdmin = ["admin", "manager", "owner"].includes(profile?.role ?? "");
   const canViewCoreServiceLinks = serviceSurfaceRoles.includes(profile?.role ?? "");
   const canViewMetrics = ["admin", "manager", "owner", "service_writer", "finance_admin"].includes(profile?.role ?? "");
@@ -141,6 +142,14 @@ export function ServiceSubNav() {
 
       {/* Core service links */}
       {SUB_NAV_LINKS.filter((navItem) => {
+        const role = profile?.role ?? "";
+        const scopedLinks: Record<string, readonly string[]> = {
+          technician: ["/m/service", "/service/inspections", "/service/efficiency"],
+          parts_counter: ["/service/parts", "/parts/orders", "/parts/vendors"],
+          dispatch: ["/m/service", "/ops/traffic", "/service/inspections"],
+          finance_admin: ["/service/agreements", "/service/wip", "/service/metrics", "/service/efficiency"],
+        };
+        if (scopedLinks[role] && !scopedLinks[role].includes(navItem.to)) return false;
         if (navItem.to === "/service/metrics") return canViewMetrics;
         if (navItem.to === "/service/grapple") return canViewGrappleProduction;
         return canViewCoreServiceLinks;

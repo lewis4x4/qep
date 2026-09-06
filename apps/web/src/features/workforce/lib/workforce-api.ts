@@ -97,6 +97,7 @@ export interface AppraisalDraftInput {
 }
 
 export interface AppraisalScoreInput {
+  expected_updated_at?: string | null;
   appraisal_id: string;
   scores: Array<{ category_key: string; score: number; notes?: string | null }>;
   manager_summary?: string | null;
@@ -400,7 +401,14 @@ async function invokePerformanceAppraisals<T>(name: string, options?: { method?:
     method: options?.method ?? "POST",
     body: options?.body,
   });
-  if (error) throw error;
+  if (error) {
+    const context = (error as { context?: Response }).context;
+    if (context instanceof Response) {
+      const payload = await context.clone().json().catch(() => null) as { error?: unknown } | null;
+      if (typeof payload?.error === "string") throw new Error(payload.error);
+    }
+    throw error;
+  }
   if (!data) throw new Error("No response from performance appraisals API.");
   return data;
 }
@@ -436,22 +444,21 @@ export async function createAppraisal(input: AppraisalDraftInput): Promise<strin
   return data.appraisal_id;
 }
 
-export async function scoreAppraisal(input: AppraisalScoreInput): Promise<void> {
-  await invokePerformanceAppraisals<{ ok?: boolean }>("performance-appraisals", {
-    body: { action: "score", ...input },
-  });
-}
+export interface AppraisalMutationVersion { updated_at: string }
 
-export async function finalizeAppraisal(input: { appraisal_id: string; manager_summary?: string | null; manager_signature_name?: string | null }): Promise<void> {
-  await invokePerformanceAppraisals<{ ok?: boolean }>("performance-appraisals", {
-    body: { action: "finalize", ...input },
-  });
+async function mutateAppraisalVersion(body: Record<string, unknown>): Promise<AppraisalMutationVersion> {
+  const result = await invokePerformanceAppraisals<{ ok?: boolean; updated_at?: string }>("performance-appraisals", { body });
+  if (result.ok !== true || !result.updated_at) throw new Error("Appraisal save was not confirmed with a version. Reload before retrying.");
+  return { updated_at: result.updated_at };
 }
-
-export async function acknowledgeAppraisal(input: { appraisal_id: string; employee_signature_name?: string | null; employee_comments?: string | null }): Promise<void> {
-  await invokePerformanceAppraisals<{ ok?: boolean }>("performance-appraisals", {
-    body: { action: "acknowledge", ...input },
-  });
+export async function scoreAppraisal(input: AppraisalScoreInput): Promise<AppraisalMutationVersion> {
+  return mutateAppraisalVersion({ action: "score", ...input });
+}
+export async function finalizeAppraisal(input: { appraisal_id: string; expected_updated_at?: string | null; manager_summary?: string | null; manager_signature_name?: string | null }): Promise<AppraisalMutationVersion> {
+  return mutateAppraisalVersion({ action: "finalize", ...input });
+}
+export async function acknowledgeAppraisal(input: { appraisal_id: string; expected_updated_at?: string | null; employee_signature_name?: string | null; employee_comments?: string | null }): Promise<AppraisalMutationVersion> {
+  return mutateAppraisalVersion({ action: "acknowledge", ...input });
 }
 
 export async function fetchTechnicianProgression(): Promise<TechnicianProgression[]> {

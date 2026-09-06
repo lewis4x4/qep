@@ -111,6 +111,8 @@ describe("sales API normalizers", () => {
       primary_contact_phone: "555",
       stage: "Unknown",
       stage_sort: 2,
+      stage_id: null,
+      stage_probability: null,
       amount: 10000,
       deal_name: "Excavator",
       created_at: "2026-05-03T12:00:00Z",

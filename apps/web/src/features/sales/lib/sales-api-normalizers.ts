@@ -249,6 +249,8 @@ export function normalizeRepPipelineDeals(rows: unknown): RepPipelineDeal[] {
       primary_contact_phone: stringOrNull(row.primary_contact_phone),
       stage: stringOrNull(row.stage) ?? "Unknown",
       stage_sort: finiteNumberOrDefault(row.stage_sort),
+      stage_id: stringOrNull(row.stage_id),
+      stage_probability: finiteNumberOrNull(row.stage_probability),
       amount: finiteNumberOrNull(row.amount),
       deal_name: dealName,
       created_at: createdAt,

@@ -1,3 +1,4 @@
+import { paymentReconciliationPending } from "../_shared/portal-payment-presentation.ts";
 /**
  * Customer Portal API Edge Function
  *
@@ -847,6 +848,8 @@ function normalizePortalPaymentStatus(intent: PortalPaymentIntentRow | null): {
   last_updated_at: string | null;
 } | null {
   if (!intent) return null;
+  const pendingReconciliation = paymentReconciliationPending(intent);
+  if (pendingReconciliation) return { label: pendingReconciliation.label, detail: pendingReconciliation.detail, tone: pendingReconciliation.tone, last_updated_at: intent.updated_at };
 
   if (intent.status === "succeeded" && intent.webhook_signature_verified) {
     return {
@@ -898,6 +901,13 @@ function buildPortalPaymentHistory(
     const checkoutSessionId = typeof metadata.checkout_session_id === "string"
       ? metadata.checkout_session_id
       : null;
+
+    const pendingReconciliation = paymentReconciliationPending(intent);
+    if (pendingReconciliation) return {
+      id: intent.id, kind: "stripe", label: pendingReconciliation.label, detail: pendingReconciliation.detail,
+      amount, status: "processing", created_at: intent.created_at, resolved_at: null,
+      reference: checkoutSessionId ?? intent.stripe_payment_intent_id,
+    };
 
     if (intent.status === "succeeded" && intent.webhook_signature_verified) {
       return {
@@ -2878,7 +2888,14 @@ Deno.serve(async (req) => {
           .order("signed_at", { ascending: false })
           .limit(1)
           .maybeSingle();
-        if (existing) return safeJsonOk({ ok: true, native_signature: nativeSignatureView(existing as NativeSignatureRow) }, origin);
+        if (existing) {
+          const { data: resumed, error: resumeError } = await admin.rpc("rental_sign_quote_atomic", {
+            p_contract_id: rentalContractId, p_token: null,
+            p_signature: { signed_via: "portal", portal_customer_id: portalCustomer.id },
+          });
+          if (resumeError || !resumed?.native_signature) return safeJsonError(resumeError?.message ?? "Rental signature could not be reconciled", 409, origin);
+          return safeJsonOk({ ok: true, native_signature: nativeSignatureView(resumed.native_signature as NativeSignatureRow) }, origin);
+        }
 
         let equipment: Record<string, unknown> | null = null;
         if (typeof contractRow.equipment_id === "string") {
@@ -2911,6 +2928,10 @@ Deno.serve(async (req) => {
             agreed_daily_rate: contractRow.agreed_daily_rate,
             agreed_weekly_rate: contractRow.agreed_weekly_rate,
             agreed_monthly_rate: contractRow.agreed_monthly_rate,
+            daily_rate: contractRow.agreed_daily_rate,
+            weekly_rate: contractRow.agreed_weekly_rate,
+            monthly_rate: contractRow.agreed_monthly_rate,
+            equipment_id: contractRow.equipment_id,
             deposit_required: contractRow.deposit_required,
             deposit_amount: contractRow.deposit_amount,
             deposit_status: contractRow.deposit_status,
@@ -2928,9 +2949,10 @@ Deno.serve(async (req) => {
         };
         const documentHash = await canonicalizeAndHash({ rental_contract_id: rentalContractId, signed_snapshot: signedSnapshot, signer_name: signerName });
 
-        const { data: inserted, error: insertError } = await admin
-          .from("rental_contract_signatures")
-          .insert({
+        const { data: signed, error: signError } = await admin.rpc("rental_sign_quote_atomic", {
+          p_contract_id: rentalContractId,
+          p_token: null,
+          p_signature: {
             workspace_id: portalWorkspaceId,
             rental_contract_id: rentalContractId,
             portal_customer_id: portalCustomer.id,
@@ -2944,33 +2966,10 @@ Deno.serve(async (req) => {
             document_hash: documentHash,
             is_valid: true,
             signed_at: signedAt,
-          })
-          .select("id, signer_name, signed_at, signed_via, document_hash")
-          .single();
-        if (insertError) {
-          const { data: raced } = await admin
-            .from("rental_contract_signatures")
-            .select("id, signer_name, signed_at, signed_via, document_hash")
-            .eq("rental_contract_id", rentalContractId)
-            .eq("is_valid", true)
-            .order("signed_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          if (raced) return safeJsonOk({ ok: true, native_signature: nativeSignatureView(raced as NativeSignatureRow) }, origin);
-          console.error("rental signature insert error:", insertError);
-          return safeJsonError("Failed to record rental signature", 500, origin);
-        }
-
-        await admin
-          .from("rental_contracts")
-          .update({
-            native_signature_id: inserted.id,
-            native_signed_at: inserted.signed_at,
-            native_signer_name: signerName,
-          })
-          .eq("id", rentalContractId);
-
-        return safeJsonOk({ ok: true, native_signature: nativeSignatureView(inserted as NativeSignatureRow) }, origin, 201);
+          },
+        });
+        if (signError || !signed?.native_signature) return safeJsonError(signError?.message ?? "Failed to record rental signature", 409, origin);
+        return safeJsonOk({ ok: true, native_signature: nativeSignatureView(signed.native_signature as NativeSignatureRow) }, origin, 201);
       }
 
       if (subRoute === "book" && req.method === "POST") {
@@ -3233,6 +3232,9 @@ Deno.serve(async (req) => {
           if (contractError || !contract) return safeJsonError("Rental contract not found", 404, origin);
 
           let invoiceStatus = "paid";
+          if (contract.deposit_required && !contract.deposit_invoice_id) {
+            return safeJsonError("A verified deposit invoice is required before confirming rental payment", 409, origin);
+          }
           if (contract.deposit_required && contract.deposit_invoice_id) {
             const { data: invoice } = await admin
               .from("customer_invoices")
@@ -3258,15 +3260,18 @@ Deno.serve(async (req) => {
             return safeJsonError("Rental terms must be signed before finalizing.", 400, origin);
           }
 
-          const { data: updated, error } = await admin
-            .from("rental_contracts")
-            .update({
-              status: "active",
-              deposit_status: contract.deposit_required ? "paid" : "not_required",
-            })
-            .eq("id", id)
-            .select()
-            .single();
+          // Repair a valid historical signature whose header attachment was interrupted.
+          const { error: signatureAttachError } = await admin.rpc("rental_sign_quote_atomic", {
+            p_contract_id: id, p_token: null,
+            p_signature: { signed_via: "portal", portal_customer_id: portalCustomer.id },
+          });
+          if (signatureAttachError) return safeJsonError(signatureAttachError.message, 409, origin);
+          const { data: updated, error } = await admin.rpc("rental_checkout_atomic", {
+            p_workspace: portalWorkspaceId,
+            p_contract_id: id,
+            p_patch: { deposit_status: contract.deposit_required ? "paid" : "not_required" },
+            p_meter: null,
+          });
           if (error) return safeJsonError("Failed to finalize rental payment", 500, origin);
           return safeJsonOk({ contract: updated }, origin);
         }

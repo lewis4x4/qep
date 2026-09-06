@@ -105,14 +105,16 @@ export async function generateInvoiceForEquipmentDeal(
 
   const workspaceId = (deal.workspace_id as string) ?? "default";
 
-  const { data: existing } = await admin
+  const { data: existing, error: existingError } = await admin
     .from("customer_invoices")
     .select("id")
     .eq("deal_id", dealId)
+    .eq("workspace_id", workspaceId)
     .eq("invoice_type", "equipment")
     .is("reversal_of_invoice_id", null)
     .limit(1)
     .maybeSingle();
+  if (existingError) throw new Error(`existing invoice lookup failed: ${existingError.message}`);
   if (existing) {
     return {
       status: "skipped",
@@ -127,6 +129,7 @@ export async function generateInvoiceForEquipmentDeal(
       "id, subtotal, equipment_total, attachment_total, trade_allowance, trade_credit, tax_profile, tax_override_amount, tax_override_reason, fet_total, fet_rate, fet_taxable_amount, fet_exemption_certificate_id, equipment",
     )
     .eq("deal_id", dealId)
+    .eq("workspace_id", workspaceId)
     .in("status", QUOTE_ACCEPTED_STATUSES)
     .order("accepted_at", { ascending: false, nullsFirst: false })
     .limit(1)

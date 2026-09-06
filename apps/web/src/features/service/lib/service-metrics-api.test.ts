@@ -35,10 +35,11 @@ describe("service metrics api normalizers", () => {
         marginableLineCount: 5,
         belowFloorLineCount: 1,
         targetMetLineCount: 4,
-        totalLaborRevenue: 1800.5,
+        totalRevenue: 1800.5,
         totalMarginCostBasis: 810.25,
         totalMarginAmount: 990.25,
         marginPct: 55,
+        costComplete: true,
         latestQuoteCreatedAt: "2026-05-29T12:00:00Z",
       },
     ]);
@@ -102,11 +103,16 @@ describe("service metrics api normalizers", () => {
       marginableLineCount: 1,
       belowFloorLineCount: 0,
       targetMetLineCount: 1,
-      totalLaborRevenue: 100,
+      totalRevenue: 100,
       totalMarginCostBasis: 45,
       totalMarginAmount: 55,
       marginPct: 55,
       latestQuoteCreatedAt: null,
     }] })).toBe(false);
   });
+});
+
+it("posted margin preserves unknown costs instead of inventing a profit", () => {
+  const [row] = normalizeMarginByRequestTypeRows([{ request_type: "customer_repair", total_revenue: 150, missing_cost_line_count: 1, marginable_line_count: 1, margin_pct: null }]);
+  expect(row.totalRevenue).toBe(150); expect(row.costComplete).toBe(false); expect(row.marginPct).toBeNull();
 });

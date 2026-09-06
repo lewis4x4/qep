@@ -1,12 +1,24 @@
+import { createClient } from "jsr:@supabase/supabase-js@2";
+import type { CrmAuditClient } from "../_shared/crm-auth-audit.ts";
 import { assertEquals } from "jsr:@std/assert@1";
 import { handleCrmAuthAuditRequest } from "./handler.ts";
 
 class MockAdminClient {
   calls: Array<{ fn: string; args: Record<string, unknown> }> = [];
 
-  async rpc(fn: string, args: Record<string, unknown> = {}) {
-    this.calls.push({ fn, args });
-    return { error: null };
+  rpc: CrmAuditClient["rpc"];
+  constructor() {
+    // Real PostgREST RPC builder with an isolated transport. No network is used.
+    const client = createClient("https://audit-test.invalid", "test-anon-key", {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: (input, init) => {
+        const url = new URL(input instanceof Request ? input.url : String(input));
+        const body = (init as { body?: unknown } | undefined)?.body;
+        this.calls.push({ fn: url.pathname.split("/").at(-1)!, args: typeof body === "string" ? JSON.parse(body) : {} });
+        return Promise.resolve(Response.json(null));
+      } },
+    });
+    this.rpc = client.rpc.bind(client);
   }
 }
 
@@ -32,7 +44,7 @@ Deno.test("logs login_failure with a hashed email hint", async () => {
     }),
     {
       admin,
-      resolveActorUserId: async () => null,
+      actorUserId: null,
       requestIdFactory: () => "req-login-failure",
     },
   );
@@ -67,8 +79,7 @@ Deno.test("logs login_success for an authenticated session", async () => {
     ),
     {
       admin,
-      resolveActorUserId: async (authHeader) =>
-        authHeader === "Bearer access-token" ? "user-123" : null,
+      actorUserId: "user-123",
       requestIdFactory: () => "req-login-success",
     },
   );
@@ -96,7 +107,7 @@ Deno.test("logs logout for an authenticated session", async () => {
     ),
     {
       admin,
-      resolveActorUserId: async () => "user-logout",
+      actorUserId: "user-logout",
       requestIdFactory: () => "req-logout",
     },
   );
@@ -119,7 +130,7 @@ Deno.test("logs token_refresh for an authenticated session", async () => {
     ),
     {
       admin,
-      resolveActorUserId: async () => "user-refresh",
+      actorUserId: "user-refresh",
       requestIdFactory: () => "req-refresh",
     },
   );
@@ -140,7 +151,7 @@ Deno.test("logs password_reset_request with a hashed email hint", async () => {
     }),
     {
       admin,
-      resolveActorUserId: async () => null,
+      actorUserId: null,
       requestIdFactory: () => "req-reset-request",
     },
   );
@@ -166,7 +177,7 @@ Deno.test("logs password_reset_complete for an authenticated session", async () 
     ),
     {
       admin,
-      resolveActorUserId: async () => "user-recovery",
+      actorUserId: "user-recovery",
       requestIdFactory: () => "req-reset-complete",
     },
   );
@@ -174,4 +185,15 @@ Deno.test("logs password_reset_complete for an authenticated session", async () 
   assertEquals(response.status, 200);
   assertEquals(admin.calls[0]?.args.p_event_type, "password_reset_complete");
   assertEquals(admin.calls[0]?.args.p_actor_user_id, "user-recovery");
+});
+
+
+Deno.test("authenticated lifecycle audit cannot trust an arbitrary request bearer header", async () => {
+  const admin = new MockAdminClient();
+  const response = await handleCrmAuthAuditRequest(
+    jsonRequest({ eventType: "login_success" }, { Authorization: "Bearer unvalidated-token" }),
+    { admin, actorUserId: null },
+  );
+  assertEquals(response.status, 401);
+  assertEquals(admin.calls.length, 0);
 });

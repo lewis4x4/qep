@@ -1121,123 +1121,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { data: order, error: oErr } = await supabase
-      .from("parts_orders")
-      .select(
-        "id, status, workspace_id, order_source, payment_classification, payment_status, charge_authorization_status",
-      )
-      .eq("id", orderId)
-      .maybeSingle();
-
-    if (oErr || !order) {
-      return safeJsonError("Order not found", 404, origin);
-    }
-    if (!["confirmed", "processing"].includes(order.status)) {
-      return safeJsonError(
-        "Pick is only allowed on confirmed or processing orders",
-        400,
-        origin,
-      );
-    }
-    try {
-      assertCounterReleaseAllowed(order);
-    } catch (e) {
-      const response = counterPosErrorResponse(e, origin);
-      if (response) return response;
-      throw e;
-    }
-
-    const { data: line, error: lErr } = await supabase
-      .from("parts_order_lines")
-      .select("id, part_number, quantity")
-      .eq("id", lineId)
-      .eq("parts_order_id", orderId)
-      .maybeSingle();
-
-    if (lErr || !line) {
-      return safeJsonError("Order line not found", 404, origin);
-    }
-    if (!Number.isInteger(Number(line.quantity))) {
-      return safeJsonError(
-        "Pick requires whole-number quantities",
-        400,
-        origin,
-      );
-    }
-
-    const { error: rpcErr } = await supabase.rpc(
-      "adjust_parts_inventory_delta_strict",
-      {
-        p_workspace_id: order.workspace_id,
-        p_branch_id: branchId,
-        p_part_number: line.part_number,
-        p_delta: -line.quantity,
-      },
-    );
-
-    if (rpcErr) {
-      console.error("parts-order-manager pick rpc:", rpcErr);
-      return safeJsonError(
-        rpcErr.message ?? "Inventory pick failed (insufficient stock?)",
-        400,
-        origin,
-      );
-    }
-
-    if (order.status === "confirmed") {
-      await supabase.from("parts_orders").update({ status: "processing" }).eq(
-        "id",
-        orderId,
-      );
-    }
-
-    const { data: run } = await supabase
-      .from("parts_orders")
-      .select("fulfillment_run_id")
-      .eq("id", orderId)
-      .maybeSingle();
-
-    if (run?.fulfillment_run_id) {
-      const { error: evErr } = await supabase.from("parts_fulfillment_events")
-        .insert({
-          workspace_id: order.workspace_id,
-          fulfillment_run_id: run.fulfillment_run_id,
-          event_type: "counter_order_picked",
-          payload: {
-            parts_order_id: orderId,
-            parts_order_line_id: lineId,
-            part_number: line.part_number,
-            quantity: line.quantity,
-            branch_id: branchId,
-            picked_by: userId,
-          },
-        });
-      if (evErr) {
-        console.warn("parts-order-manager pick event:", evErr);
-      }
-    }
-
-    await emitOrderEvent(supabase, {
-      workspaceId: order.workspace_id,
-      orderId,
-      eventType: "pick_completed",
-      actorId: userId,
-      metadata: {
-        line_id: lineId,
-        part_number: line.part_number,
-        quantity: line.quantity,
-        branch_id: branchId,
-      },
+    const { data: pickResult, error: rpcErr } = await supabase.rpc("pick_parts_order_line_once", {
+      p_order_id: orderId, p_line_id: lineId, p_branch_id: branchId,
     });
-
-    return safeJsonOk({
-      picked: {
-        line_id: lineId,
-        part_number: line.part_number,
-        quantity: line.quantity,
-        branch_id: branchId,
-      },
-    }, origin);
+    if (rpcErr) return safeJsonError(rpcErr.message ?? "Inventory pick failed", 409, origin);
+    const result = pickResult as { picked?: Record<string, unknown>; already_picked?: boolean } | null;
+    if (!result?.picked) return safeJsonError("Pick result was not confirmed", 500, origin);
+    return safeJsonOk({ ...result, picked: { ...result.picked, line_id: lineId } }, origin);
   }
 
   // ── RESERVE INTER-BRANCH TRANSFER ───────────────────────────────────

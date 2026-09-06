@@ -23,6 +23,9 @@ export interface ServiceCloseoutResult {
   warranty_queued: boolean;
   ar_synced: boolean;
   warnings: string[];
+  financial_complete: boolean;
+  financial_errors: string[];
+  invoice_not_applicable: boolean;
 }
 
 const FINALIZED_INVOICE_STATUSES = new Set([
@@ -36,12 +39,13 @@ const FINALIZED_INVOICE_STATUSES = new Set([
 export async function finalizeServiceInvoiceForJob(
   supabase: SupabaseClient,
   jobId: string,
-): Promise<{ invoice_id: string | null; finalized: boolean; error?: string }> {
+): Promise<{ invoice_id: string | null; finalized: boolean; not_applicable?: boolean; status?: string; error?: string }> {
   const generated = await generateInvoiceForServiceJob(supabase, jobId);
   if (!generated.invoice_id && generated.error) {
     return { invoice_id: null, finalized: false, error: generated.error };
   }
 
+  if (generated.not_applicable) return { invoice_id: null, finalized: false, not_applicable: true };
   const invoiceId = generated.invoice_id;
   if (!invoiceId) {
     return {
@@ -66,20 +70,21 @@ export async function finalizeServiceInvoiceForJob(
 
   const status = String(invoice.status ?? "");
   if (status === "pending") {
-    const { error: updErr } = await supabase
+    const { data: sent, error: updErr } = await supabase
       .from("customer_invoices")
       .update({ status: "sent" })
       .eq("id", invoiceId)
-      .eq("status", "pending");
-    if (updErr) {
-      return { invoice_id: invoiceId, finalized: false, error: updErr.message };
+      .eq("status", "pending").select("id,status").maybeSingle();
+    if (updErr || !sent) {
+      return { invoice_id: invoiceId, finalized: false, error: updErr?.message ?? "Invoice changed during finalization; retry" };
     }
-    return { invoice_id: invoiceId, finalized: true };
+    return { invoice_id: invoiceId, finalized: true, status: "sent" };
   }
 
   return {
     invoice_id: invoiceId,
     finalized: FINALIZED_INVOICE_STATUSES.has(status),
+    status,
   };
 }
 
@@ -94,6 +99,8 @@ export async function syncArOpenItemForInvoice(
   return { ok: true };
 }
 
+export const defaultServiceCloseoutDependencies = { finalizeServiceInvoiceForJob, syncArOpenItemForInvoice, jobHasWarrantyClaimLines, assembleWarrantyClaimForJob, queueServiceCustomerNotification };
+
 export async function executeServiceJobCloseout(
   supabase: SupabaseClient,
   params: {
@@ -101,46 +108,53 @@ export async function executeServiceJobCloseout(
     actorId: string;
     stage: ServiceCloseoutStage;
   },
+  overrides: Partial<typeof defaultServiceCloseoutDependencies> = {},
 ): Promise<ServiceCloseoutResult> {
+  const deps = { ...defaultServiceCloseoutDependencies, ...overrides };
   const warnings: string[] = [];
+  const financialErrors: string[] = [];
   const jobId = params.job.id as string;
   const workspaceId = params.job.workspace_id as string;
 
-  const finalize = await finalizeServiceInvoiceForJob(supabase, jobId);
-  if (finalize.error) warnings.push(finalize.error);
+  const finalize = await deps.finalizeServiceInvoiceForJob(supabase, jobId);
+  if (finalize.error) financialErrors.push(finalize.error);
+  if (!finalize.not_applicable && !finalize.finalized && !finalize.error) financialErrors.push("Invoice finalization is incomplete");
+  if (params.stage === "paid_closed" && finalize.invoice_id && finalize.status !== "paid") financialErrors.push("Customer invoice must be paid before closing this work order");
 
   let warrantyClaimId: string | null = null;
   let warrantyQueued = false;
   let arSynced = false;
 
   if (finalize.invoice_id) {
-    const ar = await syncArOpenItemForInvoice(supabase, finalize.invoice_id);
+    const ar = await deps.syncArOpenItemForInvoice(supabase, finalize.invoice_id);
     arSynced = ar.ok;
-    if (!ar.ok && ar.error) warnings.push(ar.error);
+    if (!ar.ok) financialErrors.push(ar.error ?? "AR synchronization failed");
   }
 
   if (params.stage === "paid_closed") {
-    const eligible = await jobHasWarrantyClaimLines(supabase, jobId);
+    let eligible = false;
+    try { eligible = await deps.jobHasWarrantyClaimLines(supabase, jobId); } catch (error) { financialErrors.push(error instanceof Error ? error.message : "Warranty eligibility lookup failed"); }
     if (eligible) {
-      const assembled = await assembleWarrantyClaimForJob(supabase, {
+      const assembled = await deps.assembleWarrantyClaimForJob(supabase, {
         jobId,
         actorId: params.actorId,
         autoQueued: true,
       });
-      if (assembled.claim_id) {
+      if (assembled.error) financialErrors.push(assembled.error);
+      if (assembled.claim_id && !assembled.error) {
         warrantyClaimId = assembled.claim_id;
         warrantyQueued = assembled.created || assembled.updated;
-      } else if (assembled.error) {
-        warnings.push(assembled.error);
+      } else if (!assembled.error) {
+        financialErrors.push("Warranty claim assembly incomplete");
       }
     }
   }
 
   if (
-    finalize.invoice_id &&
+    financialErrors.length === 0 && finalize.invoice_id &&
     (finalize.finalized || params.stage === "invoiced")
   ) {
-    await queueServiceCustomerNotification(supabase, {
+    try { await deps.queueServiceCustomerNotification(supabase, {
       workspaceId,
       jobId,
       advisorId: (params.job.advisor_id as string | null) ?? null,
@@ -158,15 +172,13 @@ export async function executeServiceJobCloseout(
         closeout_stage: params.stage,
         auto_closeout: true,
       },
-    });
+    }); } catch (error) { warnings.push(error instanceof Error ? error.message : "Customer notification remains pending"); }
   }
 
   await supabase.from("service_job_events").insert({
     workspace_id: workspaceId,
     job_id: jobId,
-    event_type: params.stage === "paid_closed"
-      ? "service_closeout"
-      : "service_invoice_sent",
+    event_type: financialErrors.length ? "service_closeout_failed" : "service_closeout_prepared",
     actor_id: params.actorId,
     metadata: {
       invoice_id: finalize.invoice_id,
@@ -175,6 +187,7 @@ export async function executeServiceJobCloseout(
       warranty_queued: warrantyQueued,
       ar_synced: arSynced,
       warnings,
+      financial_errors: financialErrors,
       stage: params.stage,
     },
   });
@@ -186,5 +199,21 @@ export async function executeServiceJobCloseout(
     warranty_queued: warrantyQueued,
     ar_synced: arSynced,
     warnings,
+    financial_complete: financialErrors.length === 0,
+    financial_errors: financialErrors,
+    invoice_not_applicable: finalize.not_applicable === true,
   };
+}
+
+/** Financial preparation must succeed before the job leaves the operator's actionable queue. */
+export async function commitServiceCloseoutTransition(
+  supabase: SupabaseClient,
+  params: { job: Record<string, unknown>; actorId: string; stage: ServiceCloseoutStage; updates: Record<string, unknown> },
+  prepare: typeof executeServiceJobCloseout = executeServiceJobCloseout,
+): Promise<{ job?: Record<string, unknown>; closeout: ServiceCloseoutResult; error?: string }> {
+  const closeout = await prepare(supabase, params);
+  if (!closeout.financial_complete) return { closeout, error: closeout.financial_errors.join("; ") };
+  const { data, error } = await supabase.from("service_jobs").update(params.updates)
+    .eq("id",params.job.id).eq("current_stage",params.job.current_stage).select().single();
+  return error || !data ? { closeout, error: error?.message ?? "Job changed during closeout; refresh and retry" } : { job: data, closeout };
 }

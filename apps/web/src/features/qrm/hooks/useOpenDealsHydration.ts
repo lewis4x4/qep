@@ -14,6 +14,7 @@ import {
 export function useOpenDealsHydration(
   dealsQueryData: OpenDealsFirstPageResult | undefined,
   dealsQueryDataUpdatedAt: number,
+  cacheScope?: string,
 ): {
   hydratedDeals: QrmRepSafeDeal[] | null;
   setHydratedDeals: Dispatch<SetStateAction<QrmRepSafeDeal[] | null>>;
@@ -43,6 +44,7 @@ export function useOpenDealsHydration(
     setDealHydrationWarning(null);
 
     if (firstPage.fromCache) {
+      setDealHydrationWarning(firstPage.nextCursor ? "Saved snapshot is incomplete. Reconnect and retry before exporting." : "Showing a saved snapshot. Reconnect and retry for current results.");
       setIsHydratingRemainingDeals(false);
       return () => {
         cancelled = true;
@@ -107,7 +109,7 @@ export function useOpenDealsHydration(
       }
 
       if (!cancelled) {
-        writeCachedOpenDeals({ items: mergedItems, nextCursor: null });
+        writeCachedOpenDeals({ items: mergedItems, nextCursor: cursor }, cacheScope);
         setIsHydratingRemainingDeals(false);
       }
     })();
@@ -115,7 +117,7 @@ export function useOpenDealsHydration(
     return () => {
       cancelled = true;
     };
-  }, [dealsQueryData, dealsQueryDataUpdatedAt, hydrationAttempt]);
+  }, [dealsQueryData, dealsQueryDataUpdatedAt, hydrationAttempt, cacheScope]);
 
   return {
     hydratedDeals,

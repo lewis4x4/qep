@@ -165,45 +165,24 @@ Deno.serve(async (req) => {
     const targetAppraisalId = appraisalId ?? optionalString(body, "appraisal_id");
     if (!targetAppraisalId) return safeJsonError("missing_appraisal_id", 400, origin);
 
-    if (action === "score") {
-      if (!canAuthorPerformanceAppraisal(auth.role)) {
-        return safeJsonError("Only managers, admins, and owners can score appraisals", 403, origin);
-      }
-      const scores = body.scores;
-      if (!Array.isArray(scores)) return safeJsonError("scores must be an array", 400, origin);
-      const { error } = await auth.supabase.rpc("employee_appraisal_score", {
-        p_appraisal_id: targetAppraisalId,
-        p_scores: scores,
-        p_manager_summary: optionalString(body, "manager_summary"),
-        p_cost_of_living_raise_pct: optionalNumber(body, "cost_of_living_raise_pct"),
-        p_key_strengths: Array.isArray(body.key_strengths) ? body.key_strengths : null,
-        p_improvement_areas: Array.isArray(body.improvement_areas) ? body.improvement_areas : null,
-        p_goals_next_period: Array.isArray(body.goals_next_period) ? body.goals_next_period : null,
-      });
-      if (error) return safeJsonError(rpcErrorMessage(error), rpcErrorStatus(error), origin);
-      return safeJsonOk({ ok: true }, origin);
+    if ((action === "score" || action === "finalize") && !canAuthorPerformanceAppraisal(auth.role)) {
+      return safeJsonError("Only managers, admins, and owners can author appraisals", 403, origin);
     }
-
-    if (action === "finalize") {
-      if (!canAuthorPerformanceAppraisal(auth.role)) {
-        return safeJsonError("Only managers, admins, and owners can finalize appraisals", 403, origin);
-      }
-      const { error } = await auth.supabase.rpc("employee_appraisal_finalize", {
-        p_appraisal_id: targetAppraisalId,
-        p_manager_summary: optionalString(body, "manager_summary"),
-        p_manager_signature_name: optionalString(body, "manager_signature_name"),
-      });
-      if (error) return safeJsonError(rpcErrorMessage(error), rpcErrorStatus(error), origin);
-      return safeJsonOk({ ok: true }, origin);
+    if (action === "score" && !Array.isArray(body.scores)) {
+      return safeJsonError("scores must be an array", 400, origin);
     }
-
-    const { error } = await auth.supabase.rpc("employee_appraisal_acknowledge", {
+    const expectedVersion = optionalString(body, "expected_updated_at");
+    if (!expectedVersion || !Number.isFinite(Date.parse(expectedVersion))) {
+      return safeJsonError("Read the current appraisal before saving (expected_updated_at required).", 400, origin);
+    }
+    const { data, error } = await auth.supabase.rpc("employee_appraisal_mutate_versioned", {
       p_appraisal_id: targetAppraisalId,
-      p_employee_signature_name: optionalString(body, "employee_signature_name"),
-      p_employee_comments: optionalString(body, "employee_comments"),
+      p_action: action === "sign" ? "acknowledge" : action,
+      p_expected_updated_at: expectedVersion,
+      p_payload: body,
     });
-    if (error) return safeJsonError(rpcErrorMessage(error), rpcErrorStatus(error), origin);
-    return safeJsonOk({ ok: true }, origin);
+    if (error) return safeJsonError(rpcErrorMessage(error), error.code === "40001" ? 409 : rpcErrorStatus(error), origin);
+    return safeJsonOk({ ok: true, updated_at: data }, origin);
   } catch (err) {
     captureEdgeException(err, { fn: "performance-appraisals", req });
     return mapCaughtError(err, origin);

@@ -1,17 +1,19 @@
+import { weightedPipelineValue } from "../lib/pipeline-totals";
 import { Calendar, TrendingUp } from "lucide-react";
 import type { RepPipelineDeal } from "../lib/types";
 
 interface PipelineForecastStripProps {
   deals: RepPipelineDeal[];
-  /** Max stage_sort across the workspace, used to derive stage probability. */
-  maxStageSort: number;
+
 }
 
 export function PipelineForecastStrip({
   deals,
-  maxStageSort,
 }: PipelineForecastStripProps) {
-  const forecast = buildForecast(deals, maxStageSort);
+  if (deals.some((deal) => deal.stage_probability == null)) {
+    return <p className="px-4 py-3 text-sm text-muted-foreground">Forecast unavailable until configured stage probabilities are loaded.</p>;
+  }
+  const forecast = buildForecast(deals);
   if (!forecast) return null;
 
   const {
@@ -113,7 +115,6 @@ interface Forecast {
 
 function buildForecast(
   deals: RepPipelineDeal[],
-  maxStageSort: number,
 ): Forecast | null {
   if (deals.length === 0) return null;
 
@@ -134,13 +135,8 @@ function buildForecast(
 
   if (closingThisMonth.length === 0) return null;
 
-  const safeMax = Math.max(maxStageSort, 1);
-
-  // Forecast = sum of (amount × stage probability)
-  const forecastValue = closingThisMonth.reduce((sum, d) => {
-    const prob = Math.min(1, d.stage_sort / safeMax);
-    return sum + (d.amount ?? 0) * prob;
-  }, 0);
+  const forecastValue = weightedPipelineValue(closingThisMonth);
+  if (forecastValue == null) return null;
 
   // Stretch = sum of full amounts for deals closing this month
   const stretchValue = closingThisMonth.reduce(
@@ -148,9 +144,9 @@ function buildForecast(
     0,
   );
 
-  // Committed = deals at >=70% stage progression closing this month
+  // Committed = configured probability at least 70%, independent of stage order
   const committedValue = closingThisMonth.reduce((sum, d) => {
-    const prob = d.stage_sort / safeMax;
+    const prob = (d.stage_probability ?? 0) / 100;
     return prob >= 0.7 ? sum + (d.amount ?? 0) : sum;
   }, 0);
 

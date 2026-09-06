@@ -1,3 +1,4 @@
+import { resolveReplayContext, completedReplayStep } from "../_shared/flow-engine/replay-context.ts";
 /**
  * QEP Flow Engine — flow-runner handler (Slice 1)
  *
@@ -211,6 +212,11 @@ export function patternMatches(pattern: string, eventType: string): boolean {
   return false;
 }
 
+export function workflowMatchesEvent(def: { slug: string; trigger_event_pattern: string }, event: FlowEvent): boolean {
+  const target = event.properties.resumed_workflow_slug;
+  return (target == null || target === def.slug) && patternMatches(def.trigger_event_pattern, event.flow_event_type);
+}
+
 /** Build a FlowContext: calls flow_resolve_context (Slice 3) for hydration. */
 async function buildContextFromEvent(admin: SupabaseClient, event: FlowEvent): Promise<FlowContext> {
   let resolved: Record<string, unknown> | null = null;
@@ -238,6 +244,7 @@ async function executeRun(
   def: FlowWorkflowDefinition & { id: string },
   event: FlowEvent,
 ): Promise<{ status: string; runId: string; deadLettered: boolean }> {
+  const replay = await resolveReplayContext(admin, event, def.slug);
   const runStart = Date.now();
   const { data: runRow, error: runErr } = await admin.from("flow_workflow_runs").insert({
     workspace_id: event.workspace_id,
@@ -246,7 +253,7 @@ async function executeRun(
     event_id: event.event_id,
     status: "running",
     dry_run: def.dry_run ?? false,
-    metadata: { trigger_pattern: def.trigger_event_pattern },
+    metadata: { trigger_pattern: def.trigger_event_pattern, effect_event_id: replay.effectEventId },
   }).select("id").maybeSingle();
 
   if (runErr || !runRow) {
@@ -256,6 +263,7 @@ async function executeRun(
 
   const runId = runRow.id as string;
   const context = await buildContextFromEvent(admin, event);
+  context.event = { ...event, event_id: replay.effectEventId };
 
   await admin.from("flow_workflow_runs").update({
     resolved_context: {
@@ -339,6 +347,17 @@ async function executeRun(
 
     const resolvedParams = resolveParamsForRun(step.params, context);
     const idempotencyKey = computeIdempotencyKey(action.idempotency_key_template, context, resolvedParams);
+
+    const priorStep = completedReplayStep(replay.priorSteps, i, step.action_key, step.params);
+    if (priorStep) {
+      const { error: receiptError } = await admin.from("flow_workflow_run_steps").update({
+        idempotency_key: idempotencyKey, status: "skipped",
+        result: { ...priorStep.result, idempotency_hit: true, replay_receipt: true },
+        finished_at: new Date().toISOString(),
+      }).eq("id", stepId ?? "");
+      if (receiptError) throw new Error("Replay step receipt could not be persisted");
+      continue;
+    }
 
     const { data: priorResult } = await admin
       .from("flow_action_idempotency")
@@ -603,7 +622,8 @@ export async function runFlowRunnerTick(
       parent_event_id: (row.parent_event_id as string) ?? null,
     };
 
-    const matched = definitions.filter((d) => patternMatches(d.trigger_event_pattern, event.flow_event_type));
+    const matched = definitions.filter((d) => workflowMatchesEvent(d, event));
+    if (event.properties.resumed_from_run && matched.length === 0) throw new Error("The replay workflow is unavailable; the event remains pending");
     result.workflows_evaluated += matched.length;
 
     if (matched.length === 0) {

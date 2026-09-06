@@ -499,7 +499,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
         )}
       >
         <header
-          className="w-full max-w-[calc(100vw-12px)] flex items-center gap-3 rounded-[24px] border border-white/10 bg-slate-900/80 px-3 py-2 shadow-2xl backdrop-blur-xl pointer-events-auto dark:bg-white/[0.05] sm:px-4 xl:gap-4 xl:px-9 xl:py-3.5"
+          className="w-full max-w-[calc(100vw-12px)] flex items-center gap-3 rounded-[24px] border border-white/10 bg-[hsl(var(--qep-dark))] px-3 py-2 shadow-2xl backdrop-blur-xl pointer-events-auto sm:px-4 xl:gap-4 xl:px-9 xl:py-3.5"
           role="banner"
         >
           <Link to="/floor" className="hidden min-w-[185px] items-center gap-3 xl:flex">
@@ -514,7 +514,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
-                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-200 outline-none transition hover:bg-white/10 hover:text-white"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-200 outline-none focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--qep-dark))] transition hover:bg-white/10 hover:text-white"
                   aria-label="Open navigation menu"
                 >
                   <Menu className="h-5 w-5" />
@@ -619,8 +619,9 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
           </div>
 
           <nav
+            aria-label="Primary navigation"
             className={cn(
-              "min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-[11px] font-bold tracking-[0.12em] uppercase text-slate-300",
+              "min-w-0 flex-1 items-center gap-1.5 overflow-x-auto text-[11px] font-bold tracking-[0.12em] uppercase text-slate-300",
               "hidden justify-start xl:flex",
             )}
           >
@@ -631,9 +632,9 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
                   <DropdownMenuTrigger asChild>
                     <button
                       className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full px-3 py-2 transition-colors outline-none",
+                        "inline-flex items-center gap-1.5 rounded-full px-3 py-2 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--qep-dark))]",
                         isActive
-                          ? "bg-qep-orange/10 text-qep-orange"
+                          ? "bg-qep-orange/10 text-orange-300"
                           : "text-slate-300 hover:bg-white/5 hover:text-white"
                       )}
                       aria-label={`${group.label} navigation`}
@@ -712,7 +713,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
                   onFocus={handleTopBarSearchFocus}
                   onClick={handleTopBarSearchFocus}
                   placeholder="Search QEP..."
-                  className="h-10 w-full rounded-full border border-white/10 bg-white/5 py-1.5 pl-9 pr-14 text-xs text-white placeholder:text-slate-400 transition-all focus:bg-white/10 focus:outline-none focus:ring-1 focus:ring-qep-orange"
+                  className="h-10 w-full rounded-full border border-white/10 bg-white/5 py-1.5 pl-9 pr-14 text-xs text-white placeholder:text-slate-400 transition-all focus:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--qep-dark))] focus:ring-1 focus:ring-qep-orange"
                 />
                 <kbd className="pointer-events-none absolute right-3 top-1/2 hidden h-6 -translate-y-1/2 items-center rounded border border-white/10 bg-white/10 px-2 font-mono text-[10px] text-slate-300 xl:inline-flex">
                   ⌘K
@@ -726,10 +727,10 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
               <DropdownMenuTrigger asChild>
                 <button
                   className={cn(
-                    "items-center gap-1.5 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] outline-none transition-colors",
+                    "items-center gap-1.5 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] outline-none focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--qep-dark))] transition-colors",
                     "hidden xl:inline-flex",
                     utilityRouteActive
-                      ? "bg-qep-orange/10 text-qep-orange"
+                      ? "bg-qep-orange/10 text-orange-300"
                       : "text-slate-300 hover:bg-white/5 hover:text-white"
                   )}
                   aria-label="System navigation"
@@ -788,35 +789,18 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
               Office view
             </span>
           )}
-          {canOpenRepTestSession ? (
-            <div className="hidden flex-col items-end gap-1 xl:flex">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void handleOpenRepTestSession()}
-                disabled={openingRepSession}
-                className="rounded-full border-white/15 bg-white/[0.04] text-[10px] font-bold uppercase tracking-[0.12em] text-slate-200 hover:bg-white/10 hover:text-white"
-              >
-                {openingRepSession ? "Opening…" : "Open Rep Test Session"}
-              </Button>
-              {repSessionFailure ? (
-                <span className="text-[10px] font-medium text-amber-300">{repSessionFailure}</span>
-              ) : null}
-            </div>
-          ) : null}
           {/* Quick action pill */}
           {quickAction && (
             <Button
               size="sm"
               onClick={handleQuickAction}
               className={cn(
-                "bg-qep-orange hover:bg-qep-orange-hover text-white font-medium",
+                "bg-qep-orange hover:bg-qep-orange-hover text-slate-950 font-medium",
                 "flex h-9 max-w-[116px] rounded-lg px-3 text-xs shadow-[0_0_18px_rgba(249,115,22,0.25)] sm:h-10 sm:max-w-[140px] sm:px-4 sm:text-sm xl:max-w-none",
               )}
             >
               <span className="truncate">{quickAction.label}</span>
-              <kbd className="ml-3 hidden rounded border border-white/20 bg-white/15 px-1.5 py-0.5 font-mono text-[10px] text-white/90 xl:inline">
+              <kbd className="ml-3 hidden rounded border border-slate-950/20 bg-slate-950/10 px-1.5 py-0.5 font-mono text-[10px] text-slate-950 xl:inline">
                 ⌘N
               </kbd>
             </Button>
@@ -934,17 +918,23 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
             <DropdownMenuTrigger asChild>
               <button
                 aria-label="User menu"
-                className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange"
+                className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--qep-dark))] focus-visible:ring-2 focus-visible:ring-qep-orange"
               >
                 <Avatar className="w-8 h-8">
-                  <AvatarFallback className="bg-qep-orange text-white text-xs">
+                  <AvatarFallback className="bg-qep-orange text-slate-950 text-xs">
                     {getInitials(profile.full_name, profile.email)}
                   </AvatarFallback>
                 </Avatar>
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuContent align="end" className="w-64">
               <ThemeAppearanceSubmenu />
+              {canOpenRepTestSession ? <>
+                <DropdownMenuItem disabled={openingRepSession} onSelect={(event) => { event.preventDefault(); void handleOpenRepTestSession(); }}>
+                  {openingRepSession ? "Opening…" : "Open Rep Test Session"}
+                </DropdownMenuItem>
+                {repSessionFailure ? <p role="alert" className="px-2 py-1 text-xs text-destructive">{repSessionFailure}</p> : null}
+              </> : null}
               <DropdownMenuItem
                 className="cursor-pointer"
                 onClick={() => {

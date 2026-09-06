@@ -221,7 +221,7 @@ export function VoiceCaptureInboxPage() {
                 </div>
 
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                  <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-primary">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-qep-orange-accessible">
                     <Mic className="h-3 w-3" /> Voice capture
                   </span>
                   {confidence != null && (
@@ -252,7 +252,7 @@ export function VoiceCaptureInboxPage() {
 
                 <div className="mt-3 text-xs">
                   <Link
-                    className="text-primary underline underline-offset-4"
+                    className="text-qep-orange-accessible underline underline-offset-4"
                     to="/qrm/activities"
                   >
                     Open in activities feed

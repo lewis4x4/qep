@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { WifiOff, Wifi } from "lucide-react";
+import { getLegacyOfflinePendingCount } from "../lib/offline-store";
 import { cn } from "@/lib/utils";
 
 export function SalesOfflineBanner() {
+  const [legacyPending, setLegacyPending] = useState(0);
+  useEffect(() => { void getLegacyOfflinePendingCount().then(setLegacyPending).catch(() => undefined); }, []);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [showReconnected, setShowReconnected] = useState(false);
 
@@ -31,7 +34,7 @@ export function SalesOfflineBanner() {
     };
   }, []);
 
-  if (!isOffline && !showReconnected) return null;
+  if (!isOffline && !showReconnected && !legacyPending) return null;
 
   return (
     <div
@@ -44,7 +47,9 @@ export function SalesOfflineBanner() {
           : "bg-emerald-500 text-white",
       )}
     >
-      {isOffline ? (
+      {legacyPending > 0 ? (
+        <>Previous unassigned offline work is retained on this device. Contact an administrator for recovery.</>
+      ) : isOffline ? (
         <>
           <WifiOff className="w-3.5 h-3.5 shrink-0" />
           Offline — your changes will sync when connected

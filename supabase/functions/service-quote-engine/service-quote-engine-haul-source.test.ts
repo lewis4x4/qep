@@ -7,7 +7,6 @@ Deno.test("service-quote-engine uses linked H7.1 traffic-ticket haul totals", ()
       "haul_total_cents",
       "round_trip_miles",
       "traffic_ticket_rate_calc",
-      "legacy_flat_fallback",
       'h7_gate: "hauling_transport_dispatch"',
       "Equipment Transport - ${truckClass}",
       "mileage_source",
@@ -51,4 +50,9 @@ Deno.test("service-quote-engine adds H15 field mileage as an optional charge", (
       );
     }
   }
+});
+
+Deno.test("quote generation never fabricates a haul amount when dispatch pricing is missing",()=>{
+ if(source.includes("ticketTotal ?? 500") || source.includes("legacy_flat_fallback")) throw new Error("Manufactured quote price returned");
+ if(!source.includes("Hauling needs a confirmed truck-class rate")) throw new Error("Missing pricing prerequisite");
 });

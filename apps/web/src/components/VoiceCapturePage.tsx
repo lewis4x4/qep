@@ -79,6 +79,11 @@ import {
 } from "@/lib/microphone-access";
 import {
   enqueueVoiceNote,
+  getOfflineIdentity,
+  captureOfflineSubmissionContext,
+  type OfflineIdentity,
+  type OfflineSubmissionContext,
+  assertOfflineIdentity,
   getQueuedVoiceNotes,
   removeQueuedVoiceNotes,
   updateQueuedVoiceNote,
@@ -94,6 +99,8 @@ import {
   startRealtimeTranscript,
   type RealtimeTranscriptSession,
 } from "@/lib/voice-realtime-client";
+import { postVoiceCapture, VoiceCaptureRequestError } from "@/features/sales/lib/voice-capture-transport";
+import { syncCapturedVoiceQueue } from "@/features/sales/lib/queued-voice-sync";
 import { isMissingSummaryBulletsColumnError } from "@/lib/voice-summary-column";
 
 interface VoiceCapturePageProps {
@@ -112,6 +119,9 @@ type RecordingState =
 
 interface CaptureResult {
   id: string;
+  capture_saved?: boolean;
+  captured_user_id?: string;
+  captured_workspace_id?: string;
   transcript: string;
   duration_seconds: number | null;
   extracted_data: ExtractedDealData;
@@ -442,16 +452,6 @@ function fieldNoteTranscriptPreview(
 /** Edge pipeline holds the blob in memory more than once; oversized uploads often fail with a generic 500. */
 const MAX_VOICE_CAPTURE_BYTES = 24 * 1024 * 1024;
 
-class VoiceCaptureRequestError extends Error {
-  constructor(
-    message: string,
-    readonly status: number | null,
-    readonly payload: Record<string, unknown> = {},
-  ) {
-    super(message);
-    this.name = "VoiceCaptureRequestError";
-  }
-}
 
 export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }: VoiceCapturePageProps) {
   const { toast } = useToast();
@@ -534,6 +534,49 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   const liveTranscriptAbortRef = useRef<AbortController | null>(null);
   const browserFinalTranscriptRef = useRef("");
   const queuedSyncingRef = useRef(false);
+  const viewMountedRef = useRef(true);
+  const viewGenerationRef = useRef(0);
+  const recordingContextRef = useRef<Readonly<OfflineSubmissionContext> | null>(null);
+  useEffect(() => {
+    viewMountedRef.current = true;
+    const subscription = supabase.auth.onAuthStateChange?.((event) => {
+      if (event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") return;
+      viewGenerationRef.current += 1;
+      setQueuedVoiceNotes([]);
+      setRecentCaptures([]);
+      setSelectedRecentCapture(null);
+      setRecentAudioPlaybackUrl(null);
+      setRecentCaptureSheetOpen(false);
+      setResult(null);
+      setInlineAudio(null);
+      setAudioBlob(null);
+      setAudioBlobUrl(null);
+      setLiveTranscript("");
+      setErrorMessage(null);
+      setRecordingState("idle");
+      setQueuedSyncing(false);
+      setHubspotDealId("");
+      setDealLookupQuery("");
+      setSelectedDealLabel(null);
+      setResolvedDealOption(null);
+      recordingContextRef.current = null;
+      if (mediaRecorderRef.current) mediaRecorderRef.current.onstop = null;
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      stopLiveTranscript();
+      stopMicSignalMonitor();
+    });
+    return () => {
+      viewMountedRef.current = false;
+      viewGenerationRef.current += 1;
+      subscription?.data.subscription.unsubscribe();
+    };
+  }, []);
+
+  async function canUpdateVoiceView(identity: OfflineIdentity, generation: number): Promise<boolean> {
+    if (!viewMountedRef.current || generation !== viewGenerationRef.current) return false;
+    try { await assertOfflineIdentity(identity); } catch { return false; }
+    return viewMountedRef.current && generation === viewGenerationRef.current;
+  }
   const recentAudioObjectUrlRef = useRef<string | null>(null);
   const recordingStartedAtRef = useRef<number | null>(null);
   const accumulatedRecordingMsRef = useRef(0);
@@ -822,6 +865,9 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   }, [hubspotDealId, result?.hubspot_deal_id]);
 
   async function loadRecentCaptures(): Promise<void> {
+    const generation = viewGenerationRef.current;
+    const identity = await getOfflineIdentity().catch(() => null);
+    if (!identity) return;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       setRecentLoading(false);
@@ -879,6 +925,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
         }
       }
 
+      if (!await canUpdateVoiceView(identity, generation)) return;
       setRecentCaptures(
         captureRows.map((capture) => {
           const recorder = profileMap.get(capture.user_id);
@@ -891,12 +938,15 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
         }),
       );
     }
-    setRecentLoading(false);
+    if (await canUpdateVoiceView(identity, generation)) setRecentLoading(false);
   }
 
-  async function loadQueuedVoiceNotes(): Promise<void> {
+  async function loadQueuedVoiceNotes(capturedIdentity?: OfflineIdentity, generation = viewGenerationRef.current): Promise<void> {
+    const identity = capturedIdentity ?? await getOfflineIdentity().catch(() => null);
+    if (!identity) return;
     try {
-      const notes = await getQueuedVoiceNotes();
+      const notes = await getQueuedVoiceNotes(identity);
+      if (!await canUpdateVoiceView(identity, generation)) return;
       const staleSyncingCutoff = Date.now() - 2 * 60 * 1000;
       setQueuedVoiceNotes(
         notes
@@ -913,7 +963,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       );
     } catch (err) {
       console.warn("Could not load queued voice notes", err);
-      setQueuedVoiceNotes([]);
+      if (await canUpdateVoiceView(identity, generation)) setQueuedVoiceNotes([]);
     }
   }
 
@@ -938,73 +988,43 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     queuedSyncingRef.current = true;
     setQueuedSyncing(true);
 
-    const notes = await getQueuedVoiceNotes().catch(() => []);
-    if (notes.length === 0) {
-      setQueuedVoiceNotes([]);
-      queuedSyncingRef.current = false;
-      setQueuedSyncing(false);
-      return;
-    }
-    let syncedCount = 0;
-    let failedCount = 0;
+    const generation = viewGenerationRef.current;
+    let context: Readonly<OfflineSubmissionContext> | null = null;
     try {
-      for (const note of notes.sort((a, b) => a.queuedAt.localeCompare(b.queuedAt))) {
-        const attemptCount = (note.attemptCount ?? 0) + 1;
-        const lastAttemptAt = new Date().toISOString();
-        await updateQueuedVoiceNote(note.id, {
-          status: "syncing",
-          lastError: null,
-          attemptCount,
-          lastAttemptAt,
-        });
-        await loadQueuedVoiceNotes();
-
-        try {
-          await submitVoiceBlob(note.audioBlob, {
-            dealId: note.dealId,
-            fileName: note.fileName,
-            durationSeconds: note.durationSeconds,
-          });
-          await removeQueuedVoiceNotes([note.id]);
-          syncedCount += 1;
-          await loadQueuedVoiceNotes();
-        } catch (err) {
-          failedCount += 1;
-          const message = getQueueSyncErrorMessage(err);
-          await updateQueuedVoiceNote(note.id, {
-            status: "failed",
-            lastError: message,
-            attemptCount,
-            lastAttemptAt,
-          });
-          await loadQueuedVoiceNotes();
-          console.warn("Queued voice note sync failed", err);
-          if (shouldStopQueueSync(err)) break;
-        }
-      }
-
-      if (syncedCount > 0) {
-        toast({
-          title: "Offline notes synced",
-          description: `${syncedCount} field note${syncedCount === 1 ? "" : "s"} reached QRM processing.`,
-        });
-      }
-      if (failedCount > 0) {
-        toast({
-          title: "Some offline notes still need retry",
-          description: "Failed recordings stayed on this device with retry details.",
-          variant: "destructive",
-        });
-      }
+      context = await captureOfflineSubmissionContext();
+      const captured = context;
+      const outcome = await syncCapturedVoiceQueue(captured, {
+        list: getQueuedVoiceNotes,
+        update: updateQueuedVoiceNote,
+        remove: removeQueuedVoiceNotes,
+        assertCurrent: assertOfflineIdentity,
+        submit: (note, submissionContext) => submitVoiceBlob(note.audioBlob, {
+          dealId: note.dealId, fileName: note.fileName, durationSeconds: note.durationSeconds,
+          context: submissionContext, queueId: note.id,
+        }),
+        progress: () => loadQueuedVoiceNotes(captured, generation),
+        shouldStop: shouldStopQueueSync,
+      });
+      if (!await canUpdateVoiceView(captured, generation)) return;
+      if (outcome.synced > 0) toast({ title: "Offline notes synced", description: `${outcome.synced} field note${outcome.synced === 1 ? "" : "s"} reached QRM processing.` });
+      if (outcome.failed > 0) toast({ title: "Some offline notes still need retry", description: "Failed recordings stayed on this device with retry details.", variant: "destructive" });
+    } catch (error) {
+      if (context && await canUpdateVoiceView(context, generation)) toast({ title: "Offline sync paused", description: getQueueSyncErrorMessage(error), variant: "destructive" });
     } finally {
       queuedSyncingRef.current = false;
-      setQueuedSyncing(false);
-      await loadQueuedVoiceNotes();
-      void loadRecentCaptures();
+      if (!context && viewMountedRef.current && generation === viewGenerationRef.current) setQueuedSyncing(false);
+      if (context && await canUpdateVoiceView(context, generation)) {
+        setQueuedSyncing(false);
+        await loadQueuedVoiceNotes(context, generation);
+        void loadRecentCaptures();
+      }
     }
   }
 
   async function openRecentCapture(capture: RecentCapture): Promise<void> {
+    const generation = viewGenerationRef.current;
+    const identity = await getOfflineIdentity().catch(() => null);
+    if (!identity || !await canUpdateVoiceView(identity, generation)) return;
     setRecentCaptureLoading(true);
     setRecentCaptureSheetOpen(true);
 
@@ -1014,6 +1034,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       .eq("id", capture.id)
       .single();
 
+    if (!await canUpdateVoiceView(identity, generation)) return;
     if (captureError || !captureRow) {
       setSelectedRecentCapture(null);
       setRecentCaptureLoading(false);
@@ -1031,6 +1052,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       .eq("id", captureRow.user_id)
       .maybeSingle();
 
+    if (!await canUpdateVoiceView(identity, generation)) return;
     setSelectedRecentCapture({
       ...captureRow,
       recorderName: profileResult.data?.full_name ?? capture.recorderName,
@@ -1044,15 +1066,17 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       const { data: signedData } = await supabase.storage
         .from("voice-recordings")
         .createSignedUrl(captureRow.audio_storage_path, 3600);
+      if (!await canUpdateVoiceView(identity, generation)) return;
       if (signedData?.signedUrl) {
         try {
           const playableUrl = await fetchPlayableAudioObjectUrl(
             signedData.signedUrl,
             captureRow.audio_storage_path,
           );
+          if (!await canUpdateVoiceView(identity, generation)) { URL.revokeObjectURL(playableUrl); return; }
           setRecentAudioPlaybackUrl(playableUrl, true);
         } catch {
-          setRecentAudioPlaybackUrl(signedData.signedUrl);
+          if (await canUpdateVoiceView(identity, generation)) setRecentAudioPlaybackUrl(signedData.signedUrl);
         }
       }
     }
@@ -1277,7 +1301,14 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
 
     let stream: MediaStream;
     try {
+      const generation = viewGenerationRef.current;
+      const captured = await captureOfflineSubmissionContext();
+      recordingContextRef.current = captured;
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!await canUpdateVoiceView(captured, generation)) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
     } catch (err) {
       setMicrophoneProblem(getMicrophoneProblemFromError(err));
@@ -1484,20 +1515,31 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     setErrorMessage(null);
     setResult(null);
 
+    const generation = viewGenerationRef.current;
+    const context = recordingContextRef.current;
+    if (!context) {
+      setRecordingState("error");
+      setErrorMessage("The recording's operator context is unavailable. Re-record after signing in.");
+      return;
+    }
     try {
+      await assertOfflineIdentity(context);
       const recordingFileName = recordingFormatRef.current?.fileName ?? "recording.webm";
       const durationSeconds = getCurrentRecordingDurationSeconds() || elapsedSeconds;
       const data = await submitVoiceBlob(audioBlob, {
         dealId: hubspotDealId.trim() || null,
         fileName: recordingFileName,
         durationSeconds,
+        context,
       });
+      if (!await canUpdateVoiceView(context, generation)) return;
 
       setProcessingStatus({
         phase: "saving",
         detail: "Server returned the transcript; saving cockpit trust state.",
       });
       await new Promise((r) => setTimeout(r, 250));
+      if (!await canUpdateVoiceView(context, generation)) return;
       setProcessingStatus({
         phase: "syncing",
         detail: data.local_crm_saved || data.hubspot_synced
@@ -1505,6 +1547,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
           : "Capture saved safely; deal matching still needs review.",
       });
       await new Promise((r) => setTimeout(r, 250));
+      if (!await canUpdateVoiceView(context, generation)) return;
       setProcessingStatus({ phase: "done", detail: PROCESSING_STEPS[PROCESSING_STEPS.length - 1].detail });
 
       setResult(data);
@@ -1527,9 +1570,11 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
         await queueVoiceCaptureForLater(
           audioBlob,
           "The recording is stored on this device and will sync when connectivity returns.",
+          context, generation,
         );
         return;
       }
+      if (!await canUpdateVoiceView(context, generation)) return;
       if (
         err instanceof VoiceCaptureRequestError &&
         err.status === 422 &&
@@ -1597,14 +1642,12 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
 
   async function submitVoiceBlob(
     blob: Blob,
-    opts: { dealId: string | null; fileName: string; durationSeconds?: number | null },
+    opts: { dealId: string | null; fileName: string; durationSeconds?: number | null; context: Readonly<OfflineSubmissionContext>; queueId?: string },
   ): Promise<CaptureResult> {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) throw new VoiceCaptureRequestError("Not authenticated", 401);
-
     const form = new FormData();
+    form.append("expected_user_id", opts.context.user_id);
+    form.append("expected_workspace_id", opts.context.workspace_id);
+    if (opts.queueId) form.append("client_queue_id", opts.queueId);
     form.append("audio", blob, opts.fileName);
     if (typeof opts.durationSeconds === "number" && opts.durationSeconds > 0) {
       form.append("duration_seconds", String(opts.durationSeconds));
@@ -1624,28 +1667,11 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       form.append("crm_deal_id", opts.dealId.trim());
     }
 
-    const res = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/voice-capture`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-        },
-        body: form,
-      },
-    );
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: "Unknown error" }));
-      throw new VoiceCaptureRequestError(
-        (err as { error?: string }).error ?? "Processing failed",
-        res.status,
-        err as Record<string, unknown>,
-      );
-    }
-
-    return (await res.json()) as CaptureResult;
+    const payload = await postVoiceCapture(form, opts.context, {
+      url: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/voice-capture`,
+      apiKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    });
+    return payload as unknown as CaptureResult;
   }
 
   function isLikelyNetworkFailure(err: unknown): boolean {
@@ -1654,7 +1680,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     return /failed to fetch|network|load failed|offline/i.test(err.message);
   }
 
-  async function queueVoiceCaptureForLater(blob: Blob, reason: string): Promise<void> {
+  async function queueVoiceCaptureForLater(blob: Blob, reason: string, identity: OfflineIdentity, generation = viewGenerationRef.current): Promise<void> {
     const recordingFileName = recordingFormatRef.current?.fileName ?? "recording.webm";
     const id =
       typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -1674,8 +1700,10 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       lastError: null,
       attemptCount: 0,
       lastAttemptAt: null,
-    });
-    await loadQueuedVoiceNotes();
+    }, identity);
+    if (!await canUpdateVoiceView(identity, generation)) return;
+    await loadQueuedVoiceNotes(identity, generation);
+    if (!await canUpdateVoiceView(identity, generation)) return;
     toast({
       title: "Saved offline",
       description: reason,
@@ -1694,6 +1722,9 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   }
 
   async function playRecentAudio(row: RecentRecordingRow): Promise<void> {
+    const generation = viewGenerationRef.current;
+    const identity = await getOfflineIdentity().catch(() => null);
+    if (!identity || !await canUpdateVoiceView(identity, generation)) return;
     if (inlineAudio?.id === row.id) {
       setInlineAudio(null);
       return;
@@ -1722,6 +1753,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       .from("voice-recordings")
       .createSignedUrl(row.audioStoragePath, 3600);
 
+    if (!await canUpdateVoiceView(identity, generation)) return;
     if (error || !data?.signedUrl) {
       setInlineAudio({
         id: row.id,
@@ -1740,6 +1772,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     try {
       const playableUrl = await fetchPlayableAudioObjectUrl(data.signedUrl, row.audioStoragePath);
 
+      if (!await canUpdateVoiceView(identity, generation)) { URL.revokeObjectURL(playableUrl); return; }
       setInlineAudio({
         id: row.id,
         url: playableUrl,
@@ -1747,6 +1780,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
         isObjectUrl: true,
       });
     } catch (err) {
+      if (!await canUpdateVoiceView(identity, generation)) return;
       const message = err instanceof Error ? err.message : "The recording file could not be opened.";
       setInlineAudio({
         id: row.id,

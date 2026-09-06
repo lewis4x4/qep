@@ -118,6 +118,9 @@ export function normalizeServiceCloseoutResult(
     warranty_queued: value.warranty_queued === true,
     ar_synced: value.ar_synced === true,
     warnings: stringArray(value.warnings),
+    ...(typeof value.financial_complete === "boolean" ? { financial_complete: value.financial_complete } : {}),
+    ...(Array.isArray(value.financial_errors) ? { financial_errors: stringArray(value.financial_errors) } : {}),
+    ...(typeof value.invoice_not_applicable === "boolean" ? { invoice_not_applicable: value.invoice_not_applicable } : {}),
   };
 }
 

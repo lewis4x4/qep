@@ -8,6 +8,7 @@ import {
   ShieldAlert,
   Target,
 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,8 @@ type PipelineHealthProfileRow = Pick<
 export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { profile } = useAuth();
+  const cacheScope = profile?.id && profile.active_workspace_id ? `${profile.id}:${profile.active_workspace_id}:${profile.role}` : undefined;
   const [selectedStageId, setSelectedStageId] = useState<string>("all");
   const [urgencyFilter, setUrgencyFilter] = useState<UrgencyFilter>("all");
   const [viewMode, setViewMode] = useState<"board" | "table">("board");
@@ -65,7 +68,7 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
 
   const dealsQuery = useQuery({
     queryKey: ["crm", "deals", "open-table"],
-    queryFn: fetchOpenDealsFirstPage,
+    queryFn: () => fetchOpenDealsFirstPage(cacheScope),
     staleTime: 30_000,
   });
 
@@ -76,7 +79,7 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
     dealHydrationWarning,
     hydrationAttempt,
     setHydrationAttempt,
-  } = useOpenDealsHydration(dealsQuery.data, dealsQuery.dataUpdatedAt);
+  } = useOpenDealsHydration(dealsQuery.data, dealsQuery.dataUpdatedAt, cacheScope);
 
   const openDeals = hydratedDeals ?? dealsQuery.data?.items ?? [];
   const deferredOpenDeals = useDeferredValue(openDeals);
@@ -292,7 +295,7 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
             {showAnalytics ? "Hide Stats" : "Stage Stats"}
           </Button>
         )}
-        <Button variant="outline" size="sm" onClick={() => {
+        <Button variant="outline" size="sm" disabled={isLoading || hasError || isHydratingRemainingDeals || Boolean(dealHydrationWarning) || Boolean(dealsQuery.data?.fromCache) || Boolean(dealsQuery.data?.nextCursor && !hydratedDeals) || deferredOpenDeals !== openDeals} title="Export is available when every current deal page has loaded." onClick={() => {
           import("@/lib/csv-export").then(({ exportDeals }) => {
             exportDeals(filteredDeals.map((d) => ({
               id: d.id,
@@ -304,7 +307,7 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
               depositStatus: d.depositStatus,
               depositAmount: d.depositAmount,
               createdAt: d.createdAt,
-              stageName: null,
+              stageName: stageNameById.get(d.stageId) ?? null,
               companyName: null,
               contactName: null,
               assignedRepName: null,

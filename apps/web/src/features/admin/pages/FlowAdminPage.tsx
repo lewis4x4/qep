@@ -367,16 +367,17 @@ export function FlowAdminPage() {
     refetchInterval: 30_000,
   });
 
-  const { data: deadLetters = [] } = useQuery({
+  const { data: deadLetters = [], error: deadLettersError } = useQuery({
     queryKey: ["flow-admin-dead-letters"],
     queryFn: async () => {
       const { data, error } = await db
         .from("exception_queue")
         .select("id, title, payload, created_at")
         .eq("source", "workflow_dead_letter")
+        .neq("status", "resolved")
         .order("created_at", { ascending: false })
         .limit(20);
-      if (error) return [];
+      if (error) throw new Error(error.message ?? "Dead letters could not load");
       return (data ?? []).map(toDeadLetterRow);
     },
     staleTime: 60_000,
@@ -396,19 +397,11 @@ export function FlowAdminPage() {
 
   const replayDeadLetter = useMutation({
     mutationFn: async (input: { exceptionId: string; runId: string }) => {
-      // Re-emit the original event by calling flow_resume_run, which copies
-      // the originating event with parent_event_id set so the runner picks
-      // it up next tick. Idempotency keys prevent duplicate side effects.
-      const { error } = await db.rpc("flow_resume_run", { p_run_id: input.runId });
-      if (error) throw new Error(error.message ?? "replay failed");
-      // Mark the exception_queue row as resolved so it disappears from the
-      // dead-letter card after a successful replay.
-      const patch: ExceptionQueueUpdate = {
-        status: "resolved",
-        resolved_at: new Date().toISOString(),
-        resolution_reason: "replayed via flow_resume_run",
-      };
-      await db.from("exception_queue").update(patch).eq("id", input.exceptionId);
+      const { error } = await db.rpc("replay_workflow_dead_letter", {
+        p_exception_id: input.exceptionId, p_run_id: input.runId,
+      });
+      if (error) throw new Error(error.message ?? "Replay could not be queued; the dead letter remains open");
+
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["flow-admin-recent-runs"] });
@@ -662,7 +655,7 @@ export function FlowAdminPage() {
           { label: "Succeeded", value: succeeded, tone: "green" },
           { label: "Failed/cancelled", value: failed, tone: "red" },
           { label: "Awaiting approval", value: awaiting, tone: "orange" },
-          { label: "Dead letters open", value: deadLetters.length, tone: "red" },
+          { label: "Dead letters shown", value: deadLetters.length, tone: "red" },
         ]}
       />
 
@@ -1124,6 +1117,7 @@ export function FlowAdminPage() {
       <FlowApprovalsPanel />
 
       {/* Dead letters */}
+      {deadLettersError && <p role="alert" className="text-red-400">Dead letters could not load. Refresh to retry.</p>}
       {deadLetters.length > 0 && (
         <Card className="border-red-500/30 p-4">
           <p className="mb-2 flex items-center gap-1 text-[10px] uppercase tracking-wider text-red-400">

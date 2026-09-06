@@ -202,7 +202,7 @@ export function SalesDealCard({
               </p>
             )}
             <p className="text-[10px] text-muted-foreground font-semibold">
-              {stagePercent}% likely
+              {deal.stage_probability == null ? "Probability unavailable" : `${deal.stage_probability}% likely`}
             </p>
           </div>
         </div>

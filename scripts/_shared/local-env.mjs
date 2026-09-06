@@ -43,6 +43,8 @@ function setIfMissing(targetKey, ...candidateKeys) {
 }
 
 export function loadLocalEnv(cwd = process.cwd()) {
+  // Isolated verification must never import hosted credentials from workspace files.
+  if (process.env.QEP_SKIP_LOCAL_ENV === "1") return;
   const envFiles = [
     ".env.demo.local",
     ".env.local",

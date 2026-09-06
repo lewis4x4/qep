@@ -8,10 +8,11 @@ export interface ServiceMarginByRequestTypeRow {
   marginableLineCount: number;
   belowFloorLineCount: number;
   targetMetLineCount: number;
-  totalLaborRevenue: number;
+  totalRevenue: number;
   totalMarginCostBasis: number;
   totalMarginAmount: number;
   marginPct: number | null;
+  costComplete?: boolean;
   latestQuoteCreatedAt: string | null;
 }
 
@@ -25,6 +26,7 @@ export interface ServiceOwnerWatchMetrics {
   avgCycleTargetHours: number | null;
   tatOnTimePct: number | null;
   avgTechnicianEfficiencyPct: number | null;
+  recordedJobEfficiencyPct?: number | null;
   laborRecoveryPct: number | null;
   techHoursCharged30d: number;
   techHoursWorked30d: number;
@@ -39,6 +41,10 @@ export interface ServiceOwnerWatchMetrics {
   warrantyRevenueCents: number;
   warrantyCostCents: number;
   warrantyRecoveryPct: number | null;
+  warrantyFiledCount?: number;
+  warrantyOutstandingCents?: number;
+  shopHours30d?: number;
+  fieldHours30d?: number;
   avgHoursToFirstTouch: number | null;
   firstTouchJobCount: number;
   computedAt: string | null;
@@ -76,6 +82,7 @@ export interface ServiceMetricsDashboardData {
   marginByRequestType: ServiceMarginByRequestTypeRow[];
   ownerWatch: ServiceOwnerWatchMetrics | null;
   cycleTimeBySegment: ServiceCycleTimeBySegmentRow[];
+  jobCycleTimeByType?: ServiceCycleTimeBySegmentRow[];
   openWorkOrdersByStatus: ServiceOpenWorkOrdersByStatusRow[];
   openWorkOrdersByHoldReason: ServiceOpenWorkOrdersByHoldReasonRow[];
 }
@@ -120,10 +127,11 @@ export function normalizeMarginByRequestTypeRows(rows: unknown[]): ServiceMargin
       marginableLineCount: numberValue(source.marginable_line_count),
       belowFloorLineCount: numberValue(source.below_floor_line_count),
       targetMetLineCount: numberValue(source.target_met_line_count),
-      totalLaborRevenue: numberValue(source.total_labor_revenue),
+      totalRevenue: numberValue(source.total_revenue ?? source.total_labor_revenue),
       totalMarginCostBasis: numberValue(source.total_margin_cost_basis),
       totalMarginAmount: numberValue(source.total_margin_amount),
       marginPct: nullableNumber(source.margin_pct),
+      costComplete: numberValue(source.missing_cost_line_count) === 0 && !(numberValue(source.marginable_line_count) === 0 && numberValue(source.total_revenue ?? source.total_labor_revenue) > 0),
       latestQuoteCreatedAt: nullableString(source.latest_quote_created_at),
     };
   });
@@ -142,6 +150,7 @@ export function normalizeOwnerWatchMetric(row: unknown): ServiceOwnerWatchMetric
     avgCycleTargetHours: nullableNumber(source.avg_cycle_target_hours),
     tatOnTimePct: nullableNumber(source.tat_on_time_pct),
     avgTechnicianEfficiencyPct: nullableNumber(source.avg_technician_efficiency_pct),
+    recordedJobEfficiencyPct: nullableNumber(source.recorded_job_efficiency_pct),
     laborRecoveryPct: nullableNumber(source.labor_recovery_pct),
     techHoursCharged30d: numberValue(source.tech_hours_charged_30d),
     techHoursWorked30d: numberValue(source.tech_hours_worked_30d),
@@ -156,6 +165,10 @@ export function normalizeOwnerWatchMetric(row: unknown): ServiceOwnerWatchMetric
     warrantyRevenueCents: numberValue(source.warranty_revenue_cents),
     warrantyCostCents: numberValue(source.warranty_cost_cents),
     warrantyRecoveryPct: nullableNumber(source.warranty_recovery_pct),
+    warrantyFiledCount: numberValue(source.warranty_filed_count),
+    warrantyOutstandingCents: numberValue(source.warranty_outstanding_cents),
+    shopHours30d: numberValue(source.shop_hours_30d),
+    fieldHours30d: numberValue(source.field_hours_30d),
     avgHoursToFirstTouch: nullableNumber(source.avg_hours_to_first_touch),
     firstTouchJobCount: numberValue(source.first_touch_job_count),
     computedAt: nullableString(source.computed_at),
@@ -223,18 +236,23 @@ async function loadViewRows(viewName: string, orderColumn?: string): Promise<unk
   return data ?? [];
 }
 
-export async function fetchServiceMetricsDashboard(): Promise<ServiceMetricsDashboardData> {
-  const [marginRows, ownerWatchRows, cycleRows, openStatusRows, openHoldRows] = await Promise.all([
-    loadViewRows("v_service_metrics_margin_by_request_type", "total_margin_amount"),
+export async function fetchServiceMetricsDashboard(basis: "posted" | "estimate" = "posted"): Promise<ServiceMetricsDashboardData> {
+  const [marginRows, ownerWatchRows, cycleRows, openStatusRows, openHoldRows, authoritative] = await Promise.all([
+    basis === "estimate" ? loadViewRows("v_service_metrics_margin_by_request_type", "total_margin_amount") : Promise.resolve([]),
     loadViewRows("v_service_metrics_owner_watch"),
     loadViewRows("v_service_metrics_cycle_time_by_segment", "completed_segment_count"),
     loadViewRows("v_service_metrics_open_wo_by_status", "open_work_order_count"),
     loadViewRows("v_service_metrics_open_wo_by_hold_reason", "open_hold_count"),
+    supabase.rpc("service_owner_metrics", {}),
   ]);
 
+  if (authoritative.error) throw new Error(authoritative.error.message);
+  const metrics = authoritative.data as { margin_by_type?: unknown[]; cycle_by_type?: unknown[]; owner_summary?: Record<string, unknown> } | null;
+  if (!metrics?.owner_summary) throw new Error("Authoritative service metrics are unavailable");
   return {
-    marginByRequestType: normalizeMarginByRequestTypeRows(marginRows),
-    ownerWatch: normalizeOwnerWatchMetric(ownerWatchRows[0]),
+    marginByRequestType: normalizeMarginByRequestTypeRows(basis === "estimate" ? marginRows : (metrics.margin_by_type ?? [])),
+    ownerWatch: normalizeOwnerWatchMetric({ ...(ownerWatchRows[0] as Record<string, unknown> ?? {}), recorded_job_efficiency_pct: (ownerWatchRows[0] as Record<string, unknown> | undefined)?.avg_technician_efficiency_pct, ...metrics.owner_summary }),
+    jobCycleTimeByType: normalizeCycleTimeRows(metrics.cycle_by_type ?? []),
     cycleTimeBySegment: normalizeCycleTimeRows(cycleRows),
     openWorkOrdersByStatus: normalizeOpenStatusRows(openStatusRows),
     openWorkOrdersByHoldReason: normalizeOpenHoldReasonRows(openHoldRows),

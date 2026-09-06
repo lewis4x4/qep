@@ -49,40 +49,45 @@ export async function jobHasWarrantyClaimLines(
   supabase: SupabaseClient,
   jobId: string,
 ): Promise<boolean> {
-  const { data: quoteIds } = await supabase.from("service_quotes").select("id")
+  const { data: quoteIds, error: quoteError } = await supabase.from("service_quotes").select("id")
     .eq("job_id", jobId);
+  if (quoteError) throw new Error(`Warranty quote lookup failed: ${quoteError.message}`);
   const quoteIdList = (quoteIds ?? []).map((q) => q.id as string);
   if (quoteIdList.length > 0) {
-    const { count } = await supabase
+    const { count, error: lineError } = await supabase
       .from("service_quote_lines")
       .select("id", { count: "exact", head: true })
       .in("quote_id", quoteIdList)
       .eq("payer_type", "warranty_claim");
+    if (lineError) throw new Error(`Warranty line lookup failed: ${lineError.message}`);
     if ((count ?? 0) > 0) return true;
   }
 
-  const { count: laborCount } = await supabase
+  const { count: laborCount, error: laborError } = await supabase
     .from("service_labor_ledger")
     .select("id", { count: "exact", head: true })
     .eq("service_job_id", jobId)
     .is("deleted_at", null)
     .or("payer_type.eq.warranty_claim,revenue_type.eq.warranty");
+  if (laborError) throw new Error(`Warranty labor lookup failed: ${laborError.message}`);
   if ((laborCount ?? 0) > 0) return true;
 
-  const { count: billingCount } = await supabase
+  const { count: billingCount, error: billingError } = await supabase
     .from("service_billing_rows")
     .select("id", { count: "exact", head: true })
     .eq("service_job_id", jobId)
     .is("deleted_at", null)
     .or("payer_type.eq.warranty_claim,revenue_type.eq.warranty");
+  if (billingError) throw new Error(`Warranty billing lookup failed: ${billingError.message}`);
   if ((billingCount ?? 0) > 0) return true;
 
-  const { count: turnInCount } = await supabase
+  const { count: turnInCount, error: turnInError } = await supabase
     .from("service_job_segments")
     .select("id", { count: "exact", head: true })
     .eq("service_job_id", jobId)
     .is("deleted_at", null)
     .eq("warranty_parts_turn_in_required", true);
+  if (turnInError) throw new Error(`Warranty segment lookup failed: ${turnInError.message}`);
   return (turnInCount ?? 0) > 0;
 }
 

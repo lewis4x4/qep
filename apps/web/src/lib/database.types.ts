@@ -69594,6 +69594,8 @@ export type Database = {
       }
       flow_resolve_context: { Args: { p_event_id: string }; Returns: Json }
       flow_resume_run: { Args: { p_run_id: string }; Returns: string }
+      service_owner_metrics: { Args: { p_workspace_id?: string }; Returns: Json }
+      replay_workflow_dead_letter: { Args: { p_exception_id: string; p_run_id: string }; Returns: string }
       fn_qep_agent_work_order_authorized: { Args: never; Returns: boolean }
       fn_qep_agent_work_order_command: {
         Args: { p_command: string }

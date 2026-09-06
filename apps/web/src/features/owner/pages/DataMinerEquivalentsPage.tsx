@@ -1,3 +1,4 @@
+import { readAllPages } from "@/lib/read-all-pages";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
@@ -77,41 +78,21 @@ type DataMinerPayload = {
 };
 
 async function fetchDataMinerPayload(): Promise<DataMinerPayload> {
-  const [profitabilityRes, creditRes, serviceRes] = await Promise.all([
-    supabase
-      .from("owner_data_miner_profitability")
-      .select(
-        "company_id, customer_name, closed_month, won_deal_count, sales_amount, gross_margin_amount, gross_margin_pct, last_closed_at",
-      )
-      .order("sales_amount", { ascending: false }),
-    supabase
-      .from("owner_data_miner_credit_exposure")
-      .select(
-        "company_id, customer_name, open_invoice_count, overdue_invoice_count, open_balance_due, overdue_balance_due, max_days_past_due, oldest_due_date, last_invoice_at, block_status, block_reason, current_max_aging_days, override_until, blocked_at, exposure_band",
-      )
-      .order("overdue_balance_due", { ascending: false }),
-    supabase
-      .from("owner_data_miner_service_labor")
-      .select(
-        "labor_date, branch_id, shop_or_field, technician_id, technician_name, job_count, hours_worked, billed_value, quoted_value, closed_job_count",
-      )
-      .order("labor_date", { ascending: false }),
+  const [profitability, credit, service] = await Promise.all([
+    readAllPages((from, to) => supabase.from("owner_data_miner_profitability")
+      .select("company_id, customer_name, closed_month, won_deal_count, sales_amount, gross_margin_amount, gross_margin_pct, last_closed_at")
+      .order("company_id").order("closed_month").range(from, to)),
+    readAllPages((from, to) => supabase.from("owner_data_miner_credit_exposure")
+      .select("company_id, customer_name, open_invoice_count, overdue_invoice_count, open_balance_due, overdue_balance_due, max_days_past_due, oldest_due_date, last_invoice_at, block_status, block_reason, current_max_aging_days, override_until, blocked_at, exposure_band")
+      .order("company_id").range(from, to)),
+    readAllPages((from, to) => supabase.from("owner_data_miner_service_labor")
+      .select("labor_date, branch_id, shop_or_field, technician_id, technician_name, job_count, hours_worked, billed_value, quoted_value, closed_job_count")
+      .order("labor_date").order("branch_id").order("shop_or_field").order("technician_id").range(from, to)),
   ]);
-
-  if (profitabilityRes.error) {
-    throw new Error(profitabilityRes.error.message ?? "Failed to load profitability equivalents.");
-  }
-  if (creditRes.error) {
-    throw new Error(creditRes.error.message ?? "Failed to load credit exposure equivalents.");
-  }
-  if (serviceRes.error) {
-    throw new Error(serviceRes.error.message ?? "Failed to load service labor equivalents.");
-  }
-
   return {
-    profitability: (profitabilityRes.data ?? []).map(mapProfitabilityRow),
-    credit: (creditRes.data ?? []).map(mapCreditExposureRow),
-    service: (serviceRes.data ?? []).map(mapServiceLaborRow),
+    profitability: profitability.map(mapProfitabilityRow),
+    credit: credit.map(mapCreditExposureRow),
+    service: service.map(mapServiceLaborRow),
   };
 }
 
@@ -308,11 +289,11 @@ export function DataMinerEquivalentsPage() {
   const serviceHours90d = buildServiceLaborRows(reportQuery.data?.service ?? [], {
     groupBy: "technician",
     windowDays: 90,
-    limit: 500,
+    limit: Number.POSITIVE_INFINITY,
   }).reduce((sum, row) => sum + row.hoursWorked, 0);
   const marginTracked = buildProfitabilityRows(reportQuery.data?.profitability ?? [], {
     timeframe: "trailing_365d",
-    limit: 500,
+    limit: Number.POSITIVE_INFINITY,
   }).reduce((sum, row) => sum + row.grossMarginAmount, 0);
   const serviceBranches = Array.from(
     new Set(

@@ -84,7 +84,7 @@ export function AppLayout({
       {/* When floor_mode is on, a 36px chip is pinned above TopBar; add clearance. */}
       <main
         className={cn(
-          "flex-1 min-h-screen pb-8",
+          "min-w-0 w-full flex-1 min-h-screen pb-8",
           showBackToFloorChip
             ? "pt-[132px] xl:pt-[140px]"
             : "pt-[96px] xl:pt-[104px]",

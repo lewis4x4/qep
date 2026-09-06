@@ -19,7 +19,7 @@ import {
   notifyPromisedDateChanged,
 } from "../_shared/service-lifecycle-notify.ts";
 import { generateInvoiceForServiceJob } from "../_shared/service-invoice.ts";
-import { executeServiceJobCloseout } from "../_shared/service-closeout.ts";
+import { executeServiceJobCloseout, commitServiceCloseoutTransition } from "../_shared/service-closeout.ts";
 import { assembleWarrantyClaimForJob } from "../_shared/service-warranty-assembler.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import {
@@ -158,13 +158,14 @@ const ALLOWED_UPDATE_FIELDS = new Set([
   "lockout_tagout_notes",
 ]);
 
-const READ_ONLY_JOB_ACTIONS = new Set(["get", "list"]);
+const READ_ONLY_JOB_ACTIONS = new Set(["get", "list", "machine_history"]);
 const TECHNICIAN_EXECUTION_ACTIONS = new Set([
   "submit_segment_diagnosis",
   "sign_off_segment_repair",
   "acknowledge_segment_overrun",
   "record_segment_labor",
   "record_segment_photo",
+  "field_packet",
 ]);
 const H8_FINANCE_WARRANTY_ACTIONS = new Set([
   "set_line_payer",
@@ -354,6 +355,20 @@ Deno.serve(async (req) => {
     }
 
     switch (action) {
+      case "machine_history": {
+        const { data, error } = await supabase.rpc("service_machine_history", { p_job_id: body.job_id, p_offset: body.offset ?? 0 });
+        if (error) return safeJsonError(error.message, error.code === "42501" ? 403 : 400, origin);
+        return safeJsonOk(data, origin);
+      }
+      case "field_packet": {
+        const { data, error } = await supabase.rpc("service_record_field_packet", {
+          p_operation_id: body.operation_id,
+          p_job_id: body.job_id,
+          p_packet: body.packet,
+        });
+        if (error) return safeJsonError(error.message, error.code === "42501" ? 403 : error.code === "40001" ? 409 : 400, origin);
+        return safeJsonOk(data, origin);
+      }
       case "create":
         return await handleCreate(supabase, body, actorId, origin);
       case "update":
@@ -654,130 +669,20 @@ async function handleCreate(
   actorId: string,
   origin: string | null,
 ) {
-  const {
-    customer_id,
-    contact_id,
-    machine_id,
-    source_type,
-    request_type,
-    priority,
-    status_flags = [],
-    branch_id,
-    advisor_id,
-    service_manager_id,
-    requested_by_name,
-    customer_problem_summary,
-    haul_required = false,
-    shop_or_field,
-    scheduled_start_at,
-    scheduled_end_at,
-    selected_job_code_id,
-    portal_request_id,
-  } = body;
-
-  const machine = await fetchH2IntakeMachine(supabase, machine_id);
-
-  const h2Validation = validateH2ServiceJobIntake(body, machine);
-  if (!h2Validation.ok) {
-    return safeJsonErrorWithFields(
-      "Incomplete service work-order intake",
-      422,
-      origin,
-      {
-        code: "service_intake_incomplete",
-        missing: h2Validation.missing,
-        invalid: h2Validation.invalid,
-        is_grapple_truck: h2Validation.is_grapple_truck,
-        is_grapple_production_service_route:
-          h2Validation.is_grapple_production_service_route,
-      },
-    );
-  }
-
-  const nowIso = new Date().toISOString();
-
-  const { data: job, error } = await supabase
-    .from("service_jobs")
-    .insert({
-      customer_id: customer_id || null,
-      contact_id: contact_id || null,
-      machine_id: machine_id || null,
-      source_type: h2Validation.normalized.source_type,
-      request_type: h2Validation.normalized.request_type,
-      priority: h2Validation.normalized.priority,
-      current_stage: "request_received",
-      current_stage_entered_at: nowIso,
-      status_flags,
-      branch_id: branch_id || null,
-      advisor_id: advisor_id || actorId,
-      service_manager_id: service_manager_id || null,
-      requested_by_name: requested_by_name || null,
-      customer_problem_summary: customer_problem_summary ||
-        h2Validation.normalized.complaint || null,
-      haul_required,
-      shop_or_field: h2Validation.normalized.shop_or_field,
-      hour_meter_reading: h2Validation.normalized.hour_meter_reading,
-      odometer_miles: h2Validation.normalized.odometer_miles ?? null,
-      machine_make: h2Validation.normalized.machine_make,
-      machine_model: h2Validation.normalized.machine_model,
-      machine_serial_number: h2Validation.normalized.machine_serial_number,
-      machine_year: h2Validation.normalized.machine_year,
-      complaint: h2Validation.normalized.complaint,
-      cause: h2Validation.normalized.cause,
-      correction: h2Validation.normalized.correction,
-      promised_at: h2Validation.normalized.promised_at,
-      field_site_location: h2Validation.normalized.field_site_location ?? null,
-      field_site_contact_name:
-        h2Validation.normalized.field_site_contact_name ?? null,
-      field_site_contact_phone:
-        h2Validation.normalized.field_site_contact_phone ?? null,
-      field_site_conditions_access_notes:
-        h2Validation.normalized.field_site_conditions_access_notes ?? null,
-      scheduled_start_at: scheduled_start_at || null,
-      scheduled_end_at: scheduled_end_at || null,
-      selected_job_code_id: selected_job_code_id || null,
-      portal_request_id: portal_request_id || null,
-      estimate_authorization_required: true,
-      estimate_authorization_status: "pending",
-      estimate_reauth_threshold_pct: 10,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    console.error("create error:", error);
-    return safeJsonError(error.message, 400, origin);
-  }
-
-  await supabase.from("service_job_events").insert({
-    workspace_id: job.workspace_id,
-    job_id: job.id,
-    event_type: "created",
-    actor_id: actorId,
-    new_stage: "request_received",
-    metadata: {
-      source_type: h2Validation.normalized.source_type,
-      request_type: h2Validation.normalized.request_type,
-      priority: h2Validation.normalized.priority,
-    },
+  const rawMachine = body.new_machine && typeof body.new_machine === "object" ? body.new_machine as Record<string, unknown> : null;
+  const machine = rawMachine
+    ? { ...rawMachine, id: body.operation_id } as Parameters<typeof validateH2ServiceJobIntake>[1]
+    : await fetchH2IntakeMachine(supabase, body.machine_id);
+  const validation = validateH2ServiceJobIntake({ ...body, machine_id: body.machine_id ?? (rawMachine ? body.operation_id : null) }, machine);
+  if (!validation.ok) return safeJsonErrorWithFields("Incomplete service work-order intake", 422, origin, { missing: validation.missing, invalid: validation.invalid });
+  const { action: _action, operation_id, ...payload } = body;
+  if (!operation_id) return safeJsonError("operation_id required for safe intake retry", 400, origin);
+  const { data, error } = await supabase.rpc("service_create_intake", {
+    p_operation_id: operation_id,
+    p_payload: { ...payload, ...validation.normalized },
   });
-
-  if (job.selected_job_code_id) {
-    await populatePartsFromJobCode(
-      supabase,
-      job.id,
-      job.selected_job_code_id as string,
-      job.workspace_id as string,
-    );
-  }
-
-  const { data: jobWithParts } = await supabase
-    .from("service_jobs")
-    .select("*")
-    .eq("id", job.id)
-    .single();
-
-  return safeJsonOk({ job: jobWithParts ?? job }, origin, 201);
+  if (error) return safeJsonError(error.message, error.code === "42501" ? 403 : error.code === "40001" ? 409 : 400, origin);
+  return safeJsonOk(data, origin, 201);
 }
 
 async function handlePopulateParts(
@@ -1079,16 +984,17 @@ async function handleTransition(
     updates.closed_at = new Date().toISOString();
   }
 
-  const { data: updated, error: updateErr } = await supabase
-    .from("service_jobs")
-    .update(updates)
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (updateErr) {
-    console.error("transition error:", updateErr);
-    return safeJsonError(updateErr.message, 400, origin);
+  let updated: Record<string, unknown>;
+  let closeoutResult: Awaited<ReturnType<typeof executeServiceJobCloseout>> | undefined;
+  if (to_stage === "invoiced" || to_stage === "paid_closed") {
+    const committed = await commitServiceCloseoutTransition(supabase, { job: job as Record<string, unknown>, actorId, stage: to_stage, updates });
+    closeoutResult = committed.closeout;
+    if (committed.error || !committed.job) return safeJsonErrorWithFields(committed.error ?? "Financial closeout incomplete", 409, origin, { closeout: closeoutResult, retryable: true });
+    updated = committed.job;
+  } else {
+    const result = await supabase.from("service_jobs").update(updates).eq("id", id).eq("current_stage",fromStage).select().single();
+    if (result.error || !result.data) return safeJsonError(result.error?.message ?? "Job changed; refresh and retry", 409, origin);
+    updated = result.data;
   }
 
   await supabase.from("service_job_events").insert({
@@ -1125,15 +1031,6 @@ async function handleTransition(
   if (to_stage === "invoice_ready") {
     const inv = await generateInvoiceForServiceJob(supabase, id);
     if (inv.error) console.warn("generateInvoiceForServiceJob:", inv.error);
-  }
-
-  let closeoutResult: Awaited<ReturnType<typeof executeServiceJobCloseout>> | undefined;
-  if (to_stage === "invoiced" || to_stage === "paid_closed") {
-    closeoutResult = await executeServiceJobCloseout(supabase, {
-      job: updated as Record<string, unknown>,
-      actorId,
-      stage: to_stage,
-    });
   }
 
   if (to_stage === "diagnosis_selected" && updated.selected_job_code_id) {

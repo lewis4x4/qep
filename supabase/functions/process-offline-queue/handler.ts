@@ -19,6 +19,8 @@ export type ActionType =
   | "schedule_followup";
 
 export interface QueuedAction {
+  user_id?: string;
+  workspace_id?: string;
   id: string;
   action_type: ActionType;
   payload: Record<string, unknown>;
@@ -60,250 +62,20 @@ const defaultDependencies: ProcessOfflineQueueDependencies = {
   resolveProfileActiveWorkspaceId,
 };
 
-async function findOwnedDeal(
-  db: SupabaseClient,
-  params: {
-    userId: string;
-    workspaceId: string;
-    dealId?: string;
-    companyId?: string;
-  },
-): Promise<OwnedDealRow | null> {
-  if (params.dealId) {
-    let query = db
-      .from("crm_deals")
-      .select("id, company_id, stage_id")
-      .eq("id", params.dealId)
-      .eq("assigned_rep_id", params.userId)
-      .eq("workspace_id", params.workspaceId)
-      .is("deleted_at", null);
-
-    if (params.companyId) {
-      query = query.eq("company_id", params.companyId);
-    }
-
-    const { data } = await query.maybeSingle();
-    return (data as OwnedDealRow | null) ?? null;
+export async function processOfflineQueueAction(db: SupabaseClient, userId: string, workspaceId: string, action: QueuedAction): Promise<ActionResult> {
+  if ((action.user_id && action.user_id !== userId) || (action.workspace_id && action.workspace_id !== workspaceId)) {
+    return { id: action.id, status: "failed", error: "Captured operator or workspace does not match the current session" };
   }
-
-  if (params.companyId) {
-    const { data } = await db
-      .from("crm_deals")
-      .select("id, company_id, stage_id")
-      .eq("company_id", params.companyId)
-      .eq("assigned_rep_id", params.userId)
-      .eq("workspace_id", params.workspaceId)
-      .is("deleted_at", null)
-      .limit(1)
-      .maybeSingle();
-
-    return (data as OwnedDealRow | null) ?? null;
-  }
-
-  return null;
-}
-
-export async function processOfflineQueueAction(
-  db: SupabaseClient,
-  userId: string,
-  workspaceId: string,
-  action: QueuedAction,
-): Promise<ActionResult> {
-  const { id, action_type, payload, queued_at } = action;
-
-  if (new Date(queued_at) > new Date()) {
-    return { id, status: "failed", error: "queued_at must be in the past" };
-  }
-
-  switch (action_type) {
-    case "log_visit": {
-      const {
-        company_id,
-        outcome,
-        notes,
-        next_action,
-      } = payload as {
-        company_id: string;
-        outcome: string;
-        notes?: string;
-        next_action?: string;
-      };
-
-      if (!company_id || !outcome) {
-        return { id, status: "failed", error: "company_id and outcome required" };
-      }
-
-      const deal = await findOwnedDeal(db, {
-        userId,
-        workspaceId,
-        companyId: company_id,
-      });
-
-      if (!deal) {
-        return { id, status: "failed", error: "no deal found for this company" };
-      }
-
-      const body = [
-        `Visit outcome: ${outcome}`,
-        notes ? `Notes: ${notes}` : null,
-        next_action ? `Next action: ${next_action}` : null,
-      ]
-        .filter(Boolean)
-        .join("\n");
-
-      const { error } = await db.from("crm_activities").insert({
-        workspace_id: workspaceId,
-        activity_type: "meeting",
-        body,
-        occurred_at: queued_at,
-        company_id,
-        deal_id: deal.id,
-        created_by: userId,
-        metadata: { source: "sales_companion_offline", outcome, next_action },
-      });
-
-      if (error) return { id, status: "failed", error: error.message };
-      return { id, status: "synced" };
-    }
-
-    case "advance_stage": {
-      const { deal_id, new_stage_id } = payload as {
-        deal_id: string;
-        new_stage_id: string;
-      };
-
-      if (!deal_id || !new_stage_id) {
-        return { id, status: "failed", error: "deal_id and new_stage_id required" };
-      }
-
-      const existingDeal = await findOwnedDeal(db, {
-        userId,
-        workspaceId,
-        dealId: deal_id,
-      });
-
-      if (!existingDeal) {
-        return { id, status: "failed", error: "deal not found or not yours" };
-      }
-
-      if (existingDeal.stage_id === new_stage_id) {
-        return { id, status: "synced" };
-      }
-
-      const { error } = await db
-        .from("crm_deals")
-        .update({ stage_id: new_stage_id, updated_at: new Date().toISOString() })
-        .eq("id", deal_id)
-        .eq("assigned_rep_id", userId)
-        .eq("workspace_id", workspaceId);
-
-      if (error) return { id, status: "failed", error: error.message };
-      return { id, status: "synced" };
-    }
-
-    case "create_note": {
-      const { company_id, deal_id, text } = payload as {
-        company_id?: string;
-        deal_id?: string;
-        text: string;
-      };
-
-      if (!text) {
-        return { id, status: "failed", error: "text required" };
-      }
-
-      let resolvedDealId: string | null = deal_id ?? null;
-      let resolvedCompanyId: string | null = company_id ?? null;
-
-      if (deal_id || company_id) {
-        const ownedDeal = await findOwnedDeal(db, {
-          userId,
-          workspaceId,
-          dealId: deal_id,
-          companyId: company_id,
-        });
-
-        if (!ownedDeal) {
-          return {
-            id,
-            status: "failed",
-            error: "deal or company not found or not yours",
-          };
-        }
-
-        resolvedDealId = ownedDeal.id;
-        resolvedCompanyId = ownedDeal.company_id ?? company_id ?? null;
-      }
-
-      const { error } = await db.from("crm_activities").insert({
-        workspace_id: workspaceId,
-        activity_type: "note",
-        body: text,
-        occurred_at: queued_at,
-        company_id: resolvedCompanyId,
-        deal_id: resolvedDealId,
-        created_by: userId,
-        metadata: { source: "sales_companion_offline" },
-      });
-
-      if (error) return { id, status: "failed", error: error.message };
-      return { id, status: "synced" };
-    }
-
-    case "schedule_followup": {
-      const { deal_id, follow_up_date, note } = payload as {
-        deal_id: string;
-        follow_up_date: string;
-        note?: string;
-      };
-
-      if (!deal_id || !follow_up_date) {
-        return { id, status: "failed", error: "deal_id and follow_up_date required" };
-      }
-
-      const ownedDeal = await findOwnedDeal(db, {
-        userId,
-        workspaceId,
-        dealId: deal_id,
-      });
-
-      if (!ownedDeal) {
-        return { id, status: "failed", error: "deal not found or not yours" };
-      }
-
-      const { error } = await db
-        .from("crm_deals")
-        .update({
-          next_follow_up_at: follow_up_date,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", deal_id)
-        .eq("assigned_rep_id", userId)
-        .eq("workspace_id", workspaceId);
-
-      if (error) return { id, status: "failed", error: error.message };
-
-      if (note) {
-        const { error: noteError } = await db.from("crm_activities").insert({
-          workspace_id: workspaceId,
-          activity_type: "note",
-          body: `Follow-up scheduled for ${follow_up_date}: ${note}`,
-          occurred_at: queued_at,
-          deal_id,
-          created_by: userId,
-          metadata: { source: "sales_companion_offline", type: "followup_scheduled" },
-        });
-
-        if (noteError) {
-          return { id, status: "failed", error: noteError.message };
-        }
-      }
-
-      return { id, status: "synced" };
-    }
-
-    default:
-      return { id, status: "failed", error: `unknown action_type: ${action_type}` };
+  try {
+    const { data, error } = await db.rpc("apply_sales_offline_action", {
+      p_workspace_id: workspaceId, p_user_id: userId, p_action_id: action.id,
+      p_action_type: action.action_type, p_payload: action.payload, p_queued_at: action.queued_at,
+    });
+    if (error) return { id: action.id, status: "failed", error: error.message };
+    if (!data || data.id !== action.id || data.status !== "synced") return { id: action.id, status: "failed", error: "Offline action receipt not confirmed" };
+    return { id: action.id, status: "synced" };
+  } catch (error) {
+    return { id: action.id, status: "failed", error: error instanceof Error ? error.message : "Offline action failed" };
   }
 }
 
@@ -375,11 +147,7 @@ export async function handleProcessOfflineQueue(
     });
   }
 
-  const sorted = [...body.actions].sort(
-    (a, b) =>
-      (ACTION_PRIORITY[a.action_type] ?? 99) -
-      (ACTION_PRIORITY[b.action_type] ?? 99),
-  );
+  const sorted = [...body.actions].sort((a, b) => Date.parse(a.queued_at) - Date.parse(b.queued_at));
 
   const results: ActionResult[] = [];
 
@@ -392,25 +160,6 @@ export async function handleProcessOfflineQueue(
     );
     results.push(result);
 
-    if (result.status === "synced") {
-      await adminClient
-        .from("offline_sync_queue")
-        .update({
-          sync_status: "synced",
-          synced_at: new Date().toISOString(),
-        })
-        .eq("id", action.id)
-        .eq("user_id", caller.userId);
-    } else {
-      await adminClient
-        .from("offline_sync_queue")
-        .update({
-          sync_status: "failed",
-          error_message: result.error ?? "unknown error",
-        })
-        .eq("id", action.id)
-        .eq("user_id", caller.userId);
-    }
   }
 
   const synced = results.filter((r) => r.status === "synced").length;

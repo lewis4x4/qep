@@ -10,7 +10,8 @@
 
     /* Primary: QEP Orange #E87722 */
     --primary: 26 81% 52%;
-    --primary-foreground: 0 0% 100%;
+    /* Brand orange needs a dark foreground for normal-size text contrast. */
+    --primary-foreground: 222 47% 8%;
 
     /* Background: QEP warm off-white #F7F8FA */
     --background: 220 25% 97%;
@@ -257,6 +258,8 @@
 
   html {
     scroll-behavior: smooth;
+    /* Keep browser-scrolled keyboard targets below the fixed QEP header. */
+    scroll-padding-top: 7rem;
   }
 
   body {

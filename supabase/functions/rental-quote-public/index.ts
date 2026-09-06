@@ -94,10 +94,13 @@ interface QuoteContractRow {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { status: 200, headers: CORS });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { status: 200, headers: CORS });
+  }
   if (req.method !== "POST") return json(405, { error: "POST only" });
 
-  let body: { action?: string; token?: string; signer_name?: string; signature_data_url?: string };
+  let body: { action?: string; token?: string; signer_name?: string; signature_data_url?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -105,9 +108,12 @@ Deno.serve(async (req) => {
   }
 
   const token = typeof body.token === "string" ? body.token.trim() : "";
-  if (!token || token.length < 16) return json(400, { error: "token required" });
+  if (!token || token.length < 16) {
+    return json(400, { error: "token required" });
+  }
 
-  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false },
+  });
 
   const { data: contract, error: contractError } = await admin
     .from("rental_contracts")
@@ -152,8 +158,10 @@ Deno.serve(async (req) => {
     lifecycle_state: row.lifecycle_state,
     company_name: companyName,
     equipment: equipment
-      ? { label: [equipment.year, equipment.make, equipment.model].filter(Boolean).join(" ") || equipment.name }
-      : { label: [row.requested_make, row.requested_model].filter(Boolean).join(" ") || row.requested_category },
+      ? { label: [equipment.year, equipment.make, equipment.model].filter(Boolean).join(" ") || equipment.name,
+      }
+      : { label: [row.requested_make, row.requested_model].filter(Boolean).join(" ") || row.requested_category,
+      },
     start_date: row.requested_start_date,
     end_date: row.requested_end_date,
     daily_rate: row.agreed_daily_rate ?? row.estimate_daily_rate,
@@ -174,7 +182,9 @@ Deno.serve(async (req) => {
     return json(200, { ok: true, quote: quotePayload });
   }
 
-  if (body.action !== "sign") return json(400, { error: "action must be read or sign" });
+  if (body.action !== "sign") {
+    return json(400, { error: "action must be read or sign" });
+  }
 
   // ── Sign ────────────────────────────────────────────────────────────
   const signerName = typeof body.signer_name === "string" ? body.signer_name.trim() : "";
@@ -184,20 +194,32 @@ Deno.serve(async (req) => {
     return json(400, { error: "signature_data_url must be a PNG data URL" });
   }
 
-  // Idempotent replay: one valid signature per contract (m607 index).
-  if (row.native_signature_id) {
+  // The atomic command verifies signature linkage and the reservation postcondition.
+  if (row.native_signature_id && row.lifecycle_state !== "quoted") {
+    const { data: resumed, error } = await admin.rpc(
+      "rental_sign_quote_atomic",
+      { p_contract_id: row.id, p_token: token, p_signature: {} },
+    );
+    if (error || !resumed) {
+      return json(409, {
+        error: error?.message ?? "Signature reservation requires review",
+      });
+    }
     return json(200, {
       ok: true,
       already_signed: true,
-      quote: quotePayload,
+      lifecycle_state: resumed.lifecycle_state,
     });
   }
 
   if (row.lifecycle_state !== "quoted") {
-    return json(409, { error: `quote is not open for signing (state: ${row.lifecycle_state})` });
+    return json(409, { error: `quote is not open for signing (state: ${row.lifecycle_state})`,
+    });
   }
   if (!row.qrm_company_id && !row.portal_customer_id) {
-    return json(409, { error: "quote has no customer anchor — contact the dealership" });
+    return json(409, {
+      error: "quote has no customer anchor — contact the dealership",
+    });
   }
 
   // rental_contract_signatures.portal_customer_id is NOT NULL (m607 was
@@ -205,20 +227,29 @@ Deno.serve(async (req) => {
   // identity via the same find-or-create the N4.1 fleet writer uses.
   let portalCustomerId = row.portal_customer_id;
   if (!portalCustomerId && row.qrm_company_id) {
-    const { data: resolved } = await admin.rpc("qep_find_or_create_portal_identity", {
-      p_workspace_id: row.workspace_id,
-      p_crm_company_id: row.qrm_company_id,
-    });
+    const { data: resolved } = await admin.rpc(
+      "qep_find_or_create_portal_identity",
+      {
+        p_workspace_id: row.workspace_id,
+        p_crm_company_id: row.qrm_company_id,
+      },
+    );
     portalCustomerId = (resolved as string | null) ?? null;
   }
   if (!portalCustomerId) {
-    return json(409, { error: "no portal identity resolvable for this quote — contact the dealership" });
+    return json(409, {
+      error:
+        "no portal identity resolvable for this quote — contact the dealership",
+    });
   }
 
   const signedAt = new Date().toISOString();
   const signedSnapshot = {
     rental_contract: {
       id: row.id,
+      equipment_id: row.equipment_id,
+      rpo_eligible: row.rpo_eligible,
+      rpo_purchase_price_cents: row.rpo_purchase_price_cents,
       contract_number: row.contract_number,
       lifecycle_state: row.lifecycle_state,
       requested_start_date: row.requested_start_date,
@@ -241,59 +272,31 @@ Deno.serve(async (req) => {
     signer_name: signerName,
   });
 
-  const { data: inserted, error: insertError } = await admin
-    .from("rental_contract_signatures")
-    .insert({
-      workspace_id: row.workspace_id,
-      rental_contract_id: row.id,
-      portal_customer_id: portalCustomerId,
-      signer_name: signerName,
-      signer_ip: clientIp(req),
-      signer_user_agent: req.headers.get("user-agent"),
-      signature_image_url: dataUrl,
-      signed_snapshot: signedSnapshot,
-      signed_via: "share_link",
-      document_hash: documentHash,
-      is_valid: true,
-      signed_at: signedAt,
-    })
-    .select("id, signed_at")
-    .single();
-  if (insertError || !inserted) {
-    // one-valid-signature race — treat as already signed
-    const { data: raced } = await admin
-      .from("rental_contract_signatures")
-      .select("id, signed_at, signer_name")
-      .eq("rental_contract_id", row.id)
-      .eq("is_valid", true)
-      .limit(1)
-      .maybeSingle();
-    if (raced) return json(200, { ok: true, already_signed: true });
-    return json(500, { error: insertError?.message ?? "signature write failed" });
-  }
-
-  // Freeze agreed rates at the signed price and reserve the contract.
-  // The m769 guard validates quoted → reserved; the m809 trigger emits
-  // rental.quote.won.
-  const { data: reserved, error: reserveError } = await admin
-    .from("rental_contracts")
-    .update({
-      native_signature_id: inserted.id,
-      native_signed_at: inserted.signed_at,
-      native_signer_name: signerName,
-      signed_terms_url: null,
-      agreed_daily_rate: row.agreed_daily_rate ?? row.estimate_daily_rate,
-      agreed_weekly_rate: row.agreed_weekly_rate ?? row.estimate_weekly_rate,
-      agreed_monthly_rate: row.agreed_monthly_rate ?? row.estimate_monthly_rate,
-      lifecycle_state: "reserved",
-    })
-    .eq("id", row.id)
-    .select("id, lifecycle_state, contract_number")
-    .single();
+  const { data: reserved, error: reserveError } = await admin.rpc(
+    "rental_sign_quote_atomic",
+    {
+      p_contract_id: row.id,
+      p_token: token,
+      p_signature: {
+        workspace_id: row.workspace_id,
+        rental_contract_id: row.id,
+        portal_customer_id: portalCustomerId,
+        signer_name: signerName,
+        signer_ip: clientIp(req),
+        signer_user_agent: req.headers.get("user-agent"),
+        signature_image_url: dataUrl,
+        signed_snapshot: signedSnapshot,
+        signed_via: "share_link",
+        document_hash: documentHash,
+        is_valid: true,
+        signed_at: signedAt,
+      },
+    },
+  );
   if (reserveError || !reserved) {
-    return json(500, {
-      error: reserveError?.message ?? "signature recorded but the reservation failed — contact the dealership",
-      signature_id: inserted.id,
+    return json(409, {
+      error: reserveError?.message ??
+        "Signature and reservation were not saved; retry is safe",
     });
   }
 

@@ -48,7 +48,7 @@ for (const f of files) {
   const cwd = isWeb ? WEB_DIR : ROOT;
   const relFromCwd = f.startsWith(cwd + "/") ? f.slice(cwd.length + 1) : f;
   console.log(`\n── ${relFromCwd}`);
-  const r = spawnSync("bun", ["test", relFromCwd], { stdio: "inherit", cwd });
+  const r = spawnSync("bun", ["--no-env-file", "test", relFromCwd], { stdio: "inherit", cwd });
   if ((r.status ?? 1) !== 0) failures++;
 }
 

@@ -95,6 +95,9 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Monaco,
 }
 
 export function ServiceWorkInProcessPage() {
+  const [payrollFrom, setPayrollFrom] = useState(() => `${new Date().toISOString().slice(0, 7)}-01`);
+  const [payrollTo, setPayrollTo] = useState(() => new Date().toISOString().slice(0, 10));
+
   const [billingStatus, setBillingStatus] = useState<ServiceWipBillingStatus | "all">("all");
   const [agingBucket, setAgingBucket] = useState<ServiceWipAgingBucket | "all">("all");
   const [search, setSearch] = useState("");
@@ -169,22 +172,26 @@ export function ServiceWorkInProcessPage() {
             billed_status: billingStatus === "all" ? undefined : billingStatus,
             wip_age_bucket: agingBucket === "all" ? undefined : agingBucket,
           }
-        : { format: "csv", summary_by: "detail" };
-      const { data, error } = await supabase.functions.invoke<unknown>(functionName, { body });
+        : { format: "csv", summary_by: "detail", labor_date_from: payrollFrom, labor_date_to: payrollTo, limit: 10000 };
+      if (kind === "payroll" && (!payrollFrom || !payrollTo || payrollFrom > payrollTo)) throw new Error("Choose a valid payroll period before exporting.");
+      const result = await supabase.functions.invoke<unknown>(functionName, { body });
+      const { data, error } = result;
+      const response = (result as { response?: Response }).response;
       if (error) throw error;
       return {
         filename: kind === "wip" ? `service-wip-${today}.csv` : `service-payroll-hours-${today}.csv`,
         print: action.endsWith("print"),
         text: await functionDataToText(data),
+        reconciliation: kind === "payroll" ? ` ${response?.headers.get("X-QEP-Source-Row-Count") ?? "All selected"} source rows; ${response?.headers.get("X-QEP-Total-Hours") ?? "verified"} hours. Period ${payrollFrom} to ${payrollTo}.` : "",
       };
     },
-    onSuccess: ({ filename, print, text }) => {
+    onSuccess: ({ filename, print, text, reconciliation }) => {
       if (print) {
         printTextReport(filename, text);
-        setExportMessage(`Opened printable ${filename}.`);
+        setExportMessage(`Opened printable ${filename}.${reconciliation}`);
       } else {
         downloadTextFile(filename, text);
-        setExportMessage(`Downloaded ${filename}.`);
+        setExportMessage(`Downloaded ${filename}.${reconciliation}`);
       }
     },
     onError: (error) => {
@@ -195,6 +202,7 @@ export function ServiceWorkInProcessPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 md:px-6 lg:px-8">
       <ServiceSubNav />
+      <div className="flex flex-wrap gap-3 text-sm"><label>Payroll period start <input aria-label="Payroll period start" type="date" value={payrollFrom} onChange={(e) => setPayrollFrom(e.target.value)} className="rounded border border-border bg-background p-2" /></label><label>Payroll period end <input aria-label="Payroll period end" type="date" value={payrollTo} onChange={(e) => setPayrollTo(e.target.value)} className="rounded border border-border bg-background p-2" /></label></div>
 
       <Card className="border border-border/50 bg-card/90 p-5 shadow-sm">
         <div className="flex items-start justify-between gap-3">

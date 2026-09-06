@@ -162,48 +162,13 @@ Deno.serve(async (req) => {
         const body = await req.json();
         if (!body.sop_step_id) return safeJsonError("sop_step_id required", 400, origin);
 
-        const { data: completion, error } = await supabase
-          .from("sop_step_completions")
-          .insert({
-            sop_execution_id: resourceId,
-            sop_step_id: body.sop_step_id,
-            completed_by: user.id,
-            decision_taken: body.decision_taken || null,
-            notes: body.notes || null,
-            evidence_urls: body.evidence_urls || [],
-            duration_minutes: body.duration_minutes || null,
-          })
-          .select()
-          .single();
-
-        if (error) return safeJsonError("Failed to complete step", 500, origin);
-
-        // Check if all steps are complete → auto-close execution
-        const { data: exec } = await supabase
-          .from("sop_executions")
-          .select("sop_template_id")
-          .eq("id", resourceId)
-          .single();
-
-        if (exec) {
-          const { count: totalSteps } = await supabase
-            .from("sop_steps")
-            .select("*", { count: "exact", head: true })
-            .eq("sop_template_id", exec.sop_template_id);
-
-          const { count: completedSteps } = await supabase
-            .from("sop_step_completions")
-            .select("*", { count: "exact", head: true })
-            .eq("sop_execution_id", resourceId);
-
-          if (totalSteps && completedSteps && completedSteps >= totalSteps) {
-            await supabase
-              .from("sop_executions")
-              .update({ status: "completed", completed_at: new Date().toISOString() })
-              .eq("id", resourceId);
-          }
-        }
-
+        const { data: completion, error } = await supabase.rpc("complete_sop_step_once", {
+          p_execution_id: resourceId, p_step_id: body.sop_step_id,
+          p_details: { decision_taken: body.decision_taken ?? null, notes: body.notes ?? null,
+            evidence_urls: body.evidence_urls ?? [], duration_minutes: body.duration_minutes ?? null,
+            completion_state: body.completion_state ?? "completed" },
+        });
+        if (error) return safeJsonError(error.message ?? "Failed to complete step", 409, origin);
         return safeJsonOk({ completion }, origin, 201);
       }
 
@@ -241,7 +206,7 @@ Deno.serve(async (req) => {
           .select()
           .single();
 
-        if (error) return safeJsonError("Failed to close execution", 500, origin);
+        if (error) return safeJsonError(error.code === "23514" ? "Complete or explicitly resolve every SOP step before closing" : "Failed to close execution", error.code === "23514" ? 409 : 500, origin);
         return safeJsonOk({ execution: data }, origin);
       }
     }

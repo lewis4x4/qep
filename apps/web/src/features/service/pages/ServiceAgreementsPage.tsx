@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
+import { ServicePlanOperationsPanel } from "../components/ServicePlanOperationsPanel";
 import { ServiceSubNav } from "../components/ServiceSubNav";
 import {
   deriveServiceAgreementStatus,
@@ -86,7 +87,7 @@ export function ServiceAgreementsPage() {
           location_code: locationCode.trim() || null,
           program_name: programName.trim(),
           category: category.trim() || null,
-          status: "active",
+          status: "draft",
           starts_on: new Date().toISOString().slice(0, 10),
           expires_on: new Date(new Date().setMonth(new Date().getMonth() + Number(termMonths || "12"))).toISOString().slice(0, 10),
           term_months: Number(termMonths || "12"),
@@ -118,6 +119,7 @@ export function ServiceAgreementsPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 md:px-6 lg:px-8">
       <ServiceSubNav />
+      <ServicePlanOperationsPanel />
 
       <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
         <Card className="border border-border/50 bg-card/90 p-5 shadow-sm">
@@ -131,8 +133,7 @@ export function ServiceAgreementsPage() {
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 Dedicated agreement register for PM contracts with contract number, covered machine,
-                customer, program, category, and expiry tracking. This is separate from `maintenance_schedules`,
-                which remain the downstream schedule engine.
+                customer, program, category, and expiry tracking. New agreements are drafts; review the program and enroll the machine above to enable PM scheduling.
               </p>
             </div>
             <div className="rounded-2xl bg-primary/10 p-3 text-primary">
@@ -260,6 +261,8 @@ export function ServiceAgreementsPage() {
         <div className="mt-4 space-y-3">
           {agreementsQuery.isLoading ? (
             <p className="text-sm text-muted-foreground">Loading agreements…</p>
+          ) : agreementsQuery.isError ? (
+            <p role="alert" className="text-destructive">{agreementsQuery.error.message}</p>
           ) : visible.length === 0 ? (
             <p className="text-sm text-muted-foreground">No service agreements match the current filters.</p>
           ) : (

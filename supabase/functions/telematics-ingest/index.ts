@@ -181,14 +181,15 @@ Deno.serve(async (req) => {
       if (callerWorkspace) {
         feedUpdate = feedUpdate.eq("workspace_id", callerWorkspace);
       }
-      await feedUpdate;
+      const { data: savedFeed, error: saveFeedError } = await feedUpdate.select("id").maybeSingle();
+      if (saveFeedError || !savedFeed) throw new Error("Telematics reading was not persisted");
 
       // If linked to EaaS subscription, update usage record
       if (feed.subscription_id && reading.hours != null) {
         const today = new Date().toISOString().split("T")[0];
         const monthStart = today.substring(0, 7) + "-01";
 
-        await supabase
+        const { error: usageError } = await supabase
           .from("eaas_usage_records")
           .upsert({
             subscription_id: feed.subscription_id,
@@ -198,6 +199,7 @@ Deno.serve(async (req) => {
             source: "telematics",
             telematics_device_id: reading.deviceId,
           }, { onConflict: "subscription_id,period_start" });
+        if (usageError) throw new Error("Telematics usage was not persisted; retry the reading");
       }
 
       return safeJsonOk({ ok: true, feed_id: feed.id }, origin);

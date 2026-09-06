@@ -103,7 +103,8 @@
     "kb:meeting-ingest:verify": "bun ./scripts/verify/kb-meeting-ingest.mjs",
     "test:rental-rate": "bun test ./shared/rental-rate-math.test.ts",
     "test:equipment-invoice": "bun test ./shared/equipment-invoice-core.test.ts",
-    "verify:rental-lockdown": "bun ./scripts/rental/verify-rpc-workspace-lockdown.mjs"
+    "verify:rental-lockdown": "bun ./scripts/rental/verify-rpc-workspace-lockdown.mjs",
+    "test:remediation": "bun --no-env-file scripts/agent-gates/run-remediation-tests.mjs"
   },
   "devDependencies": {
     "playwright": "^1.52.0",

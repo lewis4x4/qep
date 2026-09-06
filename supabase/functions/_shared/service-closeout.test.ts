@@ -40,7 +40,7 @@ Deno.test("service closeout syncs AR when invoice exists on invoiced and paid_cl
   if (
     !closeoutSource.includes("if (finalize.invoice_id)") ||
     closeoutSource.indexOf("if (finalize.invoice_id)") >
-      closeoutSource.indexOf('params.stage === "paid_closed"')
+      closeoutSource.indexOf('if (params.stage === "paid_closed")')
   ) {
     throw new Error(
       "Expected AR sync from finalize.invoice_id before paid_closed-only warranty block",
@@ -67,9 +67,9 @@ Deno.test("service closeout queues warranty only on paid_closed", () => {
 Deno.test("service-job-router wires closeout on invoiced and paid_closed", () => {
   for (
     const expected of [
-      "import { executeServiceJobCloseout }",
+      "commitServiceCloseoutTransition",
       'to_stage === "invoiced" || to_stage === "paid_closed"',
-      "executeServiceJobCloseout(supabase",
+      "commitServiceCloseoutTransition(supabase",
       "closeout: closeoutResult",
     ]
   ) {

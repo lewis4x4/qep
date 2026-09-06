@@ -41,7 +41,8 @@ export function useSalesPipeline() {
     activeFilter,
     setActiveFilter,
     stageCounts,
-    isLoading: pipelineQuery.isLoading,
-    error: pipelineQuery.error,
+    isLoading: pipelineQuery.isLoading || stagesQuery.isLoading,
+    error: pipelineQuery.error ?? stagesQuery.error,
+    retry: () => Promise.all([pipelineQuery.refetch(), stagesQuery.refetch()]),
   };
 }

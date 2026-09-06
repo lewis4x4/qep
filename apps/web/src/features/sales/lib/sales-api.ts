@@ -1,4 +1,5 @@
 /** Sales Companion API — Supabase queries */
+import { readAllPages } from "@/lib/read-all-pages";
 import { supabase } from "@/lib/supabase";
 
 /** Resolve workspace_id from the authenticated user's profile */
@@ -146,12 +147,11 @@ export async function fetchTodayBriefing(): Promise<TodayBriefing | null> {
 }
 
 export async function fetchRepPipeline(): Promise<RepPipelineDeal[]> {
-  const { data, error } = await supabase
+  const data = await readAllPages((from, to) => supabase
     .from("v_rep_pipeline")
     .select("*")
-    .limit(500);
-
-  if (error) throw error;
+    .order("deal_id", { ascending: true })
+    .range(from, to));
   return normalizeRepPipelineDeals(data);
 }
 

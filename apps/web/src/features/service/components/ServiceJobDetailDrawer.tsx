@@ -1,5 +1,6 @@
 import { useServiceJob } from "../hooks/useServiceJobs";
 import { useTransitionServiceJob } from "../hooks/useServiceJobMutation";
+import { ServiceHaulPanel } from "./ServiceHaulPanel";
 import { ServiceQuoteBuilder } from "./ServiceQuoteBuilder";
 import { ServiceWorkOrderGatePanels } from "./ServiceWorkOrderGatePanels";
 import { CompletionFeedbackForm } from "./CompletionFeedbackForm";
@@ -701,6 +702,7 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
             </section>
 
             <ServiceWorkOrderGatePanels job={job} role={profile?.role ?? ""} />
+            {job.haul_required && ["rep", "admin", "manager", "owner", "service_writer", "dispatch"].includes(profile?.role ?? "") && <ServiceHaulPanel job={job} />}
 
             {/* Problem */}
             {job.customer_problem_summary && (
@@ -929,10 +931,10 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                     <p className="font-semibold text-emerald-200">Last closeout</p>
                     <ul className="space-y-0.5 text-foreground/90">
                       {lastCloseout.invoice_finalized && (
-                        <li>Invoice sent to customer</li>
+                        <li>Invoice finalized</li>
                       )}
                       {lastCloseout.ar_synced && (
-                        <li>AR posted for sales</li>
+                        <li>AR synchronized</li>
                       )}
                       {lastCloseout.warranty_queued && (
                         <li>Warranty claim queued</li>
@@ -946,7 +948,7 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                         !lastCloseout.ar_synced &&
                         !lastCloseout.warranty_queued &&
                         lastCloseout.warnings.length === 0 && (
-                        <li className="text-muted-foreground">Closeout completed with no billable invoice.</li>
+                        <li className="text-muted-foreground">{lastCloseout.invoice_not_applicable ? "No customer invoice is required for this job." : "No billable invoice was returned; verify the financial closeout status."}</li>
                       )}
                     </ul>
                   </div>

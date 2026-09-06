@@ -4,7 +4,6 @@ Deno.test("service-haul-router prices H7.1 hauls through the rate-sheet RPC", ()
   for (
     const expected of [
       "service_calculate_haul_charge",
-      "calculateServiceHaulPricing",
       "truck_class",
       "mileage_one_way",
       "round_trip_miles",
@@ -13,7 +12,6 @@ Deno.test("service-haul-router prices H7.1 hauls through the rate-sheet RPC", ()
       "haul_total_cents",
       "haul_cost_cents",
       "rate_calc",
-      "edge_fallback_legacy_minimum",
       "reveal_gps_manual_fallback",
     ]
   ) {
@@ -43,4 +41,9 @@ Deno.test("service-haul-router persists schedule, driver, and advisor dispatch f
       );
     }
   }
+});
+
+Deno.test("haul pricing fails explicitly without an approved sheet",()=>{
+ if(source.includes("edge_fallback_legacy_minimum") || source.includes("perHaulMinimumCents: 50000")) throw new Error("Manufactured haul fallback returned");
+ if(!source.includes("No approved haul price")) throw new Error("Missing actionable pricing failure");
 });

@@ -1,8 +1,9 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState, type SetStateAction } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, BadgeCheck, ClipboardCheck, Loader2, PenLine, ShieldCheck, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { useRetainedDraft } from "@/hooks/useRetainedDraft";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { WorkforceSubNav } from "../components/WorkforceSubNav";
@@ -112,15 +113,6 @@ export function WorkforcePerformanceAppraisalsPage() {
   const canManage = canManageWorkforce(role);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [scorecardRole, setScorecardRole] = useState<ScorecardRole>("technician");
-  const [scoreDraft, setScoreDraft] = useState<ScoreDraft>({});
-  const [managerSummary, setManagerSummary] = useState("");
-  const [strengths, setStrengths] = useState("");
-  const [improvements, setImprovements] = useState("");
-  const [goals, setGoals] = useState("");
-  const [colRaise, setColRaise] = useState("0");
-  const [managerSignature, setManagerSignature] = useState(profile?.full_name ?? "");
-  const [employeeSignature, setEmployeeSignature] = useState(profile?.full_name ?? "");
-  const [employeeComments, setEmployeeComments] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [createForm, setCreateForm] = useState({
     subject_employee_id: "",
@@ -153,20 +145,34 @@ export function WorkforcePerformanceAppraisalsPage() {
     }
   }, [appraisals, selectedId]);
 
+  const serverDraft = useMemo(() => ({
+    scoreDraft: scoresFromAppraisal(selectedAppraisal),
+    managerSummary: selectedAppraisal?.manager_summary ?? "",
+    strengths: (selectedAppraisal?.key_strengths ?? []).join("\n"),
+    improvements: (selectedAppraisal?.improvement_areas ?? []).join("\n"),
+    goals: (selectedAppraisal?.goals_next_period ?? []).join("\n"),
+    colRaise: String(selectedAppraisal?.cost_of_living_raise_pct ?? 0),
+    managerSignature: selectedAppraisal?.manager_signature_name ?? profile?.full_name ?? "",
+    employeeSignature: selectedAppraisal?.employee_signature_name ?? profile?.full_name ?? "",
+    employeeComments: selectedAppraisal?.employee_comments ?? "",
+  }), [selectedAppraisal, profile?.full_name]);
+  const editor = useRetainedDraft(
+    selectedAppraisal && profile?.id ? `qep:appraisal-draft:${profile.id}:${selectedAppraisal.workspace_id}:${selectedAppraisal.id}` : null,
+    serverDraft, selectedAppraisal?.updated_at ?? null,
+  );
+  const { scoreDraft, managerSummary, strengths, improvements, goals, colRaise, managerSignature, employeeSignature, employeeComments } = editor.value;
+  const setScoreDraft = (update: SetStateAction<ScoreDraft>) => editor.setValue((current) => ({ ...current, scoreDraft: typeof update === "function" ? update(current.scoreDraft) : update }));
+  const setManagerSummary = (value: string) => editor.setValue((current) => ({ ...current, managerSummary: value }));
+  const setStrengths = (value: string) => editor.setValue((current) => ({ ...current, strengths: value }));
+  const setImprovements = (value: string) => editor.setValue((current) => ({ ...current, improvements: value }));
+  const setGoals = (value: string) => editor.setValue((current) => ({ ...current, goals: value }));
+  const setColRaise = (value: string) => editor.setValue((current) => ({ ...current, colRaise: value }));
+  const setManagerSignature = (value: string) => editor.setValue((current) => ({ ...current, managerSignature: value }));
+  const setEmployeeSignature = (value: string) => editor.setValue((current) => ({ ...current, employeeSignature: value }));
+  const setEmployeeComments = (value: string) => editor.setValue((current) => ({ ...current, employeeComments: value }));
   useEffect(() => {
-    if (!selectedAppraisal) return;
-    setScorecardRole(selectedAppraisal.scorecard_role);
-    setScoreDraft(scoresFromAppraisal(selectedAppraisal));
-    setManagerSummary(selectedAppraisal.manager_summary ?? "");
-    setStrengths((selectedAppraisal.key_strengths ?? []).join("\n"));
-    setImprovements((selectedAppraisal.improvement_areas ?? []).join("\n"));
-    setGoals((selectedAppraisal.goals_next_period ?? []).join("\n"));
-    setColRaise(String(selectedAppraisal.cost_of_living_raise_pct ?? 0));
-    setManagerSignature(selectedAppraisal.manager_signature_name ?? profile?.full_name ?? "");
-    setEmployeeSignature(selectedAppraisal.employee_signature_name ?? profile?.full_name ?? "");
-    setEmployeeComments(selectedAppraisal.employee_comments ?? "");
-    setActionError(null);
-  }, [profile?.full_name, selectedAppraisal]);
+    if (selectedAppraisal) setScorecardRole(selectedAppraisal.scorecard_role);
+  }, [selectedAppraisal?.id, selectedAppraisal?.scorecard_role]);
 
   const manageableEmployees = useMemo(
     () => filterManageableEmployees(employeesQuery.data ?? [], profile?.id, role),
@@ -202,6 +208,7 @@ export function WorkforcePerformanceAppraisalsPage() {
 
   const saveMutation = useMutation({
     mutationFn: scoreAppraisal,
+    onError: () => selectedId ? queryClient.invalidateQueries({ queryKey: ["workforce", "appraisal", selectedId] }) : undefined,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["workforce", "appraisals"] });
       if (selectedId) await queryClient.invalidateQueries({ queryKey: ["workforce", "appraisal", selectedId] });
@@ -210,6 +217,7 @@ export function WorkforcePerformanceAppraisalsPage() {
 
   const finalizeMutation = useMutation({
     mutationFn: finalizeAppraisal,
+    onError: () => selectedId ? queryClient.invalidateQueries({ queryKey: ["workforce", "appraisal", selectedId] }) : undefined,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["workforce", "appraisals"] });
       if (selectedId) await queryClient.invalidateQueries({ queryKey: ["workforce", "appraisal", selectedId] });
@@ -218,6 +226,7 @@ export function WorkforcePerformanceAppraisalsPage() {
 
   const acknowledgeMutation = useMutation({
     mutationFn: acknowledgeAppraisal,
+    onError: () => selectedId ? queryClient.invalidateQueries({ queryKey: ["workforce", "appraisal", selectedId] }) : undefined,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["workforce", "appraisals"] });
       if (selectedId) await queryClient.invalidateQueries({ queryKey: ["workforce", "appraisal", selectedId] });
@@ -244,6 +253,7 @@ export function WorkforcePerformanceAppraisalsPage() {
 
   function buildScorePayload() {
     if (!selectedAppraisal) throw new Error("Select an appraisal first.");
+    if (editor.conflict) throw new Error("Review the changed appraisal before saving your draft.");
     if (selectedCategories.length !== 7) throw new Error("Exactly seven scorecard categories are required.");
     const scores = selectedCategories.map((category) => {
       const score = normalizeScoreValue(scoreDraft[category.category_key]?.score ?? "");
@@ -256,6 +266,7 @@ export function WorkforcePerformanceAppraisalsPage() {
     });
     return {
       appraisal_id: selectedAppraisal.id,
+      expected_updated_at: editor.version,
       scores,
       manager_summary: managerSummary.trim() || null,
       cost_of_living_raise_pct: Number(colRaise || 0),
@@ -268,7 +279,9 @@ export function WorkforcePerformanceAppraisalsPage() {
   async function handleSave() {
     setActionError(null);
     try {
-      await saveMutation.mutateAsync(buildScorePayload());
+      const submitted = editor.value;
+      const saved = await saveMutation.mutateAsync(buildScorePayload());
+      editor.markSaved(submitted, saved.updated_at);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Failed to save scores.");
     }
@@ -277,13 +290,17 @@ export function WorkforcePerformanceAppraisalsPage() {
   async function handleFinalize() {
     setActionError(null);
     try {
-      await saveMutation.mutateAsync(buildScorePayload());
+      const submitted = editor.value;
+      const saved = await saveMutation.mutateAsync(buildScorePayload());
+      editor.markSaved(submitted, saved.updated_at);
       if (!selectedAppraisal) throw new Error("Select an appraisal first.");
-      await finalizeMutation.mutateAsync({
+      const finalized = await finalizeMutation.mutateAsync({
         appraisal_id: selectedAppraisal.id,
+        expected_updated_at: saved.updated_at,
         manager_summary: managerSummary.trim(),
         manager_signature_name: managerSignature.trim(),
       });
+      editor.markSaved(submitted, finalized.updated_at);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Failed to finalize appraisal.");
     }
@@ -294,11 +311,15 @@ export function WorkforcePerformanceAppraisalsPage() {
     setActionError(null);
     try {
       if (!selectedAppraisal) throw new Error("Select an appraisal first.");
-      await acknowledgeMutation.mutateAsync({
+      if (editor.conflict) throw new Error("Review the changed appraisal before acknowledging it.");
+      const submitted = editor.value;
+      const acknowledged = await acknowledgeMutation.mutateAsync({
         appraisal_id: selectedAppraisal.id,
+        expected_updated_at: editor.version,
         employee_signature_name: employeeSignature.trim(),
         employee_comments: employeeComments.trim() || null,
       });
+      editor.markSaved(submitted, acknowledged.updated_at);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Failed to acknowledge appraisal.");
     }
@@ -326,6 +347,16 @@ export function WorkforcePerformanceAppraisalsPage() {
 
       {error ? <ErrorState message={error instanceof Error ? error.message : "Unknown error"} /> : null}
       {actionError ? <ErrorState message={actionError} /> : null}
+      {editor.conflict ? <Card className="border-amber-500 p-4" role="alert">
+        <p className="font-semibold">This appraisal changed on the server. Your draft is retained.</p>
+        <p className="mt-1 text-sm">Review the latest saved record before applying your draft to its new version.</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button variant="outline" onClick={editor.acceptServer}>Discard my draft and load latest</Button>
+          <Button variant="outline" onClick={editor.retainAgainstLatest}>I reviewed the change; keep my draft</Button>
+        </div>
+        <details className="mt-3"><summary>Latest saved appraisal</summary><pre className="max-h-64 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(serverDraft, null, 2)}</pre></details>
+      </Card> : null}
+      {editor.dirty ? <p role="status" className="text-sm text-amber-600">{editor.storageError ? "Unsaved draft. Local storage is unavailable; keep this page open." : "Unsaved draft retained on this device for your account."}</p> : null}
       {loading ? <LoadingBlock label="Loading RLS-scoped appraisal workspace…" /> : null}
 
       <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
@@ -479,7 +510,7 @@ export function WorkforcePerformanceAppraisalsPage() {
                         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
-                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-black text-primary">{category.display_order}</span>
+                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-black text-qep-orange-accessible">{category.display_order}</span>
                               <h4 className="text-sm font-bold text-foreground">{category.category_name}</h4>
                               <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-bold", bandTone(liveBand ?? category.band))}>{liveBand ?? category.band ?? "Unscored"}</span>
                             </div>
@@ -487,10 +518,11 @@ export function WorkforcePerformanceAppraisalsPage() {
                               {category.criteria.slice(0, 6).map((criterion) => <li key={criterion}>• {criterion}</li>)}
                             </ul>
                           </div>
-                          <div className="w-full lg:w-56">
-                            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Score 1-10</label>
+                          <div className="min-w-0 w-full lg:w-56">
+                            <label htmlFor={`appraisal-score-${category.category_key}`} className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Score 1-10 · {category.category_name}</label>
                             <input
-                              className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-bold"
+                              id={`appraisal-score-${category.category_key}`}
+                              className="mt-1 min-w-0 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-bold"
                               type="number"
                               min="1"
                               max="10"
@@ -502,6 +534,7 @@ export function WorkforcePerformanceAppraisalsPage() {
                             <textarea
                               className="mt-2 min-h-16 w-full rounded-lg border border-border bg-background px-3 py-2 text-xs"
                               placeholder="Evidence / coaching notes"
+                              aria-label={`${category.category_name} evidence and coaching notes`}
                               disabled={readonly}
                               value={scoreDraft[category.category_key]?.notes ?? ""}
                               onChange={(event) => setScoreDraft((current) => ({ ...current, [category.category_key]: { score: current[category.category_key]?.score ?? "", notes: event.target.value } }))}

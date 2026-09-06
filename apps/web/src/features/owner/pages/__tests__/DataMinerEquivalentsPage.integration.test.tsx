@@ -7,8 +7,11 @@ import type { PropsWithChildren } from "react";
 mock.module("@/lib/supabase", () => ({
   supabase: {
     from: (table: string) => ({
-      select: () => ({
-        order: async () => {
+      select: () => {
+        const query = {
+        order: () => query,
+        range: async (from: number) => {
+          if (from > 0) return { data: [], error: null };
           if (table === "owner_data_miner_profitability") {
             return {
               data: [
@@ -68,7 +71,9 @@ mock.module("@/lib/supabase", () => ({
             error: null,
           };
         },
-      }),
+        };
+        return query;
+      },
     }),
   },
 }));

@@ -627,7 +627,8 @@ async function handleGenerate(
       haulTicket = (data ?? null) as Record<string, unknown> | null;
     }
     const ticketTotal = dollarsFromCents(haulTicket?.haul_total_cents);
-    const haulAmount = ticketTotal ?? 500;
+    if (ticketTotal == null) return safeJsonError("Hauling needs a confirmed truck-class rate and transport request before a quote can be generated. No default haul charge was added.", 409, origin);
+    const haulAmount = ticketTotal;
     const roundTripMiles = nonNegativeNumericValue(
       haulTicket?.round_trip_miles,
     );
@@ -654,9 +655,7 @@ async function handleGenerate(
       extended_price: haulAmount,
       margin_metadata: {
         h7_gate: "hauling_transport_dispatch",
-        source: ticketTotal == null
-          ? "legacy_flat_fallback"
-          : "traffic_ticket_rate_calc",
+        source: "traffic_ticket_rate_calc",
         traffic_ticket_id: haulTicket?.id ?? null,
         rate_type: haulTicket?.rate_type ?? null,
         truck_class: haulTicket?.truck_class ?? null,

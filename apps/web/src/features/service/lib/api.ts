@@ -34,7 +34,14 @@ async function invokeServiceRouter(body: Record<string, unknown>): Promise<unkno
   const { data, error } = await supabase.functions.invoke("service-job-router", {
     body,
   });
-  if (error) throw new Error(error.message ?? "Service router error");
+  if (error) {
+    const response = (error as { context?: unknown }).context;
+    if (response instanceof Response) {
+      const detail = await response.clone().json().catch(() => null) as { error?: unknown } | null;
+      if (typeof detail?.error === "string") throw new Error(detail.error);
+    }
+    throw new Error(error.message ?? "Service router error");
+  }
   return data;
 }
 
@@ -43,6 +50,7 @@ export async function createServiceJob(
 ): Promise<ServiceJobWithRelations> {
   const result = await invokeServiceRouter({
     action: "create",
+    operation_id: payload.operation_id ?? crypto.randomUUID(),
     ...payload,
   });
   return normalizeServiceJobResponse(result);
@@ -370,6 +378,9 @@ export async function recordSegmentLabor(payload: {
 }
 
 export async function uploadAndRecordSegmentPhoto(payload: {
+  operation_id?: string;
+  captured_by?: string;
+  captured_workspace_id?: string;
   workspace_id: string;
   service_job_id: string;
   segment_id: string;
@@ -379,13 +390,16 @@ export async function uploadAndRecordSegmentPhoto(payload: {
   file: File;
 }): Promise<unknown> {
   const safeName = payload.file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
-  const storagePath = `${payload.workspace_id}/service-jobs/${payload.service_job_id}/segments/${payload.segment_id}/${payload.phase}-${Date.now()}-${safeName}`;
+  const operationId = payload.operation_id ?? crypto.randomUUID();
+  const storagePath = `${payload.workspace_id}/service-jobs/${payload.service_job_id}/segments/${payload.segment_id}/${payload.phase}-${operationId}-${safeName}`;
   const { error: uploadError } = await supabase.storage
     .from("portal-service-photos")
     .upload(storagePath, payload.file, { contentType: payload.file.type || undefined });
-  if (uploadError) throw new Error(uploadError.message ?? "Photo upload failed");
-  return invokeServiceRouter({
-    action: "record_segment_photo",
+  if (uploadError && !/already exists|duplicate/i.test(uploadError.message)) throw new Error(uploadError.message ?? "Photo upload failed");
+  return recordServiceFieldPacket(operationId, payload.service_job_id, {
+    kind: "segment_photo",
+    captured_by: payload.captured_by,
+    captured_workspace_id: payload.captured_workspace_id,
     segment_id: payload.segment_id,
     phase: payload.phase,
     category: payload.category,
@@ -534,4 +548,19 @@ export async function listServiceLinePayers(jobId: string): Promise<H8LinePayerR
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+export async function recordServiceFieldPacket(operationId: string, jobId: string, packet: Record<string, unknown>): Promise<unknown> {
+  return invokeServiceRouter({ action: "field_packet", operation_id: operationId, job_id: jobId, packet });
+}
+
+export async function fetchServiceMachineHistory(jobId: string): Promise<ServiceJobWithRelations[]> {
+  const rows: ServiceJobWithRelations[] = [];
+  for (let offset = 0; ; offset += 500) {
+    const result = await invokeServiceRouter({ action: "machine_history", job_id: jobId, offset }) as { history?: unknown };
+    if (!Array.isArray(result.history)) throw new Error("Machine history response was incomplete");
+    const page = result.history as ServiceJobWithRelations[];
+    rows.push(...page);
+    if (page.length < 500) return rows;
+  }
 }

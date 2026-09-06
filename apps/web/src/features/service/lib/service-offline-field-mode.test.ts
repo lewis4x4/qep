@@ -1,15 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import {
-  buildOfflineJobUpdateFields,
-  buildOfflineSegmentLaborFields,
-  cacheOfflineJobSnapshot,
-  drainOfflineFieldQueue,
-  enqueueOfflineFieldAction,
-  enqueueOfflineJobUpdate,
-  getCachedOfflineJobSnapshot,
-  getOfflineFieldQueue,
-  listCachedOfflineJobSnapshots,
-} from "./service-offline-field-mode";
+import { buildOfflineJobUpdateFields, buildOfflineSegmentLaborFields, createOfflineFieldStore } from "./service-offline-field-mode";
+const { cacheOfflineJobSnapshot, drainOfflineFieldQueue, enqueueOfflineFieldAction, enqueueOfflineJobUpdate,
+ getCachedOfflineJobSnapshot, getOfflineFieldQueue, listCachedOfflineJobSnapshots } = createOfflineFieldStore({ userId: "tech-1", workspaceId: "default" });
 import type { ServiceJobWithRelations } from "./types";
 
 const job = {
@@ -170,3 +162,71 @@ describe("service offline field mode", () => {
   });
 });
 
+
+describe("offline durability and operator separation", () => {
+  test("retains more than 75 unsynced operations", async () => {
+    for (let index = 0; index < 80; index++) await enqueueOfflineJobUpdate(`job-${index}`, { complaint: `note-${index}` });
+    const queue = await getOfflineFieldQueue();
+    expect(queue).toHaveLength(80);
+    expect(queue[0].jobId).toBe("job-0");
+  });
+  test("concurrent captures do not overwrite one another", async () => {
+    await Promise.all(Array.from({ length: 10 }, (_, index) => enqueueOfflineJobUpdate(`job-${index}`, { cause: "diagnosis" })));
+    expect(await getOfflineFieldQueue()).toHaveLength(10);
+  });
+  test("another operator or workspace never receives cached jobs or queued writes", async () => {
+    cacheOfflineJobSnapshot(job);
+    await enqueueOfflineJobUpdate(job.id, { complaint: "private" });
+    for (const scope of [{ userId: "tech-2", workspaceId: "default" }, { userId: "tech-1", workspaceId: "other" }]) {
+      const other = createOfflineFieldStore(scope);
+      expect(await other.getOfflineFieldQueue()).toEqual([]);
+      expect(other.listCachedOfflineJobSnapshots()).toEqual([]);
+    }
+  });
+  test("clock events retain identity and ordering through refresh", async () => {
+    const store = createOfflineFieldStore({ userId: "tech-1", workspaceId: "default" });
+    await store.enqueueOfflineFieldAction({ kind: "clock_start", jobId: job.id, sessionId: "session-1", occurredAt: "2026-09-06T10:00:00Z" });
+    expect((await createOfflineFieldStore({ userId: "tech-1", workspaceId: "default" }).getActiveClock(job.id))?.sessionId).toBe("session-1");
+    await store.enqueueOfflineFieldAction({ kind: "clock_stop", jobId: job.id, sessionId: "session-1", occurredAt: "2026-09-06T11:00:00Z" });
+    expect(await store.getActiveClock(job.id)).toBeNull();
+    expect((await store.getOfflineFieldQueue()).map(row => row.kind)).toEqual(["clock_start", "clock_stop"]);
+  });
+});
+
+test("storage refusal preserves already queued work and rejects the new save", async () => {
+  window.localStorage.clear();
+  await enqueueOfflineJobUpdate("kept", { complaint: "Keep this" });
+  const storage = window.localStorage;
+  const descriptor = Object.getOwnPropertyDescriptor(window, "localStorage");
+  Object.defineProperty(window, "localStorage", { configurable: true, value: {
+    getItem: (key: string) => storage.getItem(key),
+    setItem: () => { throw new Error("QuotaExceededError"); },
+  } });
+  try {
+    await expect(enqueueOfflineJobUpdate("not-saved", { complaint: "Too large" })).rejects.toThrow("QuotaExceededError");
+    expect((await getOfflineFieldQueue()).map(row => row.jobId)).toEqual(["kept"]);
+  } finally { if (descriptor) Object.defineProperty(window, "localStorage", descriptor); else Object.defineProperty(window, "localStorage", { configurable: true, value: storage }); }
+});
+
+test("corrupt scoped queues are retained rather than overwritten as empty", async () => {
+  window.localStorage.clear();
+  const key="qep_service_offline_field_queue_v1:default:tech-1";
+  window.localStorage.setItem(key,"broken-json");
+  await expect(enqueueOfflineJobUpdate("not-saved", { complaint: "New" })).rejects.toThrow("retained");
+  expect(window.localStorage.getItem(key)).toBe("broken-json");
+});
+
+test("retrying a delivered older stop cannot erase the newer active clock", async () => {
+  window.localStorage.clear();
+  const scope={userId:"tech-1",workspaceId:"default"};const store=createOfflineFieldStore(scope);
+  await store.enqueueOfflineFieldAction({kind:"clock_start",jobId:"job",sessionId:"S1",occurredAt:"2026-09-06T10:00:00Z"});
+  await store.drainOfflineFieldQueue(async()=>({}));
+  await store.enqueueOfflineFieldAction({kind:"clock_stop",jobId:"job",sessionId:"S1",occurredAt:"2026-09-06T11:00:00Z"});
+  await store.enqueueOfflineFieldAction({kind:"clock_start",jobId:"job",sessionId:"S2",occurredAt:"2026-09-06T11:01:00Z"});
+  const first=await store.drainOfflineFieldQueue(async action=>{if(action.kind==="clock_stop" && action.sessionId==="S1")throw new Error("server committed stop; response lost");return {};});
+  expect(first).toEqual({retried:2,succeeded:1,stillFailing:1});
+  const refreshed=createOfflineFieldStore(scope);expect((await refreshed.getActiveClock("job"))?.sessionId).toBe("S2");
+  await refreshed.enqueueOfflineFieldAction({kind:"clock_stop",jobId:"job",sessionId:"S2",occurredAt:"2026-09-06T12:00:00Z"});
+  const stops:string[]=[];await refreshed.drainOfflineFieldQueue(async action=>{if(action.kind==="clock_stop")stops.push(action.sessionId);return {};});
+  expect(stops).toEqual(["S1","S2"]);expect(await refreshed.getActiveClock("job")).toBeNull();
+});

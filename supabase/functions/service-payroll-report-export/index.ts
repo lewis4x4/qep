@@ -1,3 +1,4 @@
+import { collectCompleteReportRows } from "../_shared/complete-report-rows.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import {
   optionsResponse,
@@ -256,6 +257,7 @@ Deno.serve(async (req) => {
       SERVICE_BILLING_ROLES,
     );
     if (!auth.ok) return auth.response;
+    const authorized = auth;
 
     const input = await readInput(req);
     const format = parseFormat(input.format);
@@ -275,12 +277,17 @@ Deno.serve(async (req) => {
 
     requestId = await createRequestRow(auth, format, filters);
 
-    let query = auth.supabase
+    const detailRows = await collectCompleteReportRows<PayrollReportRow>({
+      maxRows: limit,
+      key: (row) => row.payroll_entry_id,
+      page: async (offset, size) => {
+        let query = authorized.supabase
       .from("v_deal_genome_service_payroll_hours_analysis")
-      .select(DETAIL_HEADERS.join(","))
-      .eq("workspace_id", auth.workspaceId)
+      .select(DETAIL_HEADERS.join(","), { count: "exact" })
+      .eq("workspace_id", authorized.workspaceId)
       .order("labor_date", { ascending: false })
-      .limit(limit);
+      .order("payroll_entry_id", { ascending: true })
+      .range(offset, offset + size - 1);
 
     if (filters.branch_id) query = query.eq("branch_id", filters.branch_id);
     if (filters.employee_id) {
@@ -302,10 +309,9 @@ Deno.serve(async (req) => {
       query = query.lte("billing_run_date", filters.billing_run_date_to);
     }
 
-    const { data, error } = await query;
-    if (error) throw new Error(error.message);
-
-    const detailRows = (data ?? []) as unknown as PayrollReportRow[];
+        return await query as unknown as { data: PayrollReportRow[] | null; count: number | null; error: { message: string } | null };
+      },
+    });
     const outputRows = summarizeRows(detailRows, summaryBy);
     const headers = summaryBy === "detail"
       ? DETAIL_HEADERS
@@ -325,7 +331,7 @@ Deno.serve(async (req) => {
         report_request_id: requestId,
         report_kind: REPORT_KIND,
         filters,
-        truncated: detailRows.length === limit,
+        truncated: false,
         source_row_count: detailRows.length,
         summary: buildSummary(detailRows),
         rows: outputRows,
@@ -337,11 +343,13 @@ Deno.serve(async (req) => {
       headers: {
         ...safeCorsHeaders(origin),
         "Access-Control-Expose-Headers":
-          "Content-Disposition, X-QEP-Report-Request-Id, X-QEP-Report-Row-Count",
+          "Content-Disposition, X-QEP-Report-Request-Id, X-QEP-Report-Row-Count, X-QEP-Source-Row-Count, X-QEP-Total-Hours",
         "Content-Disposition": `attachment; filename="${outName}"`,
         "Content-Type": "text/csv; charset=utf-8",
         "X-QEP-Report-Request-Id": requestId,
         "X-QEP-Report-Row-Count": String(outputRows.length),
+        "X-QEP-Source-Row-Count": String(detailRows.length),
+        "X-QEP-Total-Hours": String(buildSummary(detailRows).hours),
       },
     });
   } catch (err) {

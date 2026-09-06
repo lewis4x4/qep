@@ -278,6 +278,10 @@ export function SalesTopHeader() {
                   <DropdownMenuSeparator />
                 </>
               )}
+              <DropdownMenuItem asChild>
+                <Link to="/qrm/rentals">Rental inquiries and contracts</Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
                   {theme === "dark" ? (

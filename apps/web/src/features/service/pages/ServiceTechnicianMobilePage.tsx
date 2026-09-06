@@ -1,3 +1,4 @@
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -35,18 +36,13 @@ import {
   type TechnicianMobileFilter,
 } from "../lib/mobile-tech-utils";
 import { VoiceFieldNotes } from "../components/VoiceFieldNotes";
-import {
-  buildOfflineJobUpdateFields,
-  buildOfflineSegmentLaborFields,
-  cacheOfflineJobSnapshot,
-  drainOfflineFieldQueue,
-  enqueueOfflineJobUpdate,
-  enqueueOfflineSegmentLabor,
-  enqueueOfflineSegmentPhoto,
-  getCachedOfflineJobSnapshot,
-  getOfflineFieldQueue,
-  listCachedOfflineJobSnapshots,
-} from "../lib/service-offline-field-mode";
+import { buildOfflineJobUpdateFields, createOfflineFieldStore, hasLegacyOfflineFieldWork } from "../lib/service-offline-field-mode";
+import { fetchServiceMachineHistory } from "../lib/api";
+
+function useFieldStore() {
+  const { profile } = useAuth();
+  return useMemo(() => createOfflineFieldStore({ userId: profile?.id ?? "", workspaceId: profile?.active_workspace_id ?? "" }), [profile?.id, profile?.active_workspace_id]);
+}
 
 const FILTERS: Array<{ key: TechnicianMobileFilter; label: string }> = [
   { key: "focus", label: "Focus" },
@@ -154,7 +150,7 @@ function TechnicianJobListCard({
             </span>
           ))}
         </div>
-        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary">
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-qep-orange-accessible">
           {nextMove}
           <ChevronRight className="h-3.5 w-3.5" />
         </span>
@@ -192,16 +188,19 @@ function FieldOfflinePanel({
   isOnline: boolean;
   onSyncComplete: () => void;
 }) {
+  const store = useFieldStore();
+  const { drainOfflineFieldQueue, enqueueOfflineJobUpdate, enqueueOfflineSegmentPhoto, getOfflineFieldQueue } = store;
+  const [activeClock, setActiveClock] = useState<{ sessionId: string; occurredAt: string; segmentId?: string | null } | null>(null);
   const [hourMeter, setHourMeter] = useState(job.hour_meter_reading?.toString() ?? "");
   const [complaint, setComplaint] = useState(job.complaint ?? "");
   const [cause, setCause] = useState(job.cause ?? "");
   const [correction, setCorrection] = useState(job.correction ?? "");
-  const [laborHours, setLaborHours] = useState("");
   const [photoPhase, setPhotoPhase] = useState<"before" | "during" | "after">("before");
   const [photoCategory, setPhotoCategory] = useState("hour_meter");
   const [photoCaption, setPhotoCaption] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [pendingErrors, setPendingErrors] = useState<string[]>([]);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -215,7 +214,7 @@ function FieldOfflinePanel({
     setComplaint(job.complaint ?? "");
     setCause(job.cause ?? "");
     setCorrection(job.correction ?? "");
-    setLaborHours(primarySegment?.hours_actual?.toString() ?? "");
+    void store.getActiveClock(job.id).then(setActiveClock).catch(error => setStatusMessage(error instanceof Error ? error.message : "Clock recovery failed"));
   }, [
     job.id,
     job.hour_meter_reading,
@@ -229,7 +228,7 @@ function FieldOfflinePanel({
   useEffect(() => {
     let active = true;
     void getOfflineFieldQueue().then((queue) => {
-      if (active) setPendingCount(queue.length);
+      if (active) { setPendingCount(queue.length); setPendingErrors(queue.flatMap(action => action.lastError ? [action.lastError] : [])); }
     });
     return () => {
       active = false;
@@ -244,6 +243,7 @@ function FieldOfflinePanel({
       const result = await drainOfflineFieldQueue();
       const queue = await getOfflineFieldQueue();
       setPendingCount(queue.length);
+      setPendingErrors(queue.flatMap(action => action.lastError ? [action.lastError] : []));
       onSyncComplete();
       if (result.retried > 0) {
         setStatusMessage(
@@ -267,6 +267,7 @@ function FieldOfflinePanel({
   }, [isOnline]);
 
   const queueFieldPacket = async () => {
+    try {
     const queued: string[] = [];
     const jobFields = buildOfflineJobUpdateFields({
       hourMeter,
@@ -274,20 +275,10 @@ function FieldOfflinePanel({
       cause,
       correction,
     });
-    const segmentFields = buildOfflineSegmentLaborFields({
-      hoursActual: laborHours,
-      complaint,
-      cause,
-      correction,
-    });
-
-    const jobAction = await enqueueOfflineJobUpdate(job.id, jobFields);
+    const jobAction = await enqueueOfflineJobUpdate(job.id, jobFields, { hour_meter_reading: job.hour_meter_reading, complaint: job.complaint, cause: job.cause, correction: job.correction });
     if (jobAction) queued.push("work order");
 
     if (primarySegment) {
-      const laborAction = await enqueueOfflineSegmentLabor(job.id, primarySegment.id, segmentFields);
-      if (laborAction) queued.push("labor");
-
       if (photoFile) {
         const photoAction = await enqueueOfflineSegmentPhoto({
           workspaceId: job.workspace_id,
@@ -312,6 +303,18 @@ function FieldOfflinePanel({
 
     setStatusMessage(`${queued.length} field update${queued.length === 1 ? "" : "s"} queued.`);
     if (isOnline) await syncQueuedActions();
+    } catch (error) { setStatusMessage(error instanceof Error ? error.message : "Field packet was not saved. Keep this form open and retry."); }
+  };
+  const toggleClock = async () => {
+    try {
+      const occurredAt = new Date().toISOString();
+      await store.enqueueOfflineFieldAction({ kind: activeClock ? "clock_stop" : "clock_start", jobId: job.id,
+        sessionId: activeClock?.sessionId ?? crypto.randomUUID(), occurredAt, segmentId: activeClock?.segmentId ?? primarySegment?.id });
+      setActiveClock(await store.getActiveClock(job.id));
+      setPendingCount((await getOfflineFieldQueue()).length);
+      setStatusMessage("Clock event saved on this device; pending synchronization.");
+      if (isOnline) await syncQueuedActions();
+    } catch (error) { setStatusMessage(error instanceof Error ? error.message : "Clock was not saved. Retry."); }
   };
 
   return (
@@ -381,19 +384,12 @@ function FieldOfflinePanel({
           </label>
         </div>
 
-        <label className="grid gap-1 text-xs font-semibold text-muted-foreground">
-          Labor hours
-          <input
-            type="number"
-            inputMode="decimal"
-            min="0"
-            step="0.1"
-            value={laborHours}
-            onChange={(event) => setLaborHours(event.target.value)}
-            disabled={!primarySegment}
-            className="rounded-2xl border border-border/60 bg-background px-3 py-2 text-sm font-medium text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-          />
-        </label>
+        <div className="rounded-xl border p-3 space-y-2">
+          <p className="text-sm font-semibold">Job clock</p>
+          <p className="text-xs">{activeClock ? `Clocked on at ${new Date(activeClock.occurredAt).toLocaleString()}` : "No active clock on this job."}</p>
+          <button className="rounded-lg border px-3 py-2 text-sm" onClick={() => void toggleClock()}>{activeClock ? "Clock off" : "Clock on"}</button>
+          <p className="text-xs text-muted-foreground">Clock events survive refresh and reconnect. Synchronized clocks become work-order time evidence. Payroll and billable hours require their separate approval.</p>
+        </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="grid gap-1 text-xs font-semibold text-muted-foreground">
@@ -470,6 +466,11 @@ function FieldOfflinePanel({
         </button>
       </div>
 
+      {pendingErrors.length > 0 && <div role="alert" className="mt-3 rounded-lg border border-destructive/40 p-3 text-sm">
+        <p className="font-semibold">Queued work needs review</p>
+        <ul className="list-disc pl-4">{Array.from(new Set(pendingErrors)).map(error => <li key={error}>{error}</li>)}</ul>
+        <p>These packets remain saved. Reopen current work-order details and resolve conflicts with the service writer before retrying.</p>
+      </div>}
       {statusMessage ? (
         <p className="mt-3 text-xs text-muted-foreground" role="status">
           {statusMessage}
@@ -489,6 +490,10 @@ function TechnicianDetailSheet({
   transition: ReturnType<typeof useTransitionServiceJob>;
 }) {
   const queryClient = useQueryClient();
+  const store = useFieldStore();
+  const { getCachedOfflineJobSnapshot, cacheOfflineJobSnapshot } = store;
+  const [history, setHistory] = useState<ServiceJobWithRelations[]>([]);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const isOnline = useOnlineStatus();
   const { data: liveJob, isLoading } = useServiceJob(jobId);
   const [cachedJob, setCachedJob] = useState<ServiceJobWithRelations | null>(null);
@@ -497,14 +502,26 @@ function TechnicianDetailSheet({
   const pendingForThisJob = transition.isPending && transition.variables?.id === jobId;
 
   useEffect(() => {
-    setCachedJob(getCachedOfflineJobSnapshot(jobId)?.job ?? null);
-  }, [jobId]);
+    const snapshot = getCachedOfflineJobSnapshot(jobId);
+    setCachedJob(snapshot?.job ?? null);
+    setHistory(snapshot?.history ?? []);
+  }, [jobId, store]);
 
   useEffect(() => {
     if (!liveJob) return;
     cacheOfflineJobSnapshot(liveJob);
     setCachedJob(liveJob);
-  }, [liveJob]);
+  }, [liveJob, store]);
+  useEffect(() => {
+    if (!isOnline || !liveJob?.machine_id) return;
+    let active = true;
+    void fetchServiceMachineHistory(liveJob.id).then(rows => {
+      if (!active) return;
+      cacheOfflineJobSnapshot(liveJob, rows);
+      setHistory(rows); setHistoryError(null);
+    }).catch(error => { if (active) setHistoryError(error instanceof Error ? error.message : "History could not be cached"); });
+    return () => { active = false; };
+  }, [liveJob, isOnline, store]);
 
   const actions = useMemo(
     () => (job ? getTechnicianStageActions(job.current_stage) : []),
@@ -512,7 +529,9 @@ function TechnicianDetailSheet({
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm">
+    <DialogPrimitive.Root open onOpenChange={(open) => { if (!open && !pendingForThisJob) onClose(); }}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Content aria-describedby={undefined} className="fixed inset-0 z-[70] bg-background/95 outline-none backdrop-blur-sm">
       <div className="flex h-full flex-col overflow-hidden">
         <div className="border-b border-border/50 bg-background/95 px-4 py-3">
           <div className="flex items-start justify-between gap-3">
@@ -520,9 +539,9 @@ function TechnicianDetailSheet({
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 Technician Work Order
               </p>
-              <h2 className="mt-1 text-lg font-semibold text-foreground">
+              <DialogPrimitive.Title className="mt-1 text-lg font-semibold text-foreground">
                 {job?.customer?.name ?? job?.requested_by_name ?? "Loading job"}
-              </h2>
+              </DialogPrimitive.Title>
             </div>
             <button
               type="button"
@@ -666,7 +685,7 @@ function TechnicianDetailSheet({
                 {job.machine?.id ? (
                   <Link
                     to={`/equipment/${job.machine.id}`}
-                    className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-primary"
+                    className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-qep-orange-accessible"
                   >
                     Open Asset 360
                     <ChevronRight className="h-3.5 w-3.5" />
@@ -703,17 +722,27 @@ function TechnicianDetailSheet({
                 }}
               />
 
+              <section className="rounded-xl border p-3 space-y-2">
+                <h3 className="font-semibold">Machine service history {isOnline ? "" : "(saved on device)"}</h3>
+                {historyError && <p role="alert" className="text-sm text-destructive">{historyError}</p>}
+                {history.length === 0 && <p className="text-sm">No history saved. Open this machine while online to prepare it for field use.</p>}
+                {history.map(item => <article key={item.id} className="border-t pt-2 text-sm"><p>{new Date(item.created_at).toLocaleDateString()} · {item.current_stage}</p><p>Complaint: {item.complaint ?? item.customer_problem_summary ?? "Not recorded"}</p><p>Cause: {item.cause ?? "Not recorded"}</p><p>Correction: {item.correction ?? "Not recorded"}</p></article>)}
+              </section>
               <VoiceFieldNotes jobId={job.id} machineId={job.machine_id} />
             </div>
           )}
         </div>
       </div>
-    </div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }
 
 export function ServiceTechnicianMobilePage() {
   const { profile } = useAuth();
+  const store = useFieldStore();
+  const { listCachedOfflineJobSnapshots, cacheOfflineJobSnapshot } = store;
   const isOnline = useOnlineStatus();
   const [filter, setFilter] = useState<TechnicianMobileFilter>("focus");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -731,15 +760,16 @@ export function ServiceTechnicianMobilePage() {
     [listQuery.data?.jobs],
   );
   useEffect(() => {
+    setSelectedJobId(null);
     setCachedJobs(listCachedOfflineJobSnapshots().map((snapshot) => snapshot.job));
-  }, []);
+  }, [store]);
   useEffect(() => {
     if (sortedJobs.length === 0) return;
     for (const job of sortedJobs) cacheOfflineJobSnapshot(job);
     setCachedJobs(listCachedOfflineJobSnapshots().map((snapshot) => snapshot.job));
-  }, [sortedJobs]);
-  const agendaJobs = sortedJobs.length > 0 ? sortedJobs : cachedJobs;
-  const isUsingCachedAgenda = sortedJobs.length === 0 && cachedJobs.length > 0;
+  }, [sortedJobs, store]);
+  const agendaJobs = isOnline ? sortedJobs : cachedJobs;
+  const isUsingCachedAgenda = !isOnline && cachedJobs.length > 0;
   const visibleJobs = useMemo(
     () => filterTechnicianJobs(agendaJobs, filter),
     [agendaJobs, filter],
@@ -758,6 +788,7 @@ export function ServiceTechnicianMobilePage() {
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#f4f0e6,transparent_38%),linear-gradient(180deg,#fcfbf7_0%,#f3f1ea_100%)] px-4 pb-24 pt-5 text-foreground dark:bg-[radial-gradient(circle_at_top,#172033,transparent_32%),linear-gradient(180deg,#09101c_0%,#0c1522_100%)]">
       <div className="mx-auto max-w-md space-y-4">
+        {hasLegacyOfflineFieldWork() && <p role="alert" className="rounded-lg border border-amber-500/40 p-3 text-sm">Offline work from an earlier version is retained on this device without a verified operator. A supervisor must recover it; it will not be submitted under your account.</p>}
         <div className="flex items-center justify-between">
           <Link
             to="/service"
@@ -766,7 +797,7 @@ export function ServiceTechnicianMobilePage() {
             <ArrowLeft className="h-3.5 w-3.5" />
             Command Center
           </Link>
-          <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+          <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-qep-orange-accessible">
             Mobile Tech
           </span>
         </div>
@@ -784,7 +815,7 @@ export function ServiceTechnicianMobilePage() {
                 A mobile-first queue for scheduled work orders, active repairs, and machine-down interrupts.
               </p>
             </div>
-            <div className="rounded-2xl bg-primary/10 p-3 text-primary">
+            <div className="rounded-2xl bg-primary/10 p-3 text-qep-orange-accessible">
               <Smartphone className="h-5 w-5" />
             </div>
           </div>
@@ -826,7 +857,7 @@ export function ServiceTechnicianMobilePage() {
           <section className="rounded-[1.75rem] border border-primary/20 bg-primary/[0.08] p-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary/80">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-qep-orange-accessible">
                   Next best move
                 </p>
                 <h2 className="mt-1 truncate text-lg font-semibold text-foreground">
@@ -923,6 +954,7 @@ export function ServiceTechnicianMobilePage() {
 
       {selectedJobId ? (
         <TechnicianDetailSheet
+          key={`${profile?.id}:${profile?.active_workspace_id}:${selectedJobId}`}
           jobId={selectedJobId}
           onClose={() => {
             if (transition.isPending && transition.variables?.id === selectedJobId) return;

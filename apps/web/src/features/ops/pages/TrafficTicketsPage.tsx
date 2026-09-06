@@ -1,3 +1,4 @@
+import { RentalTransportContractLink } from "../../qrm/components/RentalTransportContractLink";
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -471,6 +472,7 @@ export function TrafficTicketsPage() {
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.18em] text-qep-orange">Driver mobile workflow</p>
                   <h2 className="mt-1 text-lg font-semibold text-foreground">Stock #{selectedTicket.stock_number}</h2>
+                  {["rental", "re_rent"].includes(selectedTicket.ticket_type) ? <RentalTransportContractLink ticketId={selectedTicket.id} ticketStatus={selectedTicket.status} /> : null}
                   <p className="mt-1 text-sm text-muted-foreground">
                     {selectedTicket.from_location} → {selectedTicket.to_location} • {selectedTicket.to_contact_name} • {selectedTicket.to_contact_phone}
                   </p>

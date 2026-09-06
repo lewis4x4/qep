@@ -11,7 +11,7 @@ const buttonVariants = cva(
       variant: {
         // Primary CTA — QEP orange
         default:
-          "bg-qep-orange text-white hover:bg-qep-orange-hover disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100",
+          "bg-qep-orange text-primary-foreground hover:bg-qep-orange-hover disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100",
         // Secondary — frosted glass (light) / crystal (dark)
         secondary:
           "border border-slate-200/85 bg-gradient-to-b from-white/90 to-slate-100/65 text-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.85),0_2px_14px_-6px_rgba(15,23,42,0.12)] backdrop-blur-md hover:from-white hover:to-slate-100/75 dark:border-white/[0.12] dark:from-white/[0.09] dark:to-white/[0.035] dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08),0_10px_36px_-14px_rgba(0,0,0,0.5)] dark:hover:from-white/[0.12] dark:hover:to-white/[0.06]",

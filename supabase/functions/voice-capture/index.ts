@@ -1,3 +1,4 @@
+import { queuedVoiceIdentityError, queuedVoiceCaptureId, queuedVoiceSavedResponse } from "../_shared/voice-queue-identity.ts";
 /**
  * Voice-to-QRM Field Capture (Module 4)
  *
@@ -99,6 +100,23 @@ Deno.serve(async (req) => {
       );
     }
 
+    const identityError = queuedVoiceIdentityError(formData, user.id, workspaceId);
+    if (identityError) return jsonError(identityError, 409, ch);
+    const queueId = typeof formData.get("client_queue_id") === "string" ? String(formData.get("client_queue_id")).trim() : null;
+    const queuedCaptureId = queueId ? await queuedVoiceCaptureId(user.id, workspaceId, queueId) : null;
+    let retryCapture: Record<string, unknown> | null = null;
+    if (queuedCaptureId) {
+      const { data: previous, error: previousError } = await supabaseAdmin.from("voice_captures")
+        .select("*").eq("id", queuedCaptureId).eq("user_id", user.id).eq("workspace_id", workspaceId).maybeSingle();
+      if (previousError) return jsonError("Could not reconcile the queued recording. Retry without deleting it.", 500, ch);
+      if (previous) {
+        const saved = queuedVoiceSavedResponse(previous, user.id, workspaceId, queueId ?? undefined);
+        if (saved) return new Response(JSON.stringify(saved), { status: 200, headers: { ...ch, "Content-Type": "application/json" } });
+        if (previous.sync_status !== "failed") return jsonError("This recording is already processing. Keep it queued and retry shortly.", 409, ch, { capture_id: previous.id });
+        retryCapture = previous;
+      }
+    }
+
     const audioFile = formData.get("audio") as File | null;
     const submittedDurationSeconds = parseDurationSeconds(formData.get("duration_seconds"));
     const clientCaptureDiagnostics = readClientCaptureDiagnostics(formData);
@@ -181,24 +199,22 @@ Deno.serve(async (req) => {
       });
     }
 
-    const storagePath = `${user.id}/${Date.now()}.${extension}`;
-
-    const { error: uploadError } = await supabaseAdmin.storage
-      .from("voice-recordings")
-      .upload(storagePath, audioBuffer, {
-        contentType: audioMimeType,
-        upsert: false,
-      });
-
-    if (uploadError) {
-      console.error("Storage upload error:", uploadError.message);
-      return jsonError("Failed to store audio file", 500, ch);
+    if (retryCapture && queuedCaptureId) {
+      // Claim only after request/audio validation. One failed-record retry wins.
+      const { data: claimed, error: claimError } = await supabaseAdmin.from("voice_captures")
+        .update({ sync_status: "processing", sync_error: null }).eq("id", queuedCaptureId)
+        .eq("sync_status", "failed").eq("updated_at", retryCapture.updated_at).select("*").maybeSingle();
+      if (claimError || !claimed) return jsonError("Another retry is processing this recording. Keep it queued.", 409, ch);
+      retryCapture = claimed;
     }
 
+    const storagePath = typeof retryCapture?.audio_storage_path === "string" ? retryCapture.audio_storage_path : `${user.id}/${queuedCaptureId ?? Date.now()}.${extension}`;
+
     // Create a placeholder capture record — update as pipeline progresses
-    const { data: captureRecord, error: insertError } = await supabaseAdmin
+    const { data: captureRecord, error: insertError } = retryCapture ? { data: retryCapture, error: null } : await supabaseAdmin
       .from("voice_captures")
       .insert({
+        ...(queuedCaptureId ? { id: queuedCaptureId } : {}),
         user_id: user.id,
         workspace_id: workspaceId,
         audio_storage_path: storagePath,
@@ -214,6 +230,15 @@ Deno.serve(async (req) => {
     }
 
     const captureId = captureRecord.id as string;
+    const { error: uploadError } = await supabaseAdmin.storage.from("voice-recordings")
+      .upload(storagePath, audioBuffer, { contentType: audioMimeType, upsert: false });
+    // Retrying the same bound queue record may reuse its already stored object.
+    const alreadyStored = queuedCaptureId && uploadError && String(uploadError.statusCode) === "409";
+    if (uploadError && !alreadyStored) {
+      await supabaseAdmin.from("voice_captures").update({ sync_status: "failed", sync_error: "Audio storage failed; retry the original recording." }).eq("id", captureId);
+      return jsonError("Failed to store audio file", 500, ch);
+    }
+
 
     const openAiKey = Deno.env.get("OPENAI_API_KEY");
     if (!openAiKey) {
@@ -749,13 +774,14 @@ Return ONLY valid JSON matching this exact structure:
     };
 
     {
-      const { error: finalizeErr } = await supabaseAdmin
+      const { data: finalized, error: finalizeErr } = await supabaseAdmin
         .from("voice_captures")
         .update(finalUpdate)
-        .eq("id", captureId);
-      if (finalizeErr) {
-        console.error("voice-capture: final capture update failed", finalizeErr.message);
-        // Non-fatal for the client — core data was saved in the prior update
+        .eq("id", captureId).eq("user_id", user.id).eq("workspace_id", workspaceId)
+        .select("id").maybeSingle();
+      if (finalizeErr || !finalized) {
+        console.error("voice-capture: final capture update failed", finalizeErr?.message);
+        return jsonError("Capture persistence was not confirmed. Keep the original recording and retry.", 500, ch);
       }
     }
 
@@ -770,6 +796,10 @@ Return ONLY valid JSON matching this exact structure:
     // ── Return result ─────────────────────────────────────────────────────────
     const payload = {
       id: captureId,
+      capture_saved: true,
+      client_queue_id: queueId,
+      captured_user_id: user.id,
+      captured_workspace_id: workspaceId,
       transcript,
       duration_seconds: durationSeconds,
       extracted_data: extracted,
@@ -793,6 +823,10 @@ Return ONLY valid JSON matching this exact structure:
         transcript.length > 50_000 ? `${transcript.slice(0, 50_000)}…` : transcript;
       body = JSON.stringify({
         id: captureId,
+        capture_saved: true,
+        client_queue_id: queueId,
+        captured_user_id: user.id,
+        captured_workspace_id: workspaceId,
         transcript: safeTranscript,
         duration_seconds: durationSeconds,
         extracted_data: {},

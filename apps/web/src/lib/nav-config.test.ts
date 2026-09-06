@@ -28,7 +28,7 @@ describe("nav-config", () => {
     expect(rentals?.href).toBe("/qrm/rentals");
   });
 
-  test("scopes iron_advisor away from parts/service/workforce/rentals menus", () => {
+  test("keeps Iron Advisor rental qualification accessible without unrelated specialist menus", () => {
     const groups = resolvePrimaryNavGroups(false, false, "rep", "iron_advisor");
     const ids = groups.map((group) => group.id);
     expect(ids).toContain("sales");
@@ -36,7 +36,7 @@ describe("nav-config", () => {
     expect(ids).not.toContain("parts");
     expect(ids).not.toContain("service");
     expect(ids).not.toContain("workforce");
-    expect(ids).not.toContain("rentals");
+    expect(ids).toContain("rentals");
   });
 
   test("keeps iron_advisor utility to OS only", () => {
@@ -116,7 +116,7 @@ describe("nav-config", () => {
     expect(serviceWriterHrefs).toContain("/service/dashboard");
     expect(serviceWriterHrefs).toContain("/service/intake");
     expect(serviceWriterHrefs).toContain("/service/parts");
-    expect(serviceWriterHrefs).not.toContain("/service/metrics");
+    expect(serviceWriterHrefs).toContain("/service/metrics");
     expect(serviceWriterHrefs).not.toContain("/service/branches");
     expect(serviceWriterHrefs).not.toContain("/service/scheduler-health");
   });

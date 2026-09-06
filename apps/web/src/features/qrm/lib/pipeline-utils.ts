@@ -138,13 +138,14 @@ export function updateDealNextFollowUp(
   return deals?.map((deal) => (deal.id === dealId ? { ...deal, nextFollowUpAt } : deal)) ?? deals;
 }
 
-export function readCachedOpenDeals(): CachedOpenDealsPayload | null {
+export function readCachedOpenDeals(scope?: string): CachedOpenDealsPayload | null {
+  if (!scope) return null;
   if (typeof window === "undefined") {
     return null;
   }
 
   try {
-    const raw = window.localStorage.getItem(PIPELINE_CACHE_KEY);
+    const raw = window.localStorage.getItem(`${PIPELINE_CACHE_KEY}:${scope}`);
     if (!raw) {
       return null;
     }
@@ -156,29 +157,30 @@ export function readCachedOpenDeals(): CachedOpenDealsPayload | null {
   }
 }
 
-export function writeCachedOpenDeals(payload: CachedOpenDealsPayload): void {
+export function writeCachedOpenDeals(payload: CachedOpenDealsPayload, scope?: string): void {
+  if (!scope) return;
   if (typeof window === "undefined") {
     return;
   }
 
   try {
-    window.localStorage.setItem(PIPELINE_CACHE_KEY, JSON.stringify(payload));
+    window.localStorage.setItem(`${PIPELINE_CACHE_KEY}:${scope}`, JSON.stringify(payload));
   } catch (error) {
     // Ignore cache write failures; this is a best-effort resilience layer.
   }
 }
 
-export async function fetchOpenDealsFirstPage(): Promise<OpenDealsFirstPageResult> {
+export async function fetchOpenDealsFirstPage(scope?: string): Promise<OpenDealsFirstPageResult> {
   try {
     const result = await listCrmOpenDealsForBoard({ limit: OPEN_DEALS_PAGE_SIZE });
-    writeCachedOpenDeals({ items: result.items, nextCursor: result.nextCursor });
+    writeCachedOpenDeals({ items: result.items, nextCursor: result.nextCursor }, scope);
     return {
       items: result.items,
       nextCursor: result.nextCursor,
       fromCache: false,
     };
   } catch (error) {
-    const cached = readCachedOpenDeals();
+    const cached = readCachedOpenDeals(scope);
     if (cached) {
       return {
         items: cached.items,

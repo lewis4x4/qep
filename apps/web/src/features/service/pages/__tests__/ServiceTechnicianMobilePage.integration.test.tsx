@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { getOfflineFieldQueue } from "../../lib/service-offline-field-mode";
+import { createOfflineFieldStore } from "../../lib/service-offline-field-mode";
+const { getOfflineFieldQueue } = createOfflineFieldStore({ userId: "tech-1", workspaceId: "default" });
 
 const transitionMutate = mock(() => undefined);
 let transitionState = {
@@ -193,7 +194,8 @@ mock.module("@/hooks/useAuth", () => ({
     profile: {
       id: "tech-1",
       full_name: "Jordan Lane",
-      role: "rep",
+      role: "technician",
+      active_workspace_id: "default",
     },
   }),
 }));
@@ -215,6 +217,8 @@ mock.module("../../hooks/useServiceJobMutation", () => ({
     ...transitionState,
   }),
 }));
+
+mock.module("../../lib/api", () => ({ fetchServiceMachineHistory: async () => [], recordServiceFieldPacket: async () => ({}) }));
 
 mock.module("../../components/VoiceFieldNotes", () => ({
   VoiceFieldNotes: ({ jobId }: { jobId: string }) => <div>Voice notes stub {jobId}</div>,
@@ -301,7 +305,7 @@ describe("ServiceTechnicianMobilePage (integration)", () => {
     expect(screen.getByRole("alert").textContent).toContain("Network request failed");
   });
 
-  test("queues meter, three-C, and labor packets while offline", async () => {
+  test("queues meter and three-C packets and real clock events while offline", async () => {
     setNavigatorOnline(false);
 
     renderMobilePage();
@@ -310,7 +314,7 @@ describe("ServiceTechnicianMobilePage (integration)", () => {
     fireEvent.change(screen.getByLabelText("Hour meter"), { target: { value: "889.1" } });
     fireEvent.change(screen.getByLabelText("Cause"), { target: { value: "Loose fitting" } });
     fireEvent.change(screen.getByLabelText("Correction"), { target: { value: "Tightened fitting and checked drift" } });
-    fireEvent.change(screen.getByLabelText("Labor hours"), { target: { value: "2.4" } });
+
     fireEvent.click(screen.getByRole("button", { name: /Queue Packet/i }));
 
     await waitFor(() => {
@@ -318,7 +322,7 @@ describe("ServiceTechnicianMobilePage (integration)", () => {
     });
 
     const queue = await getOfflineFieldQueue();
-    expect(queue.map((action) => action.kind)).toEqual(["job_update", "segment_labor"]);
+    expect(queue.map((action) => action.kind)).toEqual(["job_update"]);
     expect(queue[0]).toMatchObject({
       kind: "job_update",
       jobId: "job-active",
@@ -328,12 +332,9 @@ describe("ServiceTechnicianMobilePage (integration)", () => {
         correction: "Tightened fitting and checked drift",
       },
     });
-    expect(queue[1]).toMatchObject({
-      kind: "segment_labor",
-      segmentId: "segment-active",
-      fields: {
-        hours_actual: 2.4,
-      },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Clock on" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Clock off" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Clock off" }));
+    await waitFor(async () => expect((await getOfflineFieldQueue()).map(action => action.kind)).toEqual(["job_update", "clock_start", "clock_stop"]));
   });
 });

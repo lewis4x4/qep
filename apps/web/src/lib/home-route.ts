@@ -3,6 +3,7 @@ export function resolveHomeRoute(
   ironRole?: string | null,
   audience?: string | null,
   floorMode?: boolean | null,
+  isSupport?: boolean | null,
 ): string {
   // Stakeholder audience (external QEP USA build observers — Ryan, Rylee,
   // Juan, Angela) always lands on the Build Hub regardless of role/iron role.
@@ -19,14 +20,19 @@ export function resolveHomeRoute(
     case "admin":
     case "manager":
       return "/qrm";
+    case "finance_admin":
+      return "/service/metrics";
     case "parts":
       return "/parts/companion/queue";
+    case "technician":
+      return "/m/service";
     case "service":
       return "/service";
     case "rental":
     case "rentals":
       return "/qrm/rentals";
     case "rep": {
+      if (isSupport) return "/floor";
       const ironOperatorHome = resolveIronOperatorHomeRoute(ironRole);
       if (ironOperatorHome) return ironOperatorHome;
       return "/sales/today";
@@ -35,7 +41,7 @@ export function resolveHomeRoute(
       if (floorMode || isFloorIronRole(ironRole)) {
         return "/floor";
       }
-      return "/dashboard";
+      return "/chat";
   }
 }
 
@@ -45,7 +51,7 @@ const ROLE_HOME_ALIASES: Record<string, string> = {
   parts_counter: "parts",
   parts_manager: "parts",
   service_writer: "service",
-  technician: "service",
+
   // No dedicated haul/dispatch board route in the web shell yet; dispatch
   // operators coordinate through the service command center.
   dispatch: "service",
@@ -61,6 +67,8 @@ function normalizeRole(userRole: string | null | undefined): string {
  *  roles are handled earlier in resolveHomeRoute and are not overridden here. */
 function resolveIronOperatorHomeRoute(ironRole: string | null | undefined): string | null {
   switch (ironRole) {
+    case "iron_man":
+      return "/floor";
     case "iron_parts_counter":
     case "iron_parts_manager":
       return "/parts/companion/queue";
@@ -111,8 +119,19 @@ export function canUseElevatedQrmScopes(
   );
 }
 
-export function canAccessFloorSurface(userRole: string | null | undefined): boolean {
-  return normalizeRole(userRole) !== "rep";
+export const SERVICE_OPERATIONS_ROLES = ["rep", "admin", "manager", "owner", "service_writer", "technician", "dispatch", "finance_admin", "parts_counter"] as const;
+export const PARTS_OPERATIONS_ROLES = ["rep", "admin", "manager", "owner", "parts_counter", "parts_manager"] as const;
+
+export function canAccessServiceOperations(role: string | null | undefined): boolean {
+  return SERVICE_OPERATIONS_ROLES.some((candidate) => candidate === role);
+}
+
+export function canAccessPartsOperations(role: string | null | undefined): boolean {
+  return PARTS_OPERATIONS_ROLES.some((candidate) => candidate === role);
+}
+
+export function canAccessFloorSurface(userRole: string | null | undefined, ironRole?: string | null, isSupport = false): boolean {
+  return normalizeRole(userRole) !== "rep" || ironRole === "iron_man" || isSupport;
 }
 
 /** Machine-record surfaces: /fleet (map) and /qrm/equipment/:id (detail).

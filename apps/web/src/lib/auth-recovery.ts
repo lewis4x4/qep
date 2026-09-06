@@ -100,6 +100,18 @@ export function readCachedProfile(
   }
 }
 
+/** Last observed workspace is only a storage namespace, never an authorization claim.
+ * Unlike role recovery it remains useful after the short auth-cache TTL expires offline. */
+export function readOfflineWorkspace(userId: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(`${PROFILE_CACHE_KEY_PREFIX}${userId}`);
+    const profile = raw ? (JSON.parse(raw) as CachedProfileEnvelope).profile : null;
+    return profile?.id === userId && typeof profile.active_workspace_id === "string"
+      ? profile.active_workspace_id : null;
+  } catch { return null; }
+}
+
 export function writeCachedProfile(
   profile: CachedProfile,
   storage: WriteStorageLike | undefined = typeof window !== "undefined" ? window.sessionStorage : undefined,

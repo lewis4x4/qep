@@ -1,3 +1,4 @@
+import { weightedPipelineValue } from "../lib/pipeline-totals";
 import { useState } from "react";
 import { useSalesPipeline } from "../hooks/useSalesPipeline";
 import { StageFilterTabs } from "../components/StageFilterTabs";
@@ -40,6 +41,8 @@ export function PipelineBoardPage() {
     stageCounts,
     stages,
     isLoading,
+    error,
+    retry,
   } = useSalesPipeline();
 
   // Insight filter overrides stage filter when set. Tap an AI insight card to
@@ -57,18 +60,17 @@ export function PipelineBoardPage() {
     );
   }
 
+  if (error) {
+    return <div role="alert" className="m-4 rounded-xl border border-red-400 p-4">
+      <p>Pipeline could not load. No totals are shown until the data is available.</p>
+      <button className="mt-2 underline" onClick={() => void retry()}>Retry pipeline</button>
+    </div>;
+  }
+
   // ── Compute pipeline analytics ──
   const totalValue = allDeals.reduce((sum, d) => sum + (d.amount ?? 0), 0);
 
-  // Shared stage-probability denominator: highest stage_sort across the workspace.
-  const maxStageSort =
-    stages.length > 0 ? Math.max(...stages.map((s) => s.sort_order)) : 1;
-
-  // Weighted value: estimate probability based on stage position
-  const weightedValue = allDeals.reduce((sum, d) => {
-    const pct = maxStageSort > 0 ? (d.stage_sort / maxStageSort) * 100 : 30;
-    return sum + (d.amount ?? 0) * (pct / 100);
-  }, 0);
+  const weightedValue = weightedPipelineValue(allDeals);
 
   const TERMINAL_STAGES = new Set(["won", "lost", "closed_won", "closed_lost", "closed won", "closed lost"]);
   const activeDeals = allDeals.filter((d) => !TERMINAL_STAGES.has(d.stage.toLowerCase()));
@@ -147,7 +149,7 @@ export function PipelineBoardPage() {
               Weighted
             </p>
             <span className="text-lg font-extrabold text-qep-orange-accessible">
-              {formatCurrency(weightedValue)}
+              {weightedValue == null ? "Unavailable" : formatCurrency(weightedValue)}
             </span>
           </div>
         </div>
@@ -206,7 +208,6 @@ export function PipelineBoardPage() {
       {allDeals.length > 0 && (
         <PipelineForecastStrip
           deals={allDeals}
-          maxStageSort={maxStageSort}
         />
       )}
 

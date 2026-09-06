@@ -50,6 +50,7 @@ function makeDeal(overrides: Partial<RankableDeal> = {}): RankableDeal {
     primaryContactId: overrides.primaryContactId ?? "contact-1",
     companyId: overrides.companyId ?? "company-1",
     assignedRepId: overrides.assignedRepId ?? "rep-1",
+    dgeScore: overrides.dgeScore ?? null,
   };
 }
 

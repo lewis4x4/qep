@@ -58,6 +58,7 @@ const ROUTE_RULES: RouteRule[] = [
   { prefix: "/qrm/my/reality", surface: "today", lens: "my-mirror" },
 
   // --- GRAPH (the entity explorer) ------------------------------------------
+  { prefix: "/qrm/graph", surface: "graph" },
   { prefix: "/qrm/deals", surface: "graph", lens: "deals" },
   { prefix: "/qrm/pipeline", surface: "graph", lens: "deals" },
   { prefix: "/qrm/contacts", surface: "graph", lens: "contacts" },
@@ -142,7 +143,7 @@ export const SURFACES: Record<SurfaceId, SurfaceDefinition> = {
     label: "Graph",
     description:
       "Every contact, company, deal, machine, rental — one explorer.",
-    href: "/qrm/contacts",
+    href: "/qrm/graph",
   },
   pulse: {
     id: "pulse",

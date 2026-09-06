@@ -63,7 +63,7 @@ for (const f of files) {
   const isWeb = f.startsWith(WEB_DIR);
   const cwd = isWeb ? WEB_DIR : ROOT;
   const relFromCwd = relative(cwd, f);
-  const r = spawnSync("bun", ["test", relFromCwd], {
+  const r = spawnSync("bun", ["--no-env-file", "test", relFromCwd], {
     cwd,
     encoding: "utf-8",
   });

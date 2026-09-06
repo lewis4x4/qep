@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   canAccessFloorSurface,
+  canAccessServiceOperations,
+  canAccessPartsOperations,
   canAccessMachineRecords,
   canAccessManagerAdminRoute,
   canAccessManagerAdminSurface,
@@ -20,7 +22,7 @@ describe("resolveHomeRoute", () => {
   test("keeps core business roles on their role-scoped homes", () => {
     expect(resolveHomeRoute("rep", "iron_advisor")).toBe("/sales/today");
     expect(resolveHomeRoute("rep", "iron_woman")).toBe("/sales/today");
-    expect(resolveHomeRoute("rep", "iron_man")).toBe("/sales/today");
+    expect(resolveHomeRoute("rep", "iron_man")).toBe("/floor");
     expect(resolveHomeRoute("owner", "iron_owner")).toBe("/owner");
     expect(resolveHomeRoute("owner", "iron_parts_counter")).toBe("/owner");
     expect(resolveHomeRoute("manager", "iron_parts_manager")).toBe("/qrm");
@@ -44,7 +46,7 @@ describe("resolveHomeRoute", () => {
     expect(resolveHomeRoute("parts_manager")).toBe("/parts/companion/queue");
     expect(resolveHomeRoute("service")).toBe("/service");
     expect(resolveHomeRoute("service_writer")).toBe("/service");
-    expect(resolveHomeRoute("technician")).toBe("/service");
+    expect(resolveHomeRoute("technician")).toBe("/m/service");
     // No haul/dispatch board UI yet — dispatch shares the service command center.
     expect(resolveHomeRoute("dispatch")).toBe("/service");
     expect(resolveHomeRoute("rental")).toBe("/qrm/rentals");
@@ -57,7 +59,7 @@ describe("resolveHomeRoute", () => {
       "/parts/companion/queue",
     );
     expect(resolveHomeRoute("service_writer", "iron_man")).toBe("/service");
-    expect(resolveHomeRoute("technician", null, "internal", false)).toBe("/service");
+    expect(resolveHomeRoute("technician", null, "internal", false)).toBe("/m/service");
     expect(resolveHomeRoute("dispatch", null, "internal", false)).toBe("/service");
   });
 
@@ -130,5 +132,26 @@ describe("route surface access helpers", () => {
     expect(resolveManagerAdminRouteRedirect("manager", "/qrm", "qrm_activities_templates")).toBe(
       null,
     );
+  });
+});
+
+
+describe("operational role entry parity", () => {
+  test("service operators can open their assigned home and mobile jobs", () => {
+    for (const role of ["service_writer", "technician", "dispatch"]) {
+      expect(resolveHomeRoute(role)).toBe(role === "technician" ? "/m/service" : "/service");
+      expect(canAccessServiceOperations(role)).toBe(true);
+    }
+    expect(resolveHomeRoute("finance_admin")).toBe("/service/metrics");
+    expect(canAccessPartsOperations("parts_counter")).toBe(true);
+    expect(canAccessFloorSurface("rep", "iron_man")).toBe(true);
+    expect(canAccessFloorSurface("rep", null, true)).toBe(true);
+    expect(resolveHomeRoute("rep", null, "internal", false, true)).toBe("/floor");
+    expect(canAccessFloorSurface("rep", "iron_advisor")).toBe(false);
+  });
+  test("unknown roles never redirect dashboard to itself or gain operations", () => {
+    expect(resolveHomeRoute("unknown")).not.toBe("/dashboard");
+    expect(canAccessServiceOperations("unknown")).toBe(false);
+    expect(canAccessPartsOperations("unknown")).toBe(false);
   });
 });

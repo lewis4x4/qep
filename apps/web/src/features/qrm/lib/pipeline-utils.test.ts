@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { normalizeCachedOpenDealsPayload } from "./pipeline-utils";
+import { normalizeCachedOpenDealsPayload, readCachedOpenDeals, writeCachedOpenDeals, PIPELINE_CACHE_KEY } from "./pipeline-utils";
 
 const validCachedDeal = {
   id: "deal-1",
@@ -47,4 +47,16 @@ describe("pipeline cache normalizers", () => {
     expect(normalizeCachedOpenDealsPayload(null)).toBeNull();
     expect(normalizeCachedOpenDealsPayload({ items: {} })).toBeNull();
   });
+});
+
+
+it("pipeline snapshots never cross actor/workspace scope or trust legacy unscoped cache", () => {
+  localStorage.clear();
+  const snapshot = { items: [validCachedDeal], nextCursor: "unfinished-page" };
+  localStorage.setItem(PIPELINE_CACHE_KEY, JSON.stringify(snapshot));
+  expect(readCachedOpenDeals("rep-a:workspace-1:rep")).toBeNull();
+  writeCachedOpenDeals(snapshot, "rep-a:workspace-1:rep");
+  expect(readCachedOpenDeals("rep-b:workspace-1:rep")).toBeNull();
+  expect(readCachedOpenDeals("rep-a:workspace-2:rep")).toBeNull();
+  expect(readCachedOpenDeals("rep-a:workspace-1:rep")?.nextCursor).toBe("unfinished-page");
 });

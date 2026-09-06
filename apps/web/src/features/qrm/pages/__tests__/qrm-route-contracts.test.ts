@@ -77,3 +77,14 @@ describe("QRM route contracts", () => {
     expect(appSource).toContain('to="/admin/duplicates"');
   });
 });
+
+
+it("default pipeline and voice inbox preserve their operation-specific pages", () => {
+  const voice = appSource.slice(appSource.indexOf('path="/qrm/voice-inbox"'), appSource.indexOf('path="/qrm/voice-captures/inbox"'));
+  const deals = appSource.slice(appSource.indexOf('path="/qrm/deals"'), appSource.indexOf('path="/qrm/pipeline"'));
+  expect(voice).toContain("<VoiceCaptureInboxPage />");
+  expect(voice).not.toContain("WithTodaySurface");
+  expect(deals).toContain("<QrmPipelinePage userRole={profile.role} />");
+  expect(deals).not.toContain("WithGraphExplorer");
+  expect(appSource).toContain('path="/qrm/graph"');
+});

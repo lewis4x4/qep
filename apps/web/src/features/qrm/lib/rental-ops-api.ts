@@ -78,7 +78,13 @@ async function rentalOpsFetch(body: Record<string, unknown>): Promise<Record<str
 }
 
 export const rentalOpsApi = {
+  transportContext: (ticket_id: string) => rentalOpsFetch({ action: "transport_context", ticket_id }),
+  linkTransport: (ticket_id: string, contract_id: string) => rentalOpsFetch({ action: "link_transport", ticket_id, contract_id }),
+  listInquiries: (search?: string) => rentalOpsFetch({ action: "list_inquiries", search }),
+  saveInquiry: (contract_id: string, needs_assessment: unknown) => rentalOpsFetch({ action: "save_inquiry", contract_id, needs_assessment }),
   createContract: (data: {
+    request_id: string;
+    needs_assessment?: unknown;
     qrm_company_id: string;
     qrm_contact_id?: string | null;
     contract_type?: "reservation" | "rental" | "demo" | "loaner" | "rpo" | "rerent";

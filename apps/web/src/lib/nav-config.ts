@@ -49,7 +49,7 @@ import {
   Factory,
 } from "lucide-react";
 import type { UserRole } from "@/lib/database.types";
-import { resolveOperatorNavRole } from "@/lib/home-route";
+import { resolveOperatorNavRole, SERVICE_OPERATIONS_ROLES, PARTS_OPERATIONS_ROLES } from "@/lib/home-route";
 
 export type AppNavRole = UserRole | "service_writer" | "technician" | "parts_counter" | "dispatch" | "finance_admin" | string;
 export type PrimaryHeaderId = "sales" | "parts" | "service" | "workforce" | "rentals" | "qrm";
@@ -111,9 +111,10 @@ export const WORKFORCE_ROLE_NAMES = ["admin", "manager", "owner", "service_write
 const WORKFORCE_NAV_ROLES = [...WORKFORCE_ROLE_NAMES];
 
 const CORE_BUSINESS_NAV_ROLES = ["rep", "admin", "manager", "owner"] as const;
-const PARTS_OPERATOR_NAV_ROLES: AppNavRole[] = [...CORE_BUSINESS_NAV_ROLES, "parts_counter"];
-const SERVICE_OPERATOR_NAV_ROLES: AppNavRole[] = [...CORE_BUSINESS_NAV_ROLES, "service_writer", "technician"];
+const PARTS_OPERATOR_NAV_ROLES: AppNavRole[] = [...PARTS_OPERATIONS_ROLES];
+const SERVICE_OPERATOR_NAV_ROLES: AppNavRole[] = [...SERVICE_OPERATIONS_ROLES];
 const SERVICE_MANAGEMENT_NAV_ROLES: AppNavRole[] = ["admin", "manager", "owner"];
+const SERVICE_METRICS_NAV_ROLES: AppNavRole[] = [...SERVICE_MANAGEMENT_NAV_ROLES, "service_writer", "finance_admin"];
 
 export function canAccessGrappleProductionRole(role: string | null | undefined): boolean {
   return GRAPPLE_PRODUCTION_ROLE_NAMES.includes(role as (typeof GRAPPLE_PRODUCTION_ROLE_NAMES)[number]);
@@ -339,7 +340,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     label: "Metrics",
     href: "/service/metrics",
     icon: LineChart,
-    roles: SERVICE_MANAGEMENT_NAV_ROLES,
+    roles: SERVICE_METRICS_NAV_ROLES,
     primaryHeaderId: "service",
     sectionLabel: "Insight",
   },
@@ -752,7 +753,7 @@ interface IronPersonaNavPolicy {
 
 const IRON_PERSONA_NAV_POLICIES: Record<string, IronPersonaNavPolicy> = {
   iron_advisor: {
-    allowedPrimaryHeaders: new Set<PrimaryHeaderId>(["sales", "qrm"]),
+    allowedPrimaryHeaders: new Set<PrimaryHeaderId>(["sales", "qrm", "rentals"]),
     allowedQrmHrefs: new Set([
       "/floor",
       "/qrm",
@@ -844,7 +845,7 @@ export function resolveRoleScopedNavItems(
   const navRole = resolveOperatorNavRole(role, ironRole);
   return resolveNavItems(quoteBuilderEnabled, quoteBuilderLoading)
     .filter((item) => item.roles.includes(navRole))
-    .filter((item) => isNavItemVisibleForIronRole(item, ironRole));
+    .filter((item) => isNavItemVisibleForIronRole(item, CORE_BUSINESS_NAV_ROLES.some((coreRole) => coreRole === role) ? ironRole : null));
 }
 
 function groupItemsBySection(items: NavItem[]): NavSection[] {

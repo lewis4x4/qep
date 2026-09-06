@@ -19,86 +19,46 @@ function createMockSupabase(options: {
   const client = {
     calls,
     from(table: string) {
-      return {
-        select() {
-          return {
-            eq(_column: string, value: string) {
-              return {
-                contains() {
-                  return {
-                    maybeSingle: async () => ({
-                      data: options.paymentIntent ?? null,
-                      error: null,
-                    }),
-                  };
-                },
-                limit() {
-                  return {
-                    maybeSingle: async () => {
-                      if (table === "customer_profiles_extended") {
-                        return {
-                          data: options.customerProfile ?? null,
-                          error: null,
-                        };
-                      }
-                      return { data: null, error: null };
-                    },
-                  };
-                },
-                maybeSingle: async () => {
-                  if (table === "portal_payment_intents") {
-                    return { data: options.paymentIntent ?? null, error: null };
-                  }
-                  if (table === "customer_invoices") {
-                    return { data: options.invoice ?? null, error: null };
-                  }
-                  if (table === "deposits") {
-                    return { data: options.deposit ?? null, error: null };
-                  }
-                  if (table === "crm_deals") {
-                    return {
-                      data: options.deal ?? (options.deposit
-                        ? {
-                          id: options.deposit.deal_id,
-                          workspace_id: options.deposit.workspace_id,
-                          company_id: options.paymentIntent?.company_id ?? null,
-                        }
-                        : null),
-                      error: null,
-                    };
-                  }
-                  return { data: null, error: null };
-                },
-              };
-            },
-            contains() {
-              return {
-                maybeSingle: async () => ({
-                  data: options.paymentIntent ?? null,
-                  error: null,
-                }),
-              };
-            },
-          };
-        },
-        update(args: Record<string, unknown>) {
-          calls.push({ type: "update", table, args });
-          return {
-            eq: async () => ({ error: options.updateErrors?.[table] ?? null }),
-          };
-        },
-        insert(args: Record<string, unknown>) {
-          calls.push({ type: "insert", table, args });
-          return Promise.resolve({
-            error: table === "exception_queue"
-              ? options.exceptionInsertError ?? null
-              : null,
-          });
-        },
+      let patch: Record<string, unknown> | null = null;
+      const filters: Array<[string, unknown]> = [];
+      const row = () => table === "portal_payment_intents" ? options.paymentIntent ?? null
+        : table === "customer_invoices" ? options.invoice ?? null
+        : table === "customer_profiles_extended" ? options.customerProfile ?? null
+        : table === "deposits" ? options.deposit ?? null
+        : table === "crm_deals" ? options.deal ?? (options.deposit ? { id: options.deposit.deal_id, workspace_id: options.deposit.workspace_id, company_id: options.paymentIntent?.company_id ?? null } : null) : null;
+      async function execute() {
+        const found = row();
+        const error = patch ? options.updateErrors?.[table] ?? null : null;
+        if (error) return {data:null,error};
+        if (patch && found) {
+          if (filters.some(([key,value]) => key in found && found[key] !== value)) return {data:null,error:null};
+          Object.assign(found,patch);
+        }
+        return {data:found,error:null};
+      }
+      const query = {
+        select: (_columns?: string) => query,
+        eq: (column: string,value: unknown) => {filters.push([column,value]);return query;},
+        is: (column: string,value: unknown) => {filters.push([column,value]);return query;},
+        contains: () => query, limit: () => query,
+        maybeSingle: execute,
+        update: (args: Record<string, unknown>) => {patch=args;calls.push({type:"update",table,args});return query;},
+        insert: (args: Record<string, unknown>) => {calls.push({type:"insert",table,args});return Promise.resolve({error:table === "exception_queue" ? options.exceptionInsertError ?? null : null});},
+        then: (resolve: (value: unknown) => unknown) => execute().then(resolve),
       };
+      return query;
     },
     rpc(fn: string, args: Record<string, unknown>) {
       calls.push({ type: "rpc", args: { fn, ...args } });
+      if(fn === "apply_stripe_invoice_receipt") {
+        if(options.updateErrors?.customer_invoices)return Promise.resolve({data:null,error:options.updateErrors.customer_invoices});
+        const invoice=options.invoice;
+        if(!invoice)return Promise.resolve({data:null,error:{message:"invoice_not_found"}});
+        if(Number(args.p_captured_amount_cents)!==Math.round((Number(invoice.total)-Number(invoice.amount_paid ?? 0))*100)) return Promise.resolve({data:null,error:{message:"amount_below_invoice_balance"}});
+        invoice.amount_paid=invoice.total;invoice.payment_reference=`stripe:${args.p_provider_payment_id}`;invoice.status="paid";
+        return Promise.resolve({data:{payment_id:"canonical-payment",applied_cents:args.p_captured_amount_cents,received_at:"2026-09-06T00:00:00Z"},error:null});
+      }
+
       return Promise.resolve({
         error: fn === "record_sale_deposit_receipt"
           ? options.receiptError ?? null
@@ -158,7 +118,7 @@ Deno.test("reconcileSucceededPayment recomputes health score once when company p
     fallbackAmountCents: null,
   });
 
-  const recomputeCalls = supabase.calls.filter((call) => call.type === "rpc");
+  const recomputeCalls = supabase.calls.filter((call) => call.type === "rpc" && call.args?.fn === "compute_customer_health_score");
   assertEquals(recomputeCalls.length, 1);
   assertEquals(recomputeCalls[0].args?.fn, "compute_customer_health_score");
   assertEquals(recomputeCalls[0].args?.p_customer_profile_id, "profile-1");
@@ -230,13 +190,13 @@ Deno.test("reconcileSucceededPayment blocks underpaid invoice application", asyn
     },
   });
 
-  await reconcileSucceededPayment({
+  await assertRejectsWith(() => reconcileSucceededPayment({
     supabaseAdmin: supabase as never,
     eventId: "evt_1",
     stripePaymentIntentId: "pi_1",
     checkoutSessionId: null,
     fallbackAmountCents: null,
-  });
+  }), "amount_below_invoice_balance");
 
   const invoiceUpdates = supabase.calls.filter((call) =>
     call.type === "update" && call.table === "customer_invoices"
@@ -791,12 +751,19 @@ Deno.test("reconcileSucceededPayment fails before success metadata when invoice 
       checkoutSessionId: null,
       fallbackAmountCents: 10000,
     }),
-    "failed to apply Stripe payment to customer invoice",
+    "serialization failure",
   );
-  assertEquals(
-    supabase.calls.some((call) =>
-      call.type === "update" && call.table === "portal_payment_intents"
-    ),
-    false,
-  );
+  assertEquals(supabase.calls.some(call => call.type === "update" && call.table === "portal_payment_intents" &&
+    typeof (call.args?.metadata as Record<string,unknown>)?.invoice_payment_applied_at === "string"), false);
+});
+
+Deno.test("unmatched verified payments create a recovery exception and fail for provider retry", async () => {
+  const db = createMockSupabase({ paymentIntent: null });
+  await assertRejectsWith(() => reconcileSucceededPayment({ supabaseAdmin: db as never, eventId: "evt_unmatched", stripePaymentIntentId: "pi_missing", checkoutSessionId: null, fallbackAmountCents: 12000 }), "provider must retry");
+  assertEquals(db.calls.some((call) => call.type === "rpc" && call.args?.fn === "enqueue_exception"), true);
+  assertEquals(db.calls.some((call) => call.type === "update"), false);
+});
+Deno.test("unmatched payment exception failure also fails the webhook instead of acknowledging cash", async () => {
+  const db = createMockSupabase({ paymentIntent: null, recomputeError: { message: "database unavailable" } });
+  await assertRejectsWith(() => reconcileSucceededPayment({ supabaseAdmin: db as never, eventId: "evt_failure", stripePaymentIntentId: "pi_missing", checkoutSessionId: null, fallbackAmountCents: 12000 }), "exception persistence failed");
 });

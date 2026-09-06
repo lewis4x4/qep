@@ -1,5 +1,8 @@
+import { useAuth } from "@/hooks/useAuth";
+import { RentalInquiryAssessment } from "../components/RentalInquiryAssessment";
+import { emptyRentalAssessment, normalizeRentalAssessment, rentalAssessmentMissing, type RentalNeedsAssessment } from "../../../../../../shared/rental-needs-assessment";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { optimizeCharge } from "../../../../../../shared/rental-rate-math";
 import { Link, useNavigate } from "react-router-dom";
 import { AlertTriangle, ArrowUpRight, DollarSign, RefreshCcw, TrendingUp, Truck, Wrench } from "lucide-react";
@@ -283,6 +286,18 @@ function normalizeBranches(rows: unknown): BranchOptionRow[] {
 
 export function RentalCommandCenterPage() {
   const queryClient = useQueryClient();
+  const { profile } = useAuth();
+  const [counterRequestId, setCounterRequestId] = useState(() => crypto.randomUUID());
+  const [counterAssessment, setCounterAssessment] = useState<RentalNeedsAssessment>(emptyRentalAssessment);
+  const [inquiryContractId, setInquiryContractId] = useState("");
+  const [inquiryStatus, setInquiryStatus] = useState("");
+  const [inquirySearch, setInquirySearch] = useState("");
+  const draftScope = profile?.id && profile.active_workspace_id ? `qep:rental-inquiry:${profile.active_workspace_id}:${profile.id}` : null;
+  const hydratedDraft = useRef<string | null>(null);
+  const [loadedDraftScope, setLoadedDraftScope] = useState<string | null>(null);
+  const inquiries = useQuery({ queryKey: ["rental-inquiries", draftScope, inquirySearch], enabled: !!draftScope, queryFn: () => rentalOpsApi.listInquiries(inquirySearch) });
+  const savedInquiries = (inquiries.data?.inquiries ?? []) as Array<{ id: string; contract_number: string; needs_assessment: RentalNeedsAssessment }>;
+  const saveInquiry = useMutation({ mutationFn: () => rentalOpsApi.saveInquiry(inquiryContractId, counterAssessment), onSuccess: () => { setInquiryStatus("Saved"); void inquiries.refetch(); }, onError: e => setInquiryStatus(`Failed: ${e.message}. Your answers remain here; retry.`) });
   const [dealerResponses, setDealerResponses] = useState<Record<string, string>>({});
   const [assignedUnits, setAssignedUnits] = useState<Record<string, string>>({});
   const [approvedBranches, setApprovedBranches] = useState<Record<string, string>>({});
@@ -308,6 +323,45 @@ export function RentalCommandCenterPage() {
   const [counterSubCost, setCounterSubCost] = useState("");
   const [counterChannel, setCounterChannel] = useState<"counter" | "voice">("counter");
   const [counterResult, setCounterResult] = useState<string | null>(null);
+  useEffect(() => {
+    if (!draftScope || hydratedDraft.current === draftScope) return;
+    try {
+      const raw = localStorage.getItem(draftScope);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (typeof saved.counterRequestId === "string") setCounterRequestId(saved.counterRequestId);
+        if (saved.counterAssessment !== undefined) setCounterAssessment(normalizeRentalAssessment(saved.counterAssessment));
+        if (typeof saved.inquiryContractId === "string") setInquiryContractId(saved.inquiryContractId);
+        if (typeof saved.counterCompanySearch === "string") setCounterCompanySearch(saved.counterCompanySearch);
+        if (typeof saved.counterCompanyId === "string") setCounterCompanyId(saved.counterCompanyId);
+        if (typeof saved.counterContractType === "string") setCounterContractType(saved.counterContractType);
+        if (typeof saved.counterEquipmentId === "string") setCounterEquipmentId(saved.counterEquipmentId);
+        if (typeof saved.counterStartDate === "string") setCounterStartDate(saved.counterStartDate);
+        if (typeof saved.counterEndDate === "string") setCounterEndDate(saved.counterEndDate);
+        if (typeof saved.counterDailyRate === "string") setCounterDailyRate(saved.counterDailyRate);
+        if (typeof saved.counterWeeklyRate === "string") setCounterWeeklyRate(saved.counterWeeklyRate);
+        if (typeof saved.counterMonthlyRate === "string") setCounterMonthlyRate(saved.counterMonthlyRate);
+        if (typeof saved.counterRpoPurchase === "string") setCounterRpoPurchase(saved.counterRpoPurchase);
+        if (typeof saved.counterRpoCreditPct === "string") setCounterRpoCreditPct(saved.counterRpoCreditPct);
+        if (typeof saved.counterRpoDeadline === "string") setCounterRpoDeadline(saved.counterRpoDeadline);
+        if (typeof saved.counterSubVendorId === "string") setCounterSubVendorId(saved.counterSubVendorId);
+        if (typeof saved.counterSubCost === "string") setCounterSubCost(saved.counterSubCost);
+        if (typeof saved.counterChannel === "string") setCounterChannel(saved.counterChannel);
+      } else {
+        setCounterAssessment(emptyRentalAssessment()); setInquiryContractId(""); setCounterCompanyId(""); setCounterCompanySearch("");
+        setCounterRequestId(crypto.randomUUID());
+        setCounterEquipmentId(""); setCounterDailyRate(""); setCounterWeeklyRate(""); setCounterMonthlyRate("");
+        setCounterRpoPurchase(""); setCounterRpoCreditPct("0.80"); setCounterRpoDeadline(""); setCounterSubVendorId(""); setCounterSubCost(""); setCounterContractType("rental"); setCounterChannel("counter");
+      }
+    } catch { setInquiryStatus("Saved device draft could not be read. Start a new inquiry or reopen a saved contract."); }
+    hydratedDraft.current = draftScope;
+    setLoadedDraftScope(draftScope);
+  }, [draftScope]);
+  useEffect(() => {
+    if (!draftScope || loadedDraftScope !== draftScope) return;
+    try { localStorage.setItem(draftScope, JSON.stringify({counterRequestId, counterAssessment, inquiryContractId, counterCompanySearch, counterCompanyId, counterContractType, counterEquipmentId, counterStartDate, counterEndDate, counterDailyRate, counterWeeklyRate, counterMonthlyRate, counterRpoPurchase, counterRpoCreditPct, counterRpoDeadline, counterSubVendorId, counterSubCost, counterChannel})); }
+    catch { setInquiryStatus("Device draft storage is unavailable. Save the inquiry to a contract before leaving."); }
+  }, [draftScope, loadedDraftScope, counterRequestId, counterAssessment, inquiryContractId, counterCompanySearch, counterCompanyId, counterContractType, counterEquipmentId, counterStartDate, counterEndDate, counterDailyRate, counterWeeklyRate, counterMonthlyRate, counterRpoPurchase, counterRpoCreditPct, counterRpoDeadline, counterSubVendorId, counterSubCost, counterChannel]);
   const [quoteShareUrl, setQuoteShareUrl] = useState<string | null>(null);
   const [fenceCompanyId, setFenceCompanyId] = useState("");
   const [fenceName, setFenceName] = useState("Jobsite");
@@ -522,6 +576,9 @@ export function RentalCommandCenterPage() {
   const createContractMutation = useMutation({
     mutationFn: () =>
       rentalOpsApi.createContract({
+        request_id: counterRequestId,
+        needs_assessment: counterAssessment,
+        delivery_mode: counterAssessment.answers.delivery?.value === "delivery" ? "delivery" : "pickup",
         qrm_company_id: counterCompanyId,
         contract_type: counterContractType,
         equipment_id: counterEquipmentId || null,
@@ -553,6 +610,9 @@ export function RentalCommandCenterPage() {
       setCounterResult(
         `Contract ${number} opened as a draft${id ? ` (${id.slice(0, 8)}…)` : ""}. Issue the customer quote from Draft quotes below, then reserve/check out.`,
       );
+      if (id) setInquiryContractId(id);
+      setInquiryStatus("Saved");
+      setCounterRequestId(crypto.randomUUID());
       setCounterCompanyId("");
       setCounterCompanySearch("");
       setCounterEquipmentId("");
@@ -563,6 +623,7 @@ export function RentalCommandCenterPage() {
       await queryClient.invalidateQueries({ queryKey: ["qrm", "rental-command"] });
       await queryClient.invalidateQueries({ queryKey: ["qrm", "rental-contract-queue"] });
       await queryClient.invalidateQueries({ queryKey: ["qrm", "rental-draft-quotes"] });
+      await inquiries.refetch();
     },
     onError: (error: unknown) => {
       setCounterResult(error instanceof Error ? error.message : "Failed to create the contract.");
@@ -572,6 +633,7 @@ export function RentalCommandCenterPage() {
   // Resolve the governed L1 book when unit + customer are chosen so the
   // counter never starts from a day-only sticker when a full book exists.
   const resolveCounterBook = async (equipmentId: string, companyId: string) => {
+    if (rentalAssessmentMissing(counterAssessment).length) return;
     if (!equipmentId || !companyId) return;
     try {
       const { data: session } = await supabase.auth.getUser();
@@ -1061,7 +1123,7 @@ export function RentalCommandCenterPage() {
       {commandQuery.isLoading ? (
         <DeckSurface className="p-6 text-sm text-muted-foreground">Loading rental command…</DeckSurface>
       ) : commandQuery.isError || !center ? (
-        <DeckSurface className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
+        <DeckSurface className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-700 dark:text-red-300">
           {commandQuery.error instanceof Error ? commandQuery.error.message : "Rental command is unavailable right now."}
         </DeckSurface>
       ) : (
@@ -1108,7 +1170,7 @@ export function RentalCommandCenterPage() {
             {intelligenceQuery.isLoading ? (
               <p className="mt-3 text-xs text-muted-foreground">Reading forecasts…</p>
             ) : intelligenceQuery.isError ? (
-              <p className="mt-3 text-xs text-red-300">
+              <p className="mt-3 text-xs text-red-700 dark:text-red-300">
                 {intelligenceQuery.error instanceof Error ? intelligenceQuery.error.message : "Fleet intelligence unavailable."}
               </p>
             ) : (
@@ -1136,7 +1198,7 @@ export function RentalCommandCenterPage() {
                       <ul className="mt-2 space-y-2">
                         {atRisk.slice(0, 4).map((row) => (
                           <li key={`${row.category}-${row.forecast_month}`} className="rounded border border-amber-500/30 bg-amber-500/5 p-2 text-xs">
-                            <div className="flex items-center gap-1.5 font-medium text-amber-300">
+                            <div className="flex items-center gap-1.5 font-medium text-amber-700 dark:text-amber-300">
                               <AlertTriangle className="h-3 w-3" />
                               {row.shortage_risk === "short" ? "Short" : "Tight"}: {row.category} ·{" "}
                               {new Date(`${row.forecast_month}T00:00:00`).toLocaleDateString(undefined, { month: "long" })}
@@ -1162,7 +1224,7 @@ export function RentalCommandCenterPage() {
                     <ul className="mt-2 space-y-2">
                       {(intelligenceQuery.data?.yieldSuggestions ?? []).slice(0, 4).map((suggestion) => (
                         <li key={suggestion.category} className="rounded border border-border/60 p-2 text-xs">
-                          <div className={`font-medium ${suggestion.direction === "premium" ? "text-emerald-300" : "text-sky-300"}`}>
+                          <div className={`font-medium ${suggestion.direction === "premium" ? "text-emerald-700 dark:text-emerald-300" : "text-sky-700 dark:text-sky-300"}`}>
                             {suggestion.direction === "premium" ? "+" : ""}{suggestion.adjustment_pct}% {suggestion.category} → {formatCurrency(suggestion.suggested_daily)}/day
                           </div>
                           <div className="mt-1 text-muted-foreground">
@@ -1186,7 +1248,7 @@ export function RentalCommandCenterPage() {
                           key={row.equipment_id}
                           className={`rounded border p-2 text-xs ${row.recommendation === "consider_disposal" ? "border-red-500/30 bg-red-500/5" : "border-amber-500/30 bg-amber-500/5"}`}
                         >
-                          <div className={`font-medium ${row.recommendation === "consider_disposal" ? "text-red-300" : "text-amber-300"}`}>
+                          <div className={`font-medium ${row.recommendation === "consider_disposal" ? "text-red-700 dark:text-red-300" : "text-amber-700 dark:text-amber-300"}`}>
                             {row.recommendation === "consider_disposal" ? "Consider disposal" : "Watch maintenance curve"}: {row.label || row.equipment_id.slice(0, 8)}
                           </div>
                           <div className="mt-1 text-muted-foreground">
@@ -1221,7 +1283,7 @@ export function RentalCommandCenterPage() {
             {opsHealthQuery.isLoading ? (
               <p className="mt-3 text-xs text-muted-foreground">Reading ops health…</p>
             ) : opsHealthQuery.isError ? (
-              <p className="mt-3 text-xs text-red-300">
+              <p className="mt-3 text-xs text-red-700 dark:text-red-300">
                 {opsHealthQuery.error instanceof Error ? opsHealthQuery.error.message : "Ops health unavailable."}
               </p>
             ) : opsHealthQuery.data ? (
@@ -1236,14 +1298,14 @@ export function RentalCommandCenterPage() {
                     {opsHealthQuery.data.commission.with_commission} of {opsHealthQuery.data.commission.live_contracts} live contracts attributed
                   </p>
                   {opsHealthQuery.data.commission.missing_count > 0 ? (
-                    <p className="mt-1 text-xs text-amber-300">
+                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
                       Missing: {opsHealthQuery.data.commission.missing_sample.slice(0, 3).join(", ")}
                       {opsHealthQuery.data.commission.missing_count > 3
                         ? ` +${opsHealthQuery.data.commission.missing_count - 3} more`
                         : ""}
                     </p>
                   ) : (
-                    <p className="mt-1 text-xs text-emerald-300">Every live contract has a split.</p>
+                    <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">Every live contract has a split.</p>
                   )}
                 </div>
                 <div className="rounded-lg border border-border/60 p-3">
@@ -1266,13 +1328,13 @@ export function RentalCommandCenterPage() {
                 <div className="rounded-lg border border-border/60 p-3">
                   <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Availability pressure</h3>
                   {opsHealthQuery.data.availability.current_low.length === 0 ? (
-                    <p className="mt-2 text-xs text-emerald-300">
+                    <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-300">
                       No category under pressure in the next 14 days.
                     </p>
                   ) : (
                     <ul className="mt-2 space-y-1">
                       {opsHealthQuery.data.availability.current_low.slice(0, 4).map((row) => (
-                        <li key={row.category} className="text-xs text-amber-300">
+                        <li key={row.category} className="text-xs text-amber-700 dark:text-amber-300">
                           {row.category}: headroom {row.headroom} on {row.critical_date}
                           <span className="text-muted-foreground"> ({row.peak_demand}/{row.fleet_count} committed)</span>
                         </li>
@@ -1298,7 +1360,17 @@ export function RentalCommandCenterPage() {
           </DeckSurface>
 
           <DeckSurface className="p-4">
-            <h2 className="text-sm font-semibold text-foreground">New counter contract</h2>
+            <h2 className="text-sm font-semibold text-foreground">Rental inquiry</h2>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Input aria-label="Find saved inquiry by contract number" placeholder="Find contract number…" value={inquirySearch} onChange={e => setInquirySearch(e.target.value)} />
+              {inquiries.data?.more ? <p className="text-xs">More inquiries are available. Search by contract number.</p> : null}
+              <select aria-label="Reopen saved rental inquiry" value={inquiryContractId} onChange={e => { const row = savedInquiries.find(r => r.id === e.target.value); setInquiryContractId(e.target.value); setCounterAssessment(normalizeRentalAssessment(row?.needs_assessment)); setInquiryStatus(""); }} className="rounded border bg-background p-2 text-sm">
+                <option value="">New inquiry</option>{savedInquiries.map(r => <option key={r.id} value={r.id}>{r.contract_number}</option>)}
+              </select>
+              {inquiryContractId ? <Button size="sm" disabled={saveInquiry.isPending} onClick={() => saveInquiry.mutate()}>{saveInquiry.isPending ? "Saving…" : "Save assessment"}</Button> : null}
+              <span role="status" className="text-xs">{inquiryStatus}</span>
+            </div>
+            <RentalInquiryAssessment value={counterAssessment} onChange={value => { setCounterAssessment(value); if (value.answers.desired_start_date?.status === "answered" && value.answers.desired_start_date.value) setCounterStartDate(value.answers.desired_start_date.value); if (value.answers.desired_return_date?.status === "answered" && value.answers.desired_return_date.value) setCounterEndDate(value.answers.desired_return_date.value); setInquiryStatus("Pending changes"); }} />
             <p className="mt-1 text-xs text-muted-foreground">
               Open a draft rental contract for a walk-in or phone customer — no portal account needed.
               The lifecycle guard governs every move after this (reserve, check out, off-rent, return, close).
@@ -1314,6 +1386,7 @@ export function RentalCommandCenterPage() {
                   placeholder="Search customer company (min 2 chars)…"
                 />
                 <select
+                  aria-label="Rental customer account"
                   value={counterCompanyId}
                   onChange={(event) => {
                     const next = event.target.value;
@@ -1336,6 +1409,7 @@ export function RentalCommandCenterPage() {
                   ))}
                 </select>
                 <select
+                  aria-label="Rental contract type"
                   value={counterContractType}
                   onChange={(event) => setCounterContractType(event.target.value as typeof counterContractType)}
                   className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
@@ -1392,6 +1466,7 @@ export function RentalCommandCenterPage() {
               </div>
               <div className="grid gap-2">
                 <select
+                  aria-label="Rental unit"
                   value={counterEquipmentId}
                   onChange={(event) => {
                     const next = event.target.value;
@@ -1412,10 +1487,10 @@ export function RentalCommandCenterPage() {
                     ))}
                 </select>
                 <div className="grid grid-cols-2 gap-2">
-                  <Input type="date" value={counterStartDate} onChange={(event) => setCounterStartDate(event.target.value)} />
-                  <Input type="date" value={counterEndDate} onChange={(event) => setCounterEndDate(event.target.value)} />
+                  <Input aria-label="Rental start date" type="date" value={counterStartDate} onChange={(event) => setCounterStartDate(event.target.value)} />
+                  <Input aria-label="Rental return date" type="date" value={counterEndDate} onChange={(event) => setCounterEndDate(event.target.value)} />
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <fieldset disabled={rentalAssessmentMissing(counterAssessment).length > 0} className="grid grid-cols-3 gap-2">
                   <Input
                     value={counterDailyRate}
                     onChange={(event) => setCounterDailyRate(event.target.value)}
@@ -1434,11 +1509,11 @@ export function RentalCommandCenterPage() {
                     placeholder="Month $"
                     inputMode="decimal"
                   />
-                </div>
+                </fieldset>
                 {counterRateSource ? (
                   <p className="text-[11px] text-muted-foreground">Rate book: {counterRateSource}</p>
                 ) : null}
-                {counterPreview ? (
+                {counterPreview && rentalAssessmentMissing(counterAssessment).length === 0 ? (
                   <p className="text-xs text-muted-foreground">
                     Preview: {counterPreview.billableDays} billable days · billed as {counterPreview.billedAs} ·{" "}
                     {formatCurrency(counterPreview.total)}
@@ -1463,7 +1538,7 @@ export function RentalCommandCenterPage() {
                   setCounterResult(null);
                   createContractMutation.mutate();
                 }}
-                disabled={createContractMutation.isPending || !counterCompanyId || !counterStartDate || !counterEndDate}
+                disabled={!!inquiryContractId || createContractMutation.isPending || !counterCompanyId || !counterStartDate || !counterEndDate}
               >
                 {createContractMutation.isPending ? "Opening…" : "Open draft contract"}
               </Button>
@@ -1556,7 +1631,7 @@ export function RentalCommandCenterPage() {
             {availabilityCalendarQuery.isLoading ? (
               <p className="mt-3 text-xs text-muted-foreground">Loading calendar…</p>
             ) : availabilityCalendarQuery.isError ? (
-              <p className="mt-3 text-xs text-red-300">
+              <p className="mt-3 text-xs text-red-700 dark:text-red-300">
                 {availabilityCalendarQuery.error instanceof Error
                   ? availabilityCalendarQuery.error.message
                   : "Calendar unavailable"}
@@ -1659,7 +1734,7 @@ export function RentalCommandCenterPage() {
               governs below-book estimates.
             </p>
             {quoteShareUrl ? (
-              <p className="mt-2 break-all text-xs text-emerald-300">
+              <p className="mt-2 break-all text-xs text-emerald-700 dark:text-emerald-300">
                 Share URL:{" "}
                 <a className="underline" href={quoteShareUrl} target="_blank" rel="noreferrer">
                   {quoteShareUrl}
@@ -1708,7 +1783,7 @@ export function RentalCommandCenterPage() {
               Code lines Off-rent (clock stops, unit awaits pickup), Return, or Hold; release holds; exchange units
               mid-rental. Close returned contracts after the final invoice posts.
             </p>
-            {opsError ? <p className="mt-2 text-xs text-red-300">{opsError}</p> : null}
+            {opsError ? <p className="mt-2 text-xs text-red-700 dark:text-red-300">{opsError}</p> : null}
             <div className="mt-4 space-y-3">
               {(onRentOpsQuery.data?.contracts ?? []).length === 0 ? (
                 <p className="text-xs text-muted-foreground">
@@ -1743,10 +1818,10 @@ export function RentalCommandCenterPage() {
                           contract.lifecycle_state === "off_rent"
                             ? "bg-cyan-500/10 text-cyan-300"
                             : contract.lifecycle_state === "reserved"
-                              ? "bg-amber-500/10 text-amber-300"
+                              ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
                               : contract.lifecycle_state === "returned"
                                 ? "bg-violet-500/10 text-violet-300"
-                                : "bg-emerald-500/10 text-emerald-300"
+                                : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                         }`}>
                           {String(contract.lifecycle_state).replace(/_/g, " ")}
                         </span>
@@ -1797,9 +1872,9 @@ export function RentalCommandCenterPage() {
                       const openRun = runs.find((run) => run.completed_at == null);
                       return (
                         <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-2 py-1.5">
-                          <span className="text-[10px] uppercase tracking-wide text-amber-300">Check-out</span>
+                          <span className="text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-300">Check-out</span>
                           {completedRun ? (
-                            <span className="text-xs text-emerald-300">
+                            <span className="text-xs text-emerald-700 dark:text-emerald-300">
                               Inspection {completedRun.inspection_number} complete
                               {completedRun.machine_hours != null ? ` · ${completedRun.machine_hours}h` : ""}
                             </span>
@@ -1962,13 +2037,13 @@ export function RentalCommandCenterPage() {
                             {contract.requested_start_date} → {contract.requested_end_date}
                           </p>
                           {contract.assignment_status === "pending_assignment" ? (
-                            <p className="mt-2 text-xs font-medium text-amber-300">
+                            <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">
                               Unit assignment is still pending. This booking cannot move forward until a specific rental unit is assigned.
                             </p>
                           ) : null}
                           {contract.customer_notes ? <p className="mt-2 text-xs text-muted-foreground">{contract.customer_notes}</p> : null}
                         </div>
-                        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+                        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
                           {contract.status.replace(/_/g, " ")}
                         </span>
                       </div>
@@ -2054,7 +2129,7 @@ export function RentalCommandCenterPage() {
                           {extension.customer_reason ? ` · ${extension.customer_reason}` : ""}
                         </p>
                       </div>
-                      <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+                      <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
                         {extension.status.replace(/_/g, " ")}
                       </span>
                     </div>
@@ -2300,7 +2375,7 @@ function ContractCommissionEditor({ contractId }: { contractId: string }) {
         commissionsQuery.isLoading ? (
           <p className="mt-1 text-[11px] text-muted-foreground">Loading splits…</p>
         ) : commissionsQuery.isError ? (
-          <p className="mt-1 text-[11px] text-red-300">
+          <p className="mt-1 text-[11px] text-red-700 dark:text-red-300">
             {commissionsQuery.error instanceof Error
               ? commissionsQuery.error.message
               : "Could not load splits."}
@@ -2308,7 +2383,7 @@ function ContractCommissionEditor({ contractId }: { contractId: string }) {
         ) : (
           <div className="mt-2 space-y-1.5">
             {rows.length === 0 ? (
-              <p className="text-[11px] text-amber-300">
+              <p className="text-[11px] text-amber-700 dark:text-amber-300">
                 No attribution yet — add the originating rep.
               </p>
             ) : null}
@@ -2374,7 +2449,7 @@ function ContractCommissionEditor({ contractId }: { contractId: string }) {
               >
                 Add rep
               </button>
-              <span className={`text-[11px] ${totalOk ? "text-emerald-300" : "text-amber-300"}`}>
+              <span className={`text-[11px] ${totalOk ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
                 total {Number.isFinite(total) ? total : 0}%
               </span>
               <Button
@@ -2467,10 +2542,10 @@ function UnitListCard({
 
 function RiskPill({ riskLevel }: { riskLevel: "high" | "medium" | "low" }) {
   const tone = riskLevel === "high"
-    ? "bg-red-500/10 text-red-300"
+    ? "bg-red-500/10 text-red-700 dark:text-red-300"
     : riskLevel === "medium"
-      ? "bg-amber-500/10 text-amber-200"
-      : "bg-emerald-500/10 text-emerald-200";
+      ? "bg-amber-500/10 text-amber-700 dark:text-amber-200"
+      : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-200";
 
   return (
     <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${tone}`}>

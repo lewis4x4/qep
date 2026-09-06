@@ -1,16 +1,19 @@
 #!/usr/bin/env bun
 
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
-import { spawn } from "node:child_process";
+import { mkdirSync, writeFileSync, readFileSync, existsSync, mkdtempSync, chmodSync, unlinkSync, rmdirSync, realpathSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
+import { spawn, execFileSync, spawnSync } from "node:child_process";
+import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { loadLocalEnv } from "../_shared/local-env.mjs";
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const options = {
     segment: "",
     ui: false,
     chaos: true,
     designAdvisory: false,
+    localOnly: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -21,6 +24,7 @@ function parseArgs(argv) {
       i += 1;
       continue;
     }
+    if (value === "--local-only") { options.localOnly = true; continue; }
     if (value === "--ui") {
       options.ui = true;
       continue;
@@ -37,6 +41,66 @@ function parseArgs(argv) {
 
   options.segment = options.segment.trim() || "unnamed-segment";
   return options;
+}
+
+const LOCAL_ENV_KEYS = [
+  "PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TEMP", "TMP", "LANG", "LC_ALL", "TERM", "COLORTERM", "CI",
+  "SYSTEMROOT", "COMSPEC", "PATHEXT", "DENO_DIR", "BUN_INSTALL", "XDG_CACHE_HOME", "QEP_POSTGRES_BIN", "UI_REVIEW_OUTPUT",
+];
+export function localOnlyChildEnv(source = process.env) {
+  const env = Object.fromEntries(LOCAL_ENV_KEYS.filter(key => typeof source[key] === "string").map(key => [key, source[key]]));
+  return { ...env, QEP_SKIP_LOCAL_ENV: "1", VITE_SUPABASE_URL: "https://qep-ui-test.invalid",
+    VITE_SUPABASE_ANON_KEY: "isolated-fixture-anon-key-not-real", VITE_SENTRY_DSN: "", SENTRY_AUTH_TOKEN: "", SENTRY_ORG: "", SENTRY_PROJECT: "" };
+}
+const shellQuote = value => "'" + value.replace(/'/g, "'\"'\"'") + "'";
+export function createLocalOnlyRuntime(source = process.env) {
+  const env = localOnlyChildEnv(source);
+  const bun = realpathSync(process.versions.bun ? process.execPath : execFileSync("which", ["bun"], { encoding: "utf8", env }).trim());
+  const runs = join(homedir(), ".hermes", "tmp", "agent-runs");
+  mkdirSync(runs, { recursive: true });
+  const root = mkdtempSync(join(runs, "segment-local-"));
+  const bin = join(root, "bin"); mkdirSync(bin);
+  const files = [join(bin, "bun"), join(bin, "bunx")];
+  for (const [index, path] of files.entries()) {
+    writeFileSync(path, `#!/bin/sh\nexec ${shellQuote(bun)} --no-env-file ${index === 1 ? "x " : ""}"$@"\n`, { mode: 0o700 });
+    chmodSync(path, 0o700);
+  }
+  const manifest = join(root, "manifest.json");
+  const record = artifacts => writeFileSync(manifest, JSON.stringify({ schema_version: 1, run_id: root.split("/").at(-1), created_by: "codex", artifacts }, null, 2), { mode: 0o600 });
+  record(files);
+  env.PATH = `${bin}:${env.PATH ?? "/usr/bin:/bin"}`;
+  return { env, manifest, cleanup() {
+    const result = spawnSync("jarvis-storage-steward", ["cleanup-run", "--manifest", manifest], { encoding: "utf8", env });
+    if (result.status !== 0) return `Runtime shims retained under recorded manifest: ${manifest}`;
+    for (const path of files) if (existsSync(path)) unlinkSync(path);
+    rmdirSync(bin); record([]); return null;
+  } };
+}
+export function verificationScope(localOnly) {
+  return localOnly ? {
+    kind: "isolated_local_technical_verification", local_only: true, operational_acceptance: false,
+    label: "Isolated local technical checks only; no operational acceptance",
+    exclusions: ["hosted KB retrieval/integration/workspace isolation", "production deployment", "live customer/provider acceptance", "physical-device UAT", "business rollout approval"],
+    environment: { inherited_variables: "explicit allowlist; inherited service/provider secrets excluded", bun_dotenv: "disabled for PATH-invoked bun/bunx and explicit no-env-file test children", filesystem_sandbox: false, network_sandbox: false,
+      limitation: "Not a filesystem or network sandbox: arbitrary test code and non-Bun tools can still read files or host credential stores. No claim of universal secret-file isolation." },
+  } : { kind: "configured_registered_gate_chain", local_only: false, operational_acceptance: false,
+    label: "Configured registered gate chain; operational acceptance requires separate owner/UAT approval",
+    exclusions: ["automatic business rollout approval"] };
+}
+export function designArtifacts(localOnly, ui, repoRoot, env = process.env) {
+  if (!localOnly) return ["/tmp/qep-design-review-report.json", "/tmp/qep-mobile-admin-rep-redirect.png", "test-results/design-review/floor-desktop.png", "test-results/design-review/floor-mobile.png"];
+  if (!ui) return [];
+  const output = resolve(env.UI_REVIEW_OUTPUT ?? join(repoRoot, "test-results", "isolated-ui"));
+  const report = join(output, "report.json");
+  const artifacts = [report];
+  if (existsSync(report)) {
+    const document = JSON.parse(readFileSync(report, "utf8"));
+    for (const result of document.results ?? []) for (const name of result.screenshots ?? []) {
+      const path = resolve(output, name);
+      if (path.startsWith(output + "/") && existsSync(path)) artifacts.push(path);
+    }
+  }
+  return [...new Set(artifacts)];
 }
 
 function nowIso() {
@@ -78,14 +142,14 @@ function logCheckStart({ id, command, cwd, repoRoot }) {
   console.log(`cmd: ${command}`);
 }
 
-async function runCommand({ id, command, cwd, repoRoot }) {
+async function runCommand({ id, command, cwd, repoRoot, env }) {
   logCheckStart({ id, command, cwd, repoRoot });
 
   return new Promise((resolve) => {
     const startedAt = Date.now();
     const child = spawn(command, {
       cwd,
-      env: process.env,
+      env,
       shell: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -146,9 +210,54 @@ function summarize(check) {
   return `FAIL ${check.id} (${check.duration_ms}ms)`;
 }
 
-const options = parseArgs(process.argv.slice(2));
+export function buildGateReport(options, checks, reportTimestamp, repoRoot, childEnv = process.env, runtime = null, cleanupWarning = null) {
+  const blockingFailures = checks.filter(check => check.required && check.status === "fail");
+  const verdict = blockingFailures.length ? "FAIL" : "PASS";
+  const scope = verificationScope(options.localOnly);
+return {
+  segment: options.segment,
+  agent: "segment_gate_runner",
+  timestamp: reportTimestamp,
+  verdict,
+  local_only: options.localOnly,
+  verification_scope: scope,
+  operational_acceptance: false,
+  ...(runtime ? { isolation_manifest: runtime.manifest, isolation_cleanup_warning: cleanupWarning } : {}),
+  mission_alignment: {
+    verdict: "pass",
+    evidence:
+      options.localOnly
+        ? `Segment ${options.segment} ran isolated local technical checks and, when requested, the source-bound synthetic UI review. Hosted KB checks were excluded. This result supports remediation verification, not customer, provider, physical-device or operational acceptance.`
+        : `Segment ${options.segment} ran through the registered QEP gate chain under the mission lock: equipment/parts/sales/rental operator utility, pressure testing, and release-gate review before closure.`,
+    risk:
+      "Automated command gates do not replace product judgment; release_gate_agent must still confirm surface-specific mission fit and any waiver before segment closure.",
+  },
+  options: {
+    ui: options.ui,
+    chaos: options.chaos,
+    design_advisory: options.designAdvisory,
+    local_only: options.localOnly,
+  },
+  checks,
+  summary: {
+    total: checks.length,
+    passed: checks.filter((check) => check.status === "pass").length,
+    failed: checks.filter((check) => check.status === "fail").length,
+    skipped: checks.filter((check) => check.status === "skipped").length,
+    blocking_failures: blockingFailures.map((check) => check.id),
+  },
+  artifacts: designArtifacts(options.localOnly, options.ui, repoRoot, childEnv),
+};
+}
+
+export async function main(argv = process.argv.slice(2)) {
+const options = parseArgs(argv);
 const repoRoot = process.cwd();
-loadLocalEnv(repoRoot);
+if (!options.localOnly) loadLocalEnv(repoRoot);
+const runtime = options.localOnly ? createLocalOnlyRuntime() : null;
+const childEnv = runtime?.env ?? process.env;
+const scope = verificationScope(options.localOnly);
+console.log(`verification scope: ${scope.label}`);
 const reportTimestamp = nowIso();
 const reportDir = join(repoRoot, "test-results", "agent-gates");
 mkdirSync(reportDir, { recursive: true });
@@ -168,7 +277,7 @@ async function pushCheck({ id, command, required = true, enabled = true, cwd = r
     return;
   }
 
-  const result = await runCommand({ id, command, cwd, repoRoot });
+  const result = await runCommand({ id, command, cwd, repoRoot, env: childEnv });
   checks.push({
     id,
     status: result.exitCode === 0 ? "pass" : "fail",
@@ -242,22 +351,27 @@ await pushCheck({
   required: true,
 });
 
+await pushCheck({ id: "qa.remediation-transactions-and-recovery", command: "bun --no-env-file run test:remediation", required: true });
+
 await pushCheck({
   id: "qa.kb-retrieval-eval",
   command: "node ./scripts/kb-eval/run-eval-if-configured.mjs",
-  required: true,
+  required: !options.localOnly,
+  enabled: !options.localOnly,
 });
 
 await pushCheck({
   id: "qa.kb-integration-tests",
   command: "node ./scripts/kb-eval/run-integration-if-configured.mjs",
-  required: true,
+  required: !options.localOnly,
+  enabled: !options.localOnly,
 });
 
 await pushCheck({
   id: "qa.kb-workspace-isolation",
   command: "KB_ISOLATION_REQUIRED=true node ./scripts/kb-eval/workspace-isolation.mjs",
-  required: true,
+  required: !options.localOnly,
+  enabled: !options.localOnly,
 });
 
 await pushCheck({
@@ -269,46 +383,17 @@ await pushCheck({
 
 await pushCheck({
   id: "cdo.design-review",
-  command: "bun run design:review",
+  command: options.localOnly ? "node scripts/agent-gates/validate-isolated-ui-review.mjs" : "bun run design:review",
   required: options.ui && !options.designAdvisory,
   enabled: options.ui,
 });
 
+const cleanupWarning = runtime?.cleanup() ?? null;
+if (cleanupWarning) console.warn(cleanupWarning);
 const blockingFailures = checks.filter((check) => check.required && check.status === "fail");
 const verdict = blockingFailures.length > 0 ? "FAIL" : "PASS";
 
-const report = {
-  segment: options.segment,
-  agent: "segment_gate_runner",
-  timestamp: reportTimestamp,
-  verdict,
-  mission_alignment: {
-    verdict: "pass",
-    evidence:
-      `Segment ${options.segment} ran through the registered QEP gate chain under the mission lock: equipment/parts/sales/rental operator utility, pressure testing, and release-gate review before closure.`,
-    risk:
-      "Automated command gates do not replace product judgment; release_gate_agent must still confirm surface-specific mission fit and any waiver before segment closure.",
-  },
-  options: {
-    ui: options.ui,
-    chaos: options.chaos,
-    design_advisory: options.designAdvisory,
-  },
-  checks,
-  summary: {
-    total: checks.length,
-    passed: checks.filter((check) => check.status === "pass").length,
-    failed: checks.filter((check) => check.status === "fail").length,
-    skipped: checks.filter((check) => check.status === "skipped").length,
-    blocking_failures: blockingFailures.map((check) => check.id),
-  },
-  artifacts: [
-    "/tmp/qep-design-review-report.json",
-    "/tmp/qep-mobile-admin-rep-redirect.png",
-    "test-results/design-review/floor-desktop.png",
-    "test-results/design-review/floor-mobile.png",
-  ],
-};
+const report = buildGateReport(options, checks, reportTimestamp, repoRoot, childEnv, runtime, cleanupWarning);
 
 const reportPath = join(
   reportDir,
@@ -317,12 +402,13 @@ const reportPath = join(
 writeFileSync(reportPath, JSON.stringify(report, null, 2));
 
 console.log(`segment: ${options.segment}`);
-console.log(`verdict: ${verdict}`);
+console.log(`verdict: ${verdict}${options.localOnly ? " (isolated local technical verification only; operational acceptance excluded)" : ""}`);
 console.log(`report: ${reportPath}`);
 for (const check of checks) {
   console.log(summarize(check));
 }
 
-if (verdict === "FAIL") {
-  process.exit(1);
+return verdict === "FAIL" ? 1 : 0;
 }
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exitCode = await main();

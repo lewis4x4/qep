@@ -13,7 +13,6 @@ import {
   safeJsonError,
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
-import { calculateServiceHaulPricing } from "../_shared/service-haul-pricing.ts";
 import { notifyAfterStageChange } from "../_shared/service-lifecycle-notify.ts";
 import { normalizeServiceMileageSource } from "../_shared/service-mileage-source.ts";
 
@@ -98,42 +97,6 @@ function normalizePricingRow(
   };
 }
 
-function fallbackHaulPricing(input: {
-  truckClass: string;
-  rateType: "customer" | "internal";
-  oneWayMiles: number;
-}): HaulPricingRow {
-  const result = calculateServiceHaulPricing({
-    oneWayMiles: input.oneWayMiles,
-    baseRateCents: 0,
-    perMileRateCents: 0,
-    perHaulMinimumCents: 50000,
-    roundTripMinimumMiles: 0,
-  });
-  return {
-    rate_sheet_id: null,
-    truck_class: input.truckClass,
-    rate_type: input.rateType,
-    one_way_miles: result.oneWayMiles,
-    round_trip_miles: result.roundTripMiles,
-    billable_miles: result.billableMiles,
-    base_rate_cents: 0,
-    per_mile_rate_cents: 0,
-    per_haul_minimum_cents: 50000,
-    total_cents: result.totalCents,
-    rate_source: "edge_fallback_legacy_minimum",
-    calculation: {
-      one_way_miles: result.oneWayMiles,
-      round_trip_miles: result.roundTripMiles,
-      billable_miles: result.billableMiles,
-      base_rate_cents: 0,
-      per_mile_rate_cents: 0,
-      per_haul_minimum_cents: 50000,
-      rate_source: "edge_fallback_legacy_minimum",
-    },
-  };
-}
-
 async function calculateHaulCharge(
   supabase: SupabaseClient,
   input: {
@@ -157,7 +120,7 @@ async function calculateHaulCharge(
   if (error) {
     console.warn("H7.1 haul pricing RPC unavailable, using fallback:", error);
   }
-  return fallbackHaulPricing(input);
+  throw new Error("No approved haul price is available. Confirm the truck class and rate sheet before saving a charge.");
 }
 
 Deno.serve(async (req) => {
@@ -188,6 +151,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     captureEdgeException(err, { fn: "service-haul-router", req });
     console.error("service-haul-router error:", err);
+    if (err instanceof Error && err.message.startsWith("No approved haul price")) return safeJsonError(err.message, 409, origin);
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);
     }

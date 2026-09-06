@@ -112,6 +112,8 @@ export interface RepPipelineDeal {
   primary_contact_phone: string | null;
   stage: string;
   stage_sort: number;
+  stage_id?: string | null;
+  stage_probability?: number | null;
   amount: number | null;
   deal_name: string;
   created_at: string;

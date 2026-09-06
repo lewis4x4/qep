@@ -47,24 +47,26 @@ export async function findPortalPaymentIntent(
   checkoutSessionId: string | null,
 ): Promise<PortalPaymentIntentRow | null> {
   if (stripePaymentIntentId) {
-    const { data } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from("portal_payment_intents")
       .select(
         "id, workspace_id, company_id, invoice_id, amount_cents, stripe_payment_intent_id, metadata",
       )
       .eq("stripe_payment_intent_id", stripePaymentIntentId)
       .maybeSingle();
+    if (error) throw new Error(`Payment lookup failed: ${error.message}`);
     if (data) return data as PortalPaymentIntentRow;
   }
 
   if (checkoutSessionId) {
-    const { data } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from("portal_payment_intents")
       .select(
         "id, workspace_id, company_id, invoice_id, amount_cents, stripe_payment_intent_id, metadata",
       )
       .contains("metadata", { checkout_session_id: checkoutSessionId })
       .maybeSingle();
+    if (error) throw new Error(`Payment lookup failed: ${error.message}`);
     if (data) return data as PortalPaymentIntentRow;
   }
 
@@ -349,22 +351,15 @@ export async function reconcileSucceededPayment(input: {
 
   const now = new Date().toISOString();
   if (!paymentIntent) {
-    if (input.stripePaymentIntentId) {
-      const { error: fallbackUpdateError } = await input.supabaseAdmin
-        .from("portal_payment_intents")
-        .update({
-          status: "succeeded",
-          succeeded_at: now,
-          webhook_signature_verified: true,
-        })
-        .eq("stripe_payment_intent_id", input.stripePaymentIntentId);
-      if (fallbackUpdateError) {
-        throw new Error(
-          `failed to persist unmatched Stripe payment state: ${fallbackUpdateError.message}`,
-        );
-      }
-    }
-    return;
+    const { error } = await input.supabaseAdmin.rpc("enqueue_exception", {
+      p_source: "stripe_mismatch",
+      p_title: "Verified card payment needs reconciliation",
+      p_severity: "error",
+      p_detail: "No local intent matches the verified event. Recover the anchor before acknowledging delivery.",
+      p_payload: { exception_subtype: "stripe_unmatched_payment", event_id: input.eventId, payment_intent_id: input.stripePaymentIntentId, checkout_session_id: input.checkoutSessionId },
+      p_entity_table: "portal_payment_intents", p_entity_id: null,
+    });
+    throw new Error(error ? `Unmatched payment; exception persistence failed: ${error.message}` : "Unmatched verified payment retained for reconciliation; provider must retry");
   }
 
   const metadata = asRecord(paymentIntent.metadata);
@@ -381,108 +376,72 @@ export async function reconcileSucceededPayment(input: {
     return;
   }
 
-  const alreadyAppliedAt =
-    typeof metadata.invoice_payment_applied_at === "string"
-      ? metadata.invoice_payment_applied_at
-      : null;
-  const amountCents = paymentIntent.amount_cents > 0
-    ? paymentIntent.amount_cents
-    : Math.max(0, input.fallbackAmountCents ?? 0);
-  const intentId = input.stripePaymentIntentId ??
-    paymentIntent.stripe_payment_intent_id;
+  const intentId = input.stripePaymentIntentId ?? paymentIntent.stripe_payment_intent_id;
+  const expectedCents = Number(paymentIntent.amount_cents);
+  const capturedCents = input.fallbackAmountCents == null ? expectedCents : Number(input.fallbackAmountCents);
+  let nextMetadata: Record<string, unknown> = { ...metadata, stripe_event_id: input.eventId };
+  // An old marker alone is not proof: older versions could set it before any invoice write.
+  delete nextMetadata.invoice_payment_applied_at;
 
-  let nextMetadata: Record<string, unknown> = {
-    ...metadata,
-    stripe_event_id: input.eventId,
-    invoice_payment_applied_at: alreadyAppliedAt ?? now,
-  };
-
-  if (!alreadyAppliedAt && paymentIntent.invoice_id && amountCents > 0) {
-    const { data: invoiceRow } = await input.supabaseAdmin
-      .from("customer_invoices")
-      .select(
-        "id, workspace_id, total, amount_paid, status, paid_at, payment_reference, crm_company_id",
-      )
-      .eq("id", paymentIntent.invoice_id)
-      .maybeSingle();
-
-    if (invoiceRow) {
-      const invoice = invoiceRow as PortalInvoiceRow;
-      const currentAmountPaid = Number(invoice.amount_paid ?? 0);
-      const invoiceTotal = Number(invoice.total ?? 0);
-      const balance = Math.max(invoiceTotal - currentAmountPaid, 0);
-      const balanceCents = Math.round(balance * 100);
-      const workspaceMismatch = paymentIntent.workspace_id &&
-        invoice.workspace_id &&
-        paymentIntent.workspace_id !== invoice.workspace_id;
-      const companyMismatch = paymentIntent.company_id &&
-        invoice.crm_company_id &&
-        paymentIntent.company_id !== invoice.crm_company_id;
-      const underpaid = amountCents < balanceCents;
-      if (workspaceMismatch || companyMismatch || underpaid) {
-        nextMetadata = {
-          ...nextMetadata,
-          invoice_payment_blocked_reason: workspaceMismatch
-            ? "workspace_mismatch"
-            : companyMismatch
-            ? "company_mismatch"
-            : "amount_below_invoice_balance",
-        };
-      } else if (balance > 0) {
-        const amount = amountCents / 100;
-        const appliedAmount = Math.min(balance, amount);
-        const nextAmountPaid = currentAmountPaid + appliedAmount;
-        const { error: invoiceUpdateError } = await input.supabaseAdmin
-          .from("customer_invoices")
-          .update({
-            amount_paid: nextAmountPaid,
-            payment_method: "stripe",
-            payment_reference: `stripe:${intentId}`,
-            paid_at: nextAmountPaid >= invoiceTotal
-              ? (invoice.paid_at ?? now)
-              : invoice.paid_at,
-            status: nextAmountPaid >= invoiceTotal
-              ? "paid"
-              : nextAmountPaid > 0
-              ? "partial"
-              : invoice.status,
-            updated_at: now,
-          })
-          .eq("id", invoice.id);
-        if (invoiceUpdateError) {
-          throw new Error(
-            `failed to apply Stripe payment to customer invoice: ${invoiceUpdateError.message}`,
-          );
-        }
-      }
-
-      nextMetadata = await recomputeHealthScoreForInvoice({
-        supabaseAdmin: input.supabaseAdmin,
-        invoice,
-        metadata: nextMetadata,
-        now,
+  async function block(reason: string): Promise<never> {
+    nextMetadata = { ...nextMetadata, invoice_payment_blocked_reason: reason, reconciliation_status: "blocked", provider_payment_captured: true, ...(/legacy|ambiguous/i.test(reason) ? { reconciliation_requires_manual: true } : {}) };
+    const exceptionPayload = { exception_subtype: "stripe_invoice_reconciliation", event_id: input.eventId, portal_payment_intent_id: paymentIntent!.id,
+      invoice_id: paymentIntent!.invoice_id, workspace_id: paymentIntent!.workspace_id, captured_amount_cents: capturedCents, blocked_reason: reason };
+    let exceptionError: { message: string; code?: string } | null;
+    if (paymentIntent!.workspace_id) {
+      // The service-role caller has no user workspace claim: do not let the generic RPC default this to another workspace.
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${paymentIntent!.workspace_id}:${input.eventId ?? intentId}:${reason}`));
+      const hex = Array.from(new Uint8Array(digest)).slice(0,16).map(n => n.toString(16).padStart(2,"0")).join("");
+      const exceptionId = `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+      const result = await input.supabaseAdmin.from("exception_queue").insert({
+        id: exceptionId, workspace_id: paymentIntent!.workspace_id, source: "stripe_mismatch",
+        title: "Captured card payment needs invoice reconciliation", severity: "error", detail: `Invoice receipt is unapplied: ${reason}.`,
+        payload: exceptionPayload, entity_table: "portal_payment_intents", entity_id: paymentIntent!.id,
       });
+      exceptionError = result.error?.code === "23505" ? null : result.error;
     } else {
-      nextMetadata = {
-        ...nextMetadata,
-        health_score_recompute_error: "invoice_not_found",
-      };
+      const result = await input.supabaseAdmin.rpc("enqueue_exception", {
+        p_source: "stripe_mismatch", p_title: "Captured card payment has no workspace anchor", p_severity: "error",
+        p_detail: "Recover the local payment workspace before application.", p_payload: exceptionPayload,
+        p_entity_table: "portal_payment_intents", p_entity_id: paymentIntent!.id,
+      });
+      exceptionError = result.error;
     }
+    if (exceptionError) throw new Error(`Invoice reconciliation blocked (${reason}); exception persistence failed: ${exceptionError.message}`);
+    const { data, error } = await input.supabaseAdmin.from("portal_payment_intents").update({
+      stripe_payment_intent_id: intentId, status: "processing", webhook_signature_verified: true, metadata: nextMetadata,
+    }).eq("id", paymentIntent!.id).select("id").maybeSingle();
+    if (error || !data) throw new Error(`Invoice reconciliation blocked (${reason}); state persistence failed: ${error?.message ?? "intent missing"}`);
+    throw new Error(`Invoice reconciliation blocked: ${reason}; provider must retry`);
   }
 
-  const { error: paymentIntentUpdateError } = await input.supabaseAdmin
-    .from("portal_payment_intents")
-    .update({
-      stripe_payment_intent_id: intentId,
-      status: "succeeded",
-      succeeded_at: now,
-      webhook_signature_verified: true,
-      metadata: nextMetadata,
-    })
-    .eq("id", paymentIntent.id);
-  if (paymentIntentUpdateError) {
-    throw new Error(
-      `failed to persist Stripe invoice reconciliation state: ${paymentIntentUpdateError.message}`,
-    );
-  }
+  if (!paymentIntent.invoice_id) return await block("invoice_anchor_missing");
+  if (!paymentIntent.workspace_id || !paymentIntent.company_id) return await block("payment_scope_missing");
+  if (!Number.isSafeInteger(expectedCents) || expectedCents <= 0 || !Number.isSafeInteger(capturedCents) || capturedCents <= 0) return await block("invalid_payment_amount");
+  if (capturedCents !== expectedCents) return await block("stripe_amount_mismatch");
+
+  const { data: invoiceRow, error: invoiceLookupError } = await input.supabaseAdmin.from("customer_invoices")
+    .select("id, workspace_id, total, amount_paid, status, paid_at, payment_reference, crm_company_id")
+    .eq("id", paymentIntent.invoice_id).maybeSingle();
+  if (invoiceLookupError) throw new Error(`Invoice lookup failed: ${invoiceLookupError.message}`);
+  if (!invoiceRow) return await block("invoice_not_found");
+  const invoice = invoiceRow as PortalInvoiceRow;
+  if (invoice.workspace_id !== paymentIntent.workspace_id) return await block("workspace_mismatch");
+  if (!invoice.crm_company_id || invoice.crm_company_id !== paymentIntent.company_id) return await block("company_mismatch");
+  const reference = `stripe:${intentId}`;
+  const { data: receipt, error: receiptError } = await input.supabaseAdmin.rpc("apply_stripe_invoice_receipt", {
+    p_intent_id: paymentIntent.id, p_provider_payment_id: intentId, p_captured_amount_cents: capturedCents, p_event_id: input.eventId,
+  });
+  if (receiptError) return await block(receiptError.message);
+  if (!receipt || typeof receipt.payment_id !== "string" || receipt.applied_cents !== capturedCents) throw new Error("Provider receipt transaction returned no matching immutable receipt; retry");
+  nextMetadata = { ...nextMetadata, invoice_payment_applied_at: receipt.received_at ?? now,
+    invoice_payment_reference: reference, invoice_payment_applied_cents: capturedCents, customer_payment_id: receipt.payment_id,
+    reconciliation_status: "applied" };
+  delete nextMetadata.invoice_payment_blocked_reason;
+  delete nextMetadata.reconciliation_requires_manual;
+  nextMetadata = await recomputeHealthScoreForInvoice({ supabaseAdmin: input.supabaseAdmin, invoice, metadata: nextMetadata, now });
+  const { data: persistedIntent, error: paymentIntentUpdateError } = await input.supabaseAdmin.from("portal_payment_intents").update({
+    stripe_payment_intent_id: intentId, status: "succeeded", succeeded_at: now, webhook_signature_verified: true, metadata: nextMetadata,
+  }).eq("id", paymentIntent.id).select("id").maybeSingle();
+  if (paymentIntentUpdateError || !persistedIntent) throw new Error(`failed to persist Stripe invoice reconciliation state: ${paymentIntentUpdateError?.message ?? "intent missing"}`);
 }

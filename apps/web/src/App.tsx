@@ -15,6 +15,8 @@ import {
 import { hasCachedAuthProfile } from "./lib/auth-recovery";
 import {
   canAccessFloorSurface,
+  canAccessServiceOperations,
+  canAccessPartsOperations,
   canAccessMachineRecords,
   canAccessManagerAdminRoute,
   canAccessManagerAdminSurface,
@@ -838,7 +840,8 @@ function App() {
     connected: true,
     loading: false,
   });
-  const [queryClient] = useState(
+  const queryScope = `${user?.id ?? "anonymous"}:${profile?.active_workspace_id ?? "unbound"}:${profile?.role ?? "none"}:${profile?.iron_role ?? "none"}`;
+  const queryClient = useMemo(
     () =>
       new QueryClient({
         defaultOptions: {
@@ -850,8 +853,13 @@ function App() {
             gcTime: 10 * 60_000,     // 10 min — keep unused cache longer for back-nav
           },
         },
-      })
+      }),
+    [queryScope],
   );
+  useEffect(() => () => {
+    void queryClient.cancelQueries();
+    queryClient.clear();
+  }, [queryClient]);
   const [sessionExpired, setSessionExpired] = useState(false);
   // Track intentional logouts so SIGNED_OUT doesn't show the expired modal
   const isIntentionalLogout = useRef(false);
@@ -922,7 +930,7 @@ function App() {
 
   if (!user && shouldHoldProtectedRouteBootstrap) {
     return (
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider key={queryScope} client={queryClient}>
         <BrowserRouter>
           <Suspense fallback={null}>
             <OfflineBanner />
@@ -953,7 +961,7 @@ function App() {
 
   if (!user) {
     return (
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider key={queryScope} client={queryClient}>
         <BrowserRouter>
           <Suspense fallback={null}>
             <OfflineBanner />
@@ -996,7 +1004,7 @@ function App() {
 
   if (!profile) {
     return (
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider key={queryScope} client={queryClient}>
         <BrowserRouter>
           <Suspense fallback={<RouteFallback />}>
             <SessionExpiredModal
@@ -1023,22 +1031,23 @@ function App() {
     profile.iron_role,
     profile.audience,
     profile.floor_mode,
+    profile.is_support,
   );
   const signedInAuthEntryRedirect = (pathname: string) =>
     resolveSignedInAuthEntryRedirect(pathname, homeRoute);
   const hasRepOrAboveRole = ["rep", "admin", "manager", "owner"].includes(profile.role);
   const hasManagerOrAboveRole = ["admin", "manager", "owner"].includes(profile.role);
   const canAccessNavHref = (href: string) => canAccessNavHrefForIronRole(profile.iron_role, href);
-  const canAccessServiceHeader = canAccessPrimaryHeaderForIronRole(profile.iron_role, "service");
+  const canAccessServiceHeader = !hasRepOrAboveRole || canAccessPrimaryHeaderForIronRole(profile.iron_role, "service");
   const canAccessWorkforceHeader = canAccessPrimaryHeaderForIronRole(profile.iron_role, "workforce");
-  const canAccessPartsHeader = canAccessPrimaryHeaderForIronRole(profile.iron_role, "parts");
+  const canAccessPartsHeader = !hasRepOrAboveRole || canAccessPrimaryHeaderForIronRole(profile.iron_role, "parts");
   const canAccessRentalsHeader = canAccessPrimaryHeaderForIronRole(profile.iron_role, "rentals");
   const canAccessWorkforceSurface = canAccessWorkforceRole(profile.role) && canAccessWorkforceHeader;
-  const canAccessServiceSurface = hasRepOrAboveRole && canAccessServiceHeader;
+  const canAccessServiceSurface = canAccessServiceOperations(profile.role) && canAccessServiceHeader;
   const canAccessServiceManagedSurface = hasManagerOrAboveRole && canAccessServiceHeader;
   const canAccessServiceMetricsSurface = ["admin", "manager", "owner", "service_writer", "finance_admin"].includes(profile.role) && canAccessServiceHeader;
   const canAccessGrappleProductionSurface = canAccessGrappleProductionRole(profile.role) && canAccessServiceHeader;
-  const canAccessPartsSurface = hasRepOrAboveRole && canAccessPartsHeader;
+  const canAccessPartsSurface = canAccessPartsOperations(profile.role) && canAccessPartsHeader;
   const canAccessPartsManagedSurface = hasManagerOrAboveRole && canAccessPartsHeader;
   const canAccessRentalsSurface = hasRepOrAboveRole && canAccessRentalsHeader;
   const canAccessAccountModule = (moduleKey: string) =>
@@ -1063,7 +1072,7 @@ function App() {
     : <Navigate to="/dashboard" replace />;
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider key={queryScope} client={queryClient}>
       <BrowserRouter>
         <Suspense fallback={<RouteFallback />}>
           <AppErrorBoundary>
@@ -1109,7 +1118,7 @@ function App() {
               <Route
                 path="/floor"
                 element={
-                  !canAccessFloorSurface(profile.role) ? (
+                  !canAccessFloorSurface(profile.role, profile.iron_role, profile.is_support) ? (
                     <Navigate to={homeRoute} replace />
                   ) : (
                     <FloorPage
@@ -2225,7 +2234,7 @@ function App() {
                 path="/qrm/voice-inbox"
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
-                    <WithTodaySurface fallback={<VoiceCaptureInboxPage />} />
+                    <VoiceCaptureInboxPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -2240,16 +2249,12 @@ function App() {
                 path="/qrm/sequences"
                 element={<Navigate to="/admin/sequences" replace />}
               />
+              <Route path="/qrm/graph" element={hasRepOrAboveRole ? <WithGraphExplorer fallback={<QrmPipelinePage userRole={profile.role} />} /> : <Navigate to={homeRoute} replace />} />
               <Route
                 path="/qrm/deals"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <WithGraphExplorer
-                      defaultLens="deal"
-                      title="Deals"
-                      subtitle="Every active deal — filtered, searched, one list."
-                      fallback={<QrmPipelinePage userRole={profile.role} />}
-                    />
+                    <QrmPipelinePage userRole={profile.role} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

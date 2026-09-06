@@ -22,7 +22,6 @@ import { captureEdgeException } from "../_shared/sentry.ts";
 import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 import { generateInvoiceForEquipmentDeal } from "../_shared/equipment-invoice.ts";
 
-const DELIVERED_STAGE_NAMES = ["Delivery Completed", "Invoice Closed"];
 const MAX_DEALS_PER_RUN = 50;
 
 Deno.serve(async (req) => {
@@ -49,50 +48,13 @@ Deno.serve(async (req) => {
 
     const limit = Math.max(1, Math.min(MAX_DEALS_PER_RUN, Number(body.limit ?? MAX_DEALS_PER_RUN)));
 
-    const { data: stages, error: stagesError } = await admin
-      .from("crm_deal_stages")
-      .select("id, name, is_closed_won")
-      .or(`name.in.("${DELIVERED_STAGE_NAMES.join('","')}"),is_closed_won.eq.true`);
-    if (stagesError) return safeJsonError(stagesError.message, 500, origin);
-    const stageIds = (stages ?? []).map((stage: { id: string }) => stage.id);
-    if (stageIds.length === 0) {
-      return safeJsonOk({ ok: true, mode: "sweep", summary: { examined: 0, invoiced: 0, skipped: 0, failed: 0 }, note: "no delivered/closed-won stages found" }, origin);
-    }
-
-    const { data: deals, error: dealsError } = await admin
-      .from("crm_deals")
-      .select("id")
-      .in("stage_id", stageIds)
-      .is("deleted_at", null)
-      .order("updated_at", { ascending: true })
-      .limit(limit * 4);
-    if (dealsError) return safeJsonError(dealsError.message, 500, origin);
-
-    const dealIds = (deals ?? []).map((deal: { id: string }) => deal.id);
+    const { data: candidatesRows, error: candidatesError } = await admin.rpc("select_equipment_invoice_candidates", { p_limit: limit });
+    if (candidatesError) throw new Error(candidatesError.message);
+    const candidates = (candidatesRows ?? []).map((row: { deal_id: string }) => row.deal_id);
     const summary = {
-      examined: 0,
-      invoiced: 0,
-      skipped_already_invoiced: 0,
-      skipped_no_quote: 0,
-      failed: 0,
+      examined: 0, invoiced: 0, skipped_already_invoiced: 0, skipped_no_quote: 0, failed: 0,
       invoices: [] as Array<{ deal_id: string; invoice_id: string; invoice_number: string; total: number; warnings: string[] }>,
     };
-
-    if (dealIds.length === 0) {
-      return safeJsonOk({ ok: true, mode: "sweep", summary }, origin);
-    }
-
-    const { data: invoicedRows } = await admin
-      .from("customer_invoices")
-      .select("deal_id")
-      .in("deal_id", dealIds)
-      .eq("invoice_type", "equipment")
-      .is("reversal_of_invoice_id", null);
-    const invoicedDealIds = new Set((invoicedRows ?? []).map((row: { deal_id: string }) => row.deal_id));
-
-    const notYetInvoiced = dealIds.filter((id: string) => !invoicedDealIds.has(id));
-    const candidates = notYetInvoiced.slice(0, limit);
-    summary.skipped_already_invoiced = dealIds.length - notYetInvoiced.length;
 
     for (const dealId of candidates) {
       summary.examined++;

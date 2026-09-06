@@ -1,0 +1,77 @@
+import { describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
+import { withScratchPostgres, hasScratchPostgres } from "../../scripts/testing/scratch-postgres";
+const migration=readFileSync(new URL('./842_operational_retry_integrity.sql',import.meta.url),'utf8');
+const stockSource=readFileSync(new URL('./810_service_parts_replan_idempotency.sql',import.meta.url),'utf8');
+const stock=stockSource.match(/CREATE OR REPLACE FUNCTION public.adjust_parts_inventory_delta_strict\([\s\S]*?\n\$\$;/)![0];
+const bootstrap=`
+create role authenticated;create role anon;create role service_role;create schema auth;
+create function auth.uid() returns uuid language sql stable as $$select '10000000-0000-0000-0000-000000000001'::uuid$$;
+create function auth.role() returns text language sql stable as $$select coalesce(nullif(current_setting('request.role',true),''),'authenticated')$$;
+create function get_my_role() returns text language sql stable as $$select coalesce(nullif(current_setting('request.app_role',true),''),'owner')$$;
+create function get_my_workspace() returns text language sql stable as $$select coalesce(nullif(current_setting('request.workspace',true),''),'w1')$$;
+create table profiles(id uuid primary key);insert into profiles values(auth.uid());
+create table parts_orders(id uuid primary key,workspace_id text,status text,order_source text,payment_classification text,payment_status text,charge_authorization_status text,fulfillment_run_id uuid,updated_at timestamptz);
+create table parts_order_lines(id uuid primary key,parts_order_id uuid,part_number text,quantity numeric);
+create table parts_order_events(workspace_id text,parts_order_id uuid,event_type text,source text,actor_id uuid,from_status text,to_status text,metadata jsonb,created_at timestamptz default now());
+create table parts_fulfillment_events(workspace_id text,fulfillment_run_id uuid,event_type text,payload jsonb);
+create table parts_stock(id uuid primary key default gen_random_uuid(),workspace_id text,part_number text,qty_on_hand numeric,qty_reserved numeric,updated_at timestamptz);
+create function qep_resolve_parts_stock_row(text,text,text,boolean) returns uuid language sql as $$select id from public.parts_stock where workspace_id=$1 and part_number=$3$$;
+create table sop_executions(id uuid primary key,workspace_id text,sop_template_id uuid,status text,completed_at timestamptz);
+create table sop_steps(id uuid primary key,sop_template_id uuid);
+create table sop_step_completions(id uuid primary key default gen_random_uuid(),workspace_id text,sop_execution_id uuid,sop_step_id uuid,completed_by uuid,completed_at timestamptz default now(),decision_taken text,notes text,evidence_urls jsonb,duration_minutes integer,completion_state text default 'completed');
+create table exception_queue(id uuid primary key,workspace_id text,source text,status text,payload jsonb,resolved_at timestamptz,resolution_reason text);
+create table flow_workflow_runs(id uuid primary key,workspace_id text,dead_letter_id uuid,metadata jsonb,status text,event_id uuid,workflow_id uuid,workflow_slug text,finished_at timestamptz);
+create table flow_workflow_definitions(id uuid primary key,workspace_id text,enabled boolean);
+create table analytics_events(event_id uuid primary key default gen_random_uuid(),event_name text,source text,role text,workspace_id text,project_id text,entity_type text,entity_id uuid,properties jsonb,flow_event_type text,source_module text,correlation_id uuid,parent_event_id uuid);
+create table crm_deals(id uuid primary key,workspace_id text,assigned_rep_id uuid,company_id uuid,deleted_at timestamptz,stage_id uuid,next_follow_up_at timestamptz,updated_at timestamptz);
+create table crm_deal_stages(id uuid primary key,workspace_id text);
+create table crm_activities(id uuid primary key,workspace_id text,activity_type text,body text,occurred_at timestamptz,company_id uuid,deal_id uuid,created_by uuid,metadata jsonb);
+create table offline_sync_queue(id uuid,user_id uuid,sync_status text,synced_at timestamptz,error_message text);
+create table replay_events(id uuid primary key default gen_random_uuid());
+create function flow_resume_run(uuid) returns uuid language plpgsql as $$declare e uuid;begin insert into public.replay_events default values returning id into e;update public.flow_workflow_runs set metadata=jsonb_build_object('resumed_as_event',e) where id=$1;return e;end;$$;
+`;
+(hasScratchPostgres?describe:describe.skip)('operational retry transactions',()=>{
+ it('picks once, rolls stock back with audit failure, rejects foreign scope, distinct SOP completion, atomic replay',()=>{
+  withScratchPostgres(q=>{
+   q(bootstrap);q(stock);q(migration);
+   q(`insert into parts_orders values('20000000-0000-0000-0000-000000000001','w1','confirmed','counter','cash','paid',null,null,now());
+   insert into parts_order_lines values('30000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','PART',2);
+   insert into parts_stock(workspace_id,part_number,qty_on_hand,qty_reserved) values('w1','PART',10,0);`);
+   const pick=`select pick_parts_order_line_once('20000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','branch');`;
+   expect(()=>q(`set request.workspace='w2';${pick}`)).toThrow('Order not found');
+   q(`alter table parts_order_events add constraint injected_error check(event_type<>'pick_completed');`);
+   expect(()=>q(pick)).toThrow('injected_error');expect(q('select qty_on_hand from parts_stock')).toBe('10');expect(q('select count(*) from parts_order_picks')).toBe('0');
+   q('alter table parts_order_events drop constraint injected_error;');q(pick);expect(q(pick)).toContain('"already_picked": true');expect(q('select qty_on_hand from parts_stock')).toBe('8');expect(q('select count(*) from parts_order_events')).toBe('1');q("update parts_order_lines set quantity=3");expect(()=>q(pick)).toThrow('changed after picking');
+   q(`insert into sop_executions values('40000000-0000-0000-0000-000000000001','w1','50000000-0000-0000-0000-000000000001','in_progress',null);
+    insert into sop_steps values('60000000-0000-0000-0000-000000000001','50000000-0000-0000-0000-000000000001'),('60000000-0000-0000-0000-000000000002','50000000-0000-0000-0000-000000000001');`);
+   const complete=`select complete_sop_step_once('40000000-0000-0000-0000-000000000001','60000000-0000-0000-0000-000000000001','{}');`;
+   expect(()=>q("insert into sop_executions values(gen_random_uuid(),'w1','50000000-0000-0000-0000-000000000001','completed',null)")).toThrow('open SOP');
+   q(complete);q(complete);expect(q('select count(*) from sop_step_completions')).toBe('1');
+   expect(()=>q(`update sop_executions set status='completed';`)).toThrow('Unresolved SOP');
+   q(`insert into sop_step_completions(workspace_id,sop_execution_id,sop_step_id) values('w1','40000000-0000-0000-0000-000000000001','60000000-0000-0000-0000-000000000001');`);
+   expect(()=>q(`update sop_executions set status='completed';`)).toThrow('Unresolved SOP');
+   q(`insert into sop_step_completions(workspace_id,sop_execution_id,sop_step_id,completion_state,notes) values('w1','40000000-0000-0000-0000-000000000001','60000000-0000-0000-0000-000000000002','not_applicable','');`);
+   q(`select complete_sop_step_once('40000000-0000-0000-0000-000000000001','60000000-0000-0000-0000-000000000002','{}');`);expect(q('select status from sop_executions')).toBe('completed');
+   q("update sop_step_completions set completion_state='deferred' where sop_step_id='60000000-0000-0000-0000-000000000002'");expect(q('select status from sop_executions')).toBe('blocked');
+   q("select complete_sop_step_once('40000000-0000-0000-0000-000000000001','60000000-0000-0000-0000-000000000002','{}')");expect(q('select status from sop_executions')).toBe('completed');
+   q("delete from sop_step_completions where sop_step_id='60000000-0000-0000-0000-000000000001'");expect(q('select status from sop_executions')).toBe('blocked');
+
+   q(`insert into exception_queue(id,workspace_id,source,status,payload) values('70000000-0000-0000-0000-000000000001','w1','workflow_dead_letter','open','{"run_id":"80000000-0000-0000-0000-000000000001"}');
+    insert into flow_workflow_definitions values('90000000-0000-0000-0000-000000000001','w1',true);
+    insert into analytics_events(event_id,workspace_id,flow_event_type,properties) values('90000000-0000-0000-0000-000000000002','w1','rental.contract.opened','{}');
+    insert into flow_workflow_runs values('80000000-0000-0000-0000-000000000001','w1','70000000-0000-0000-0000-000000000001','{}','failed','90000000-0000-0000-0000-000000000002','90000000-0000-0000-0000-000000000001','rental-on-rent-delivery',null);`);
+   const replay=`select replay_workflow_dead_letter('70000000-0000-0000-0000-000000000001','80000000-0000-0000-0000-000000000001');`;
+   expect(()=>q(`set request.app_role='rep';${replay}`)).toThrow('administrator');const first=q(replay);expect(q(replay)).toBe(first);expect(q("select count(*) from analytics_events where event_name='workflow.resume'")).toBe('1');expect(q("select flow_event_type||':'||(properties->>'resumed_workflow_slug') from analytics_events where event_name='workflow.resume'")).toBe('rental.contract.opened:rental-on-rent-delivery');
+   const note="select apply_sales_offline_action('w1','10000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-000000000003','create_note','{\"text\":\"Original\"}','2026-01-01T00:00:00Z');";
+   expect(()=>q(note)).toThrow('Service role required');
+   q('set request.role=\'service_role\';'+note);q('set request.role=\'service_role\';'+note);
+   expect(q('select count(*) from crm_activities')).toBe('1');
+   expect(()=>q('set request.role=\'service_role\';'+note.replace('Original','Changed'))).toThrow('conflicts');
+   q("alter table sales_offline_action_receipts add constraint fail_receipt check(action_id<>'90000000-0000-0000-0000-000000000004');");
+   expect(()=>q('set request.role=\'service_role\';'+note.replace('000000000003','000000000004'))).toThrow('fail_receipt');
+   expect(q('select count(*) from crm_activities')).toBe('1');
+
+  });
+ },30000);
+});

@@ -1,4 +1,4 @@
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { encryptCredential } from "../_shared/integration-crypto.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { createEventTracker, emitIntegrationConfigUpdated } from "../_shared/event-tracker.ts";
@@ -13,7 +13,7 @@ const ALLOWED_ORIGINS = [
   "https://qep.blackrockai.co",
   "http://localhost:5173"
 ];
-function corsHeaders(origin) {
+function corsHeaders(origin: string | null) {
   return {
     "Access-Control-Allow-Origin": origin && ALLOWED_ORIGINS.includes(origin) ? origin : "",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -21,7 +21,7 @@ function corsHeaders(origin) {
     "Vary": "Origin"
   };
 }
-const INTEGRATION_DEFAULTS = {
+const INTEGRATION_DEFAULTS: Record<string, { displayName: string; authType: string; syncFrequency: string }> = {
   hubspot: {
     displayName: "HubSpot QRM",
     authType: "oauth2",
@@ -122,8 +122,8 @@ const DEFERRED_PROVIDER_KEYS = new Set([
   "tethr_telematics",
   "yanmar_smart_assist"
 ]);
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 // Admin client — bypasses RLS, can access auth.admin API
 const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: {
@@ -131,7 +131,7 @@ const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     persistSession: false
   }
 });
-function createCallerClient(jwt) {
+function createCallerClient(jwt: string) {
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   if (!anonKey) {
     throw new Error("SUPABASE_ANON_KEY is required for user-scoped admin-users access.");
@@ -148,14 +148,14 @@ function createCallerClient(jwt) {
     }
   });
 }
-async function resolveCallerWorkspaceId(callerDb) {
+async function resolveCallerWorkspaceId(callerDb: SupabaseClient) {
   const { data, error } = await callerDb.rpc("get_my_workspace");
   if (error || typeof data !== "string" || data.trim().length === 0) {
     throw new Error("WORKSPACE_RESOLUTION_FAILED");
   }
   return data.trim();
 }
-async function loadWorkspaceProfileIds(workspaceId) {
+async function loadWorkspaceProfileIds(workspaceId: string) {
   const { data, error } = await adminClient
     .from("profile_workspaces")
     .select("profile_id")
@@ -163,7 +163,7 @@ async function loadWorkspaceProfileIds(workspaceId) {
   if (error) throw error;
   return workspaceProfileIdSet(data);
 }
-async function targetUserBelongsToWorkspace(userId, workspaceId) {
+async function targetUserBelongsToWorkspace(userId: string, workspaceId: string) {
   const { data: membership, error: membershipError } = await adminClient
     .from("profile_workspaces")
     .select("profile_id")
@@ -181,12 +181,12 @@ async function targetUserBelongsToWorkspace(userId, workspaceId) {
   if (profileError) throw profileError;
   return profile?.active_workspace_id === workspaceId;
 }
-async function getCallerProfile(jwt) {
+async function getCallerProfile(jwt: string) {
   // ES256-safe token validation via GoTrue. supabase-js v2's local verifier
   // rejects this project's ES256 tokens; hit /auth/v1/user directly instead.
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   if (!anonKey) return null;
-  let userId;
+  let userId: string;
   try {
     const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
       headers: { Authorization: `Bearer ${jwt}`, apikey: anonKey },
@@ -206,23 +206,26 @@ async function getCallerProfile(jwt) {
     role: parsedRole
   };
 }
-function canManageUsers(role) {
+function canManageUsers(role: string | null) {
   return [
     "admin",
     "manager",
     "owner"
-  ].includes(role);
+  ].includes(role as string);
 }
-function canManageIntegrations(role) {
+function canManageIntegrations(role: string | null) {
   return role === "admin" || role === "owner";
 }
-function isOwner(role) {
+function isOwner(role: string | null) {
   return role === "owner";
 }
-function isAdmin(role) {
+function isAdmin(role: string | null) {
   return role === "admin" || role === "owner";
 }
-function deniedResponse({ ch, route, action, callerUserId, reasonCode, status, error }) {
+function deniedResponse({ ch, route, action, callerUserId, reasonCode, status, error }: {
+  ch: Record<string, string>; route: string; action: string | null; callerUserId?: string | null;
+  reasonCode: string; status: number; error: string;
+}) {
   emitAuthzDenialAuditEvent({
     route,
     action,
@@ -312,9 +315,9 @@ Deno.serve(async (req)=>{
       ]);
       if (profileResult.error) throw profileResult.error;
       const profiles = filterProfilesToWorkspace(profileResult.data, callerWorkspaceId, workspaceProfileIds);
-      let authUsers: Array<{ id: string; email?: string | null; last_sign_in_at?: string | null; email_confirmed_at?: string | null; banned_until?: string | null; raw_user_meta_data?: Record<string, unknown> | null }> = [];
+      let authUsers: ReturnType<typeof filterAuthUsersToProfiles> = [];
       if (!authResult.error && authResult.data) {
-        authUsers = filterAuthUsersToProfiles(authResult.data, new Set(profiles.map((p: { id: string }) => p.id)));
+        authUsers = filterAuthUsersToProfiles(authResult.data, new Set(profiles.map((p) => p.id as string)));
       } else if (authResult.error) {
         console.warn("[admin-users] get_auth_user_metadata degraded:", authResult.error?.message ?? "no data");
       }
@@ -916,7 +919,17 @@ Deno.serve(async (req)=>{
             }
           });
         }
-        const updatePayload = {
+        const updatePayload: {
+          updated_at: string;
+          credentials_encrypted?: string | null;
+          status?: string;
+          last_test_success?: boolean | null;
+          last_test_error?: string | null;
+          last_test_latency_ms?: number | null;
+          last_test_at?: string | null;
+          endpoint_url?: string | null;
+          config?: Record<string, unknown>;
+        } = {
           updated_at: new Date().toISOString()
         };
         const changedFields = [];

@@ -452,6 +452,7 @@ const create_traffic_ticket: FlowAction = {
     const direction = p.direction === "delivery" ? "delivery" : "pickup";
 
     const { data, error } = await deps.admin.from("traffic_tickets").insert({
+        rental_contract_id: p.rental_contract_id ?? null,
       workspace_id: deps.workspace_id,
       equipment_id: p.equipment_id ?? null,
       stock_number: stockNumber || "rental unit",

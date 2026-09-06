@@ -202,6 +202,9 @@ export interface ServiceJobWithRelations extends ServiceJob {
 
 /** Closeout bundle returned when transitioning to invoiced or paid_closed. */
 export interface ServiceCloseoutResult {
+  financial_complete?: boolean;
+  financial_errors?: string[];
+  invoice_not_applicable?: boolean;
   invoice_id: string | null;
   invoice_finalized: boolean;
   warranty_claim_id: string | null;

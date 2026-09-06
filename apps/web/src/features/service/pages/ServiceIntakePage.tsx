@@ -154,6 +154,9 @@ function SkeletonPulse() {
 export function ServiceIntakePage() {
   const navigate = useNavigate();
   const createJob = useCreateServiceJob();
+  const operationId = useRef(crypto.randomUUID());
+  const [registerMachine, setRegisterMachine] = useState(false);
+  const [machineDraft, setMachineDraft] = useState({ make: "", model: "", serial_number: "", year: "" });
   const symptomRef = useRef<HTMLTextAreaElement>(null);
   const diagnoseTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const customerDropdownRef = useRef<HTMLDivElement>(null);
@@ -200,7 +203,7 @@ export function ServiceIntakePage() {
       const { data, error } = await supabase.functions.invoke("service-intake", {
         body: {
           customer_id: selectedCustomer?.id ?? undefined,
-          machine_id: selectedMachine?.id ?? undefined,
+          machine_id: selectedMachine?.id === "new" ? undefined : selectedMachine?.id ?? undefined,
           machine_search: !selectedMachine && machineQuery ? machineQuery : undefined,
           customer_search: !selectedCustomer && customerQuery ? customerQuery : undefined,
           symptom,
@@ -327,8 +330,10 @@ export function ServiceIntakePage() {
 
     createJob.mutate(
       {
+        operation_id: operationId.current,
         customer_id: selectedCustomer?.id ?? null,
-        machine_id: selectedMachine?.id ?? null,
+        machine_id: selectedMachine?.id === "new" ? null : selectedMachine?.id ?? null,
+        new_machine: selectedMachine?.id === "new" ? { make: selectedMachine.make, model: selectedMachine.model, serial_number: selectedMachine.serial_number, year: selectedMachine.year } : undefined,
         source_type: sourceType,
         request_type: requestType,
         priority: effectivePriority,
@@ -423,7 +428,7 @@ export function ServiceIntakePage() {
           {selectedCustomer ? (
             <SelectedCard
               icon={
-                <span className="text-base font-semibold text-primary">
+                <span className="text-base font-semibold text-qep-orange-accessible">
                   {selectedCustomer.name[0].toUpperCase()}
                 </span>
               }
@@ -455,7 +460,7 @@ export function ServiceIntakePage() {
                   )}
                   {customerResults.map((c) => (
                     <DropdownItem key={c.id} onClick={() => selectCustomer(c)}>
-                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-qep-orange-accessible shrink-0">
                         {c.name[0].toUpperCase()}
                       </div>
                       <div className="min-w-0">
@@ -478,6 +483,17 @@ export function ServiceIntakePage() {
             2 · Machine
           </p>
 
+          {!selectedMachine && <div className="space-y-3">
+            <button type="button" onClick={() => setRegisterMachine(!registerMachine)} className="rounded-lg border px-3 py-2 text-sm">{registerMachine ? "Use machine search" : "Register a first-seen machine"}</button>
+            {registerMachine && <div className="rounded-lg border p-3 space-y-3">
+              <p className="text-sm">The machine and work order will be saved together. Select the customer first.</p>
+              {(["make", "model", "serial_number", "year"] as const).map(field => <label key={field} className="block text-sm">{field.replace(/_/g, " ")}
+                <input aria-label={`New machine ${field}`} value={machineDraft[field]} type={field === "year" ? "number" : "text"} onChange={event => setMachineDraft(previous => ({ ...previous, [field]: event.target.value }))} className="block w-full rounded border px-3 py-2" />
+              </label>)}
+              <button type="button" disabled={!selectedCustomer || !Object.values(machineDraft).every(value => value.trim()) || Number(machineDraft.year)<1900 || Number(machineDraft.year)>2100}
+                onClick={() => { selectMachine({ id: "new", ...machineDraft, year: Number(machineDraft.year), customer_id: selectedCustomer?.id ?? null }); setRegisterMachine(false); }} className="rounded-lg border px-3 py-2 disabled:opacity-50">Use these machine details</button>
+            </div>}
+          </div>}
           {selectedMachine ? (
             <SelectedCard
               icon={<span className="text-lg">🚜</span>}
@@ -510,7 +526,7 @@ export function ServiceIntakePage() {
                             {eq.year ? `  ·  ${eq.year}` : ""}
                           </div>
                         </div>
-                        <span className="text-primary opacity-0 group-hover:opacity-100 text-xs transition shrink-0">
+                        <span className="text-qep-orange-accessible opacity-0 group-hover:opacity-100 text-xs transition shrink-0">
                           Select →
                         </span>
                       </button>
@@ -560,6 +576,15 @@ export function ServiceIntakePage() {
             </>
           )}
         </section>
+
+        {selectedMachine && <section className="rounded-xl border bg-card p-4 space-y-1" aria-label="Machine warranty eligibility">
+          <h2 className="text-sm font-semibold">Warranty at intake</h2>
+          <p className="text-sm">{selectedMachine.id === "new" ? "Not registered — verify coverage before marking this job as warranty." : selectedMachine.warranty_registered ? "Registration recorded" : "Registration not recorded — coverage requires verification"}</p>
+          <p className="text-xs">Provider: {selectedMachine.warranty_provider ?? "Not recorded"} · Registration: {selectedMachine.warranty_registration_number ?? "Not recorded"}</p>
+          <p className="text-xs">Coverage: {selectedMachine.warranty_start_date ?? "Unknown start"} to {selectedMachine.warranty_end_date ?? "Unknown end"}</p>
+          {selectedMachine.warranty_end_date && selectedMachine.warranty_end_date < new Date().toISOString().slice(0,10) && <p className="text-sm text-destructive">Recorded coverage has expired.</p>}
+          <p className="text-xs">{selectedMachine.warranty_coverage_terms ?? "No coverage terms recorded. Registration alone does not establish claim approval."}</p>
+        </section>}
 
         {/* ══ SECTION 3: What's the issue? ═════════════════════════════════════ */}
         <section className="rounded-xl border bg-card p-5 space-y-4">
@@ -649,7 +674,7 @@ export function ServiceIntakePage() {
                   }}
                   className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition ${
                     sourceType === k
-                      ? "border-primary bg-primary/10 text-primary"
+                      ? "border-primary bg-primary/10 text-qep-orange-accessible"
                       : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
                   }`}
                 >
@@ -663,8 +688,8 @@ export function ServiceIntakePage() {
           {/* Request type + Shop/Field */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-muted-foreground mb-2">Request type</label>
-              <select
+              <label htmlFor="service-intake-request-type" className="block text-xs text-muted-foreground mb-2">Request type</label>
+              <select id="service-intake-request-type"
                 value={requestType}
                 onChange={(e) => {
                   const next = e.target.value as ServiceRequestType;
@@ -761,8 +786,8 @@ export function ServiceIntakePage() {
           <div className="flex items-end gap-4 flex-wrap">
             {!machineDown && (
               <div className="flex-1 min-w-28">
-                <label className="block text-xs text-muted-foreground mb-2">Priority</label>
-                <select
+                <label htmlFor="service-intake-priority" className="block text-xs text-muted-foreground mb-2">Priority</label>
+                <select id="service-intake-priority"
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as ServicePriority)}
                   className="w-full rounded-lg border px-3 py-2.5 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
@@ -811,7 +836,7 @@ export function ServiceIntakePage() {
                 AI Diagnosis
               </p>
               {diagnosisRunning ? (
-                <span className="text-xs text-primary animate-pulse">Analyzing…</span>
+                <span className="text-xs text-qep-orange-accessible animate-pulse">Analyzing…</span>
               ) : intakeResult ? (
                 <span
                   className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -916,7 +941,7 @@ export function ServiceIntakePage() {
         {!diagnosisRunning && !intakeResult && symptom.trim().length > 5 && !selectedMachine && (
           <button
             onClick={() => diagnose.mutate()}
-            className="w-full rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm font-medium text-primary hover:bg-primary/10 transition"
+            className="w-full rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm font-medium text-qep-orange-accessible hover:bg-primary/10 transition"
           >
             ✨ Run AI Diagnosis
           </button>
@@ -958,7 +983,7 @@ export function ServiceIntakePage() {
             disabled={!canSubmit}
             className={`w-full rounded-xl px-4 py-4 text-base font-semibold transition-all duration-200 shadow-lg ${
               canSubmit
-                ? "bg-green-600 text-white hover:bg-green-500 shadow-green-900/30"
+                ? "bg-green-700 text-white hover:bg-green-800 shadow-green-900/30"
                 : "bg-muted/40 text-muted-foreground cursor-not-allowed shadow-none"
             }`}
           >

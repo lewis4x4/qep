@@ -1,3 +1,5 @@
+import { useRetainedDraft } from "@/hooks/useRetainedDraft";
+import { useAuth } from "@/hooks/useAuth";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -34,6 +36,7 @@ type ApBillSelectedRow = Pick<
   | "amount_paid"
   | "balance_due"
   | "notes"
+  | "updated_at"
 >;
 type ApBillLineSelectedRow = Pick<
   ApBillLineRow,
@@ -42,6 +45,7 @@ type ApBillLineSelectedRow = Pick<
 
 type BillRow = {
   id: string;
+  updated_at: string;
   vendor_id: string | null;
   vendor_name: string | null;
   invoice_number: string;
@@ -75,6 +79,7 @@ type LineRow = {
 function toBillRow(row: ApBillSelectedRow): BillRow {
   return {
     id: row.id,
+    updated_at: row.updated_at,
     vendor_id: row.vendor_id,
     vendor_name: row.vendor_name,
     invoice_number: row.invoice_number,
@@ -127,6 +132,7 @@ export function AccountsPayableDetailPage() {
 function AccountsPayableDetailPageInner() {
   const { billId = "" } = useParams<{ billId: string }>();
   const qc = useQueryClient();
+  const { profile } = useAuth();
   const [newLineDescription, setNewLineDescription] = useState("");
   const [newLineQuantity, setNewLineQuantity] = useState("1");
   const [newLineUnitCost, setNewLineUnitCost] = useState("0");
@@ -139,7 +145,7 @@ function AccountsPayableDetailPageInner() {
     queryFn: async () => {
       const { data, error } = await db
         .from("ap_bills")
-        .select("id, vendor_id, vendor_name, invoice_number, invoice_date, due_date, payable_account_code, payable_account_name, description, status, approval_status, subtotal_amount, tax_amount, total_amount, amount_paid, balance_due, notes")
+        .select("id, vendor_id, vendor_name, invoice_number, invoice_date, due_date, payable_account_code, payable_account_name, description, status, approval_status, subtotal_amount, tax_amount, total_amount, amount_paid, balance_due, notes, updated_at")
         .eq("id", billId)
         .maybeSingle();
       if (error) throw error;
@@ -162,14 +168,14 @@ function AccountsPayableDetailPageInner() {
   });
 
   const updateBill = useMutation({
-    mutationFn: async (payload: ApBillUpdate) => {
-      const { error } = await db
-        .from("ap_bills")
-        .update(payload)
-        .eq("id", billId);
+    mutationFn: async ({ patch, expectedVersion }: { patch: ApBillUpdate; expectedVersion: string }) => {
+      const { data, error } = await db.from("ap_bills").update(patch)
+        .eq("id", billId).eq("updated_at", expectedVersion).select("*").maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error("The bill changed or is no longer editable. Reload the saved bill and review your retained draft.");
+      return toBillRow(data);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["ap-bill", billId] }),
+    onSuccess: (saved) => qc.setQueryData(["ap-bill", billId], saved),
   });
 
   const addLine = useMutation({
@@ -184,10 +190,9 @@ function AccountsPayableDetailPageInner() {
         gl_code: newLineGlCode || null,
         gl_name: newLineGlName || null,
       };
-      const { error } = await db
-        .from("ap_bill_lines")
-        .insert(payload);
+      const { data, error } = await db.from("ap_bill_lines").insert(payload).select("id").maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error("The voucher line was not saved.");
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["ap-bill-lines", billId] });
@@ -203,6 +208,31 @@ function AccountsPayableDetailPageInner() {
   const bill = billQuery.data;
   const lines = linesQuery.data ?? [];
 
+  const serverHeader = {
+    invoice_date: bill?.invoice_date ?? "",
+    due_date: bill?.due_date ?? "",
+    payable_account_code: bill?.payable_account_code ?? "",
+    payable_account_name: bill?.payable_account_name ?? "",
+    notes: bill?.notes ?? "",
+  };
+  const header = useRetainedDraft(bill && profile?.id
+    ? `qep:ap-draft:${profile.id}:${profile.active_workspace_id ?? "none"}:${billId}` : null,
+    serverHeader, bill?.updated_at ?? null);
+  function changeHeader(field: keyof typeof serverHeader, value: string) {
+    header.setValue((current) => ({ ...current, [field]: value }));
+  }
+  async function saveHeader() {
+    if (!header.version || header.conflict) return;
+    const submitted = header.value;
+    try {
+      const saved = await updateBill.mutateAsync({ patch: submitted, expectedVersion: header.version });
+      header.markSaved(submitted, saved.updated_at);
+    } catch { /* The retained draft and visible mutation error own recovery. */ }
+  }
+  function updateStatus(patch: ApBillUpdate) {
+    if (bill) updateBill.mutate({ patch, expectedVersion: bill.updated_at });
+  }
+
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 md:px-6 lg:px-8">
       <Link
@@ -213,9 +243,13 @@ function AccountsPayableDetailPageInner() {
         Back to A/P Outstanding
       </Link>
 
+      {billQuery.isError ? <Card role="alert" className="p-4"><p>Bill could not load: {(billQuery.error as Error).message}</p><Button variant="outline" onClick={() => void billQuery.refetch()}>Retry loading bill</Button></Card> : null}
+      {linesQuery.isError ? <Card role="alert" className="p-4"><p>Voucher lines could not load.</p><Button variant="outline" onClick={() => void linesQuery.refetch()}>Retry loading lines</Button></Card> : null}
+      {updateBill.isError ? <Card role="alert" className="p-4"><p>Bill not saved: {(updateBill.error as Error).message}</p><p>Your header draft is retained.</p><Button variant="outline" onClick={() => void billQuery.refetch()}>Reload saved bill</Button></Card> : null}
+      {addLine.isError ? <Card role="alert" className="p-4"><p>Line not saved: {(addLine.error as Error).message}</p><Button variant="outline" onClick={() => addLine.mutate()}>Retry adding line</Button></Card> : null}
       {!bill ? (
         <Card className="p-4 text-sm text-muted-foreground">
-          {billQuery.isLoading ? "Loading bill…" : "Bill not found."}
+          {billQuery.isLoading ? "Loading bill…" : billQuery.isError ? "Saved bill unavailable." : "Bill not found."}
         </Card>
       ) : (
         <>
@@ -228,22 +262,31 @@ function AccountsPayableDetailPageInner() {
               <p className="mt-2 text-sm text-muted-foreground">{bill.vendor_name ?? "Vendor"} · {bill.description ?? "A/P bill"}</p>
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <input defaultValue={bill.invoice_date} type="date" onBlur={(e) => updateBill.mutate({ invoice_date: e.target.value })} className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
-                <input defaultValue={bill.due_date} type="date" onBlur={(e) => updateBill.mutate({ due_date: e.target.value })} className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
-                <input defaultValue={bill.payable_account_code ?? ""} onBlur={(e) => updateBill.mutate({ payable_account_code: e.target.value || null })} placeholder="Payable account code" className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
-                <input defaultValue={bill.payable_account_name ?? ""} onBlur={(e) => updateBill.mutate({ payable_account_name: e.target.value || null })} placeholder="Payable account name" className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
+                <input aria-label="Invoice date" value={header.value.invoice_date} type="date" onChange={(e) => changeHeader("invoice_date", e.target.value)} className="min-w-0 w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
+                <input aria-label="Due date" value={header.value.due_date} type="date" onChange={(e) => changeHeader("due_date", e.target.value)} className="min-w-0 w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
+                <input value={header.value.payable_account_code} onChange={(e) => changeHeader("payable_account_code", e.target.value)} placeholder="Payable account code" className="min-w-0 w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
+                <input value={header.value.payable_account_name} onChange={(e) => changeHeader("payable_account_name", e.target.value)} placeholder="Payable account name" className="min-w-0 w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
               </div>
 
-              <textarea defaultValue={bill.notes ?? ""} onBlur={(e) => updateBill.mutate({ notes: e.target.value || null })} placeholder="Notes" className="mt-4 min-h-[110px] w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
+              <textarea value={header.value.notes} onChange={(e) => changeHeader("notes", e.target.value)} placeholder="Notes" className="mt-4 min-h-[110px] w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
 
+              <div className="mt-3 space-y-2">
+                <p role="status" className="text-sm">{updateBill.isPending ? "Saving…" : header.dirty ? header.storageError ? "Unsaved draft; local storage unavailable. Keep this page open." : "Unsaved draft retained on this device." : "Saved"}</p>
+                {header.conflict ? <div role="alert"><p>The saved bill changed. Review it before saving your draft.</p>
+                  <Button variant="outline" onClick={header.acceptServer}>Discard draft and load latest</Button>
+                  <Button variant="outline" onClick={header.retainAgainstLatest}>Keep draft against latest version</Button>
+                  <details><summary>Latest saved header</summary><pre className="whitespace-pre-wrap text-xs">{JSON.stringify(serverHeader, null, 2)}</pre></details>
+                </div> : null}
+                <Button disabled={updateBill.isPending || !header.dirty || header.conflict} onClick={() => void saveHeader()}>{updateBill.isError ? "Retry saving header" : "Save header"}</Button>
+              </div>
               <div className="mt-4 flex flex-wrap gap-2">
-                <Button variant="outline" onClick={() => updateBill.mutate({ approval_status: "approved", status: "approved", approved_at: new Date().toISOString() })}>
+                <Button variant="outline" disabled={updateBill.isPending} onClick={() => updateStatus({ approval_status: "approved", status: "approved", approved_at: new Date().toISOString() })}>
                   Approve
                 </Button>
-                <Button variant="outline" onClick={() => updateBill.mutate({ approval_status: "rejected", status: "draft" })}>
+                <Button variant="outline" disabled={updateBill.isPending} onClick={() => updateStatus({ approval_status: "rejected", status: "draft" })}>
                   Reject
                 </Button>
-                <Button variant="outline" onClick={() => updateBill.mutate({ status: "paid", amount_paid: bill.total_amount, last_payment_at: new Date().toISOString() })}>
+                <Button variant="outline" disabled={updateBill.isPending} onClick={() => updateStatus({ status: "paid", amount_paid: bill.total_amount, last_payment_at: new Date().toISOString() })}>
                   Mark Paid
                 </Button>
               </div>
@@ -291,11 +334,11 @@ function AccountsPayableDetailPageInner() {
             </div>
 
             <div className="mt-6 grid gap-3 sm:grid-cols-[1.4fr_100px_120px_140px_1fr]">
-              <input value={newLineDescription} onChange={(e) => setNewLineDescription(e.target.value)} placeholder="Description" className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
-              <input value={newLineQuantity} onChange={(e) => setNewLineQuantity(e.target.value)} placeholder="Qty" className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
-              <input value={newLineUnitCost} onChange={(e) => setNewLineUnitCost(e.target.value)} placeholder="Unit cost" className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
-              <input value={newLineGlCode} onChange={(e) => setNewLineGlCode(e.target.value)} placeholder="GL code" className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
-              <input value={newLineGlName} onChange={(e) => setNewLineGlName(e.target.value)} placeholder="GL name" className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
+              <input value={newLineDescription} onChange={(e) => setNewLineDescription(e.target.value)} placeholder="Description" className="min-w-0 w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
+              <input value={newLineQuantity} onChange={(e) => setNewLineQuantity(e.target.value)} placeholder="Qty" className="min-w-0 w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
+              <input value={newLineUnitCost} onChange={(e) => setNewLineUnitCost(e.target.value)} placeholder="Unit cost" className="min-w-0 w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
+              <input value={newLineGlCode} onChange={(e) => setNewLineGlCode(e.target.value)} placeholder="GL code" className="min-w-0 w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
+              <input value={newLineGlName} onChange={(e) => setNewLineGlName(e.target.value)} placeholder="GL name" className="min-w-0 w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
             </div>
             <Button className="mt-3" onClick={() => addLine.mutate()} disabled={addLine.isPending}>
               <Plus className="mr-1 h-4 w-4" />

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
@@ -30,7 +30,8 @@ import {
   type ServiceOwnerWatchMetrics,
 } from "../lib/service-metrics-api";
 
-function formatMoney(value: number): string {
+function formatMoney(value: number | null | undefined): string {
+  if (value == null) return "—";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -63,15 +64,17 @@ function formatDateTime(value: string | null | undefined): string {
 }
 
 export function ServiceMetricsDashboardPage() {
+  const [basis, setBasis] = useState<"posted" | "estimate">("posted");
   const metricsQuery = useQuery({
-    queryKey: ["service-metrics-dashboard", "h11"],
-    queryFn: fetchServiceMetricsDashboard,
+    queryKey: ["service-metrics-dashboard", "h11", basis],
+    queryFn: () => fetchServiceMetricsDashboard(basis),
     staleTime: 60_000,
   });
 
   const data = metricsQuery.data;
   const topMarginRow = useMemo(() => {
     return data?.marginByRequestType.reduce<ServiceMarginByRequestTypeRow | null>((winner, row) => {
+      if (row.costComplete === false) return winner;
       if (!winner) return row;
       return row.totalMarginAmount > winner.totalMarginAmount ? row : winner;
     }, null) ?? null;
@@ -85,14 +88,14 @@ export function ServiceMetricsDashboardPage() {
         <div>
           <div className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-qep-orange" aria-hidden />
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-qep-orange">H11 Service Metrics</p>
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-qep-orange-accessible">H11 Service Metrics</p>
           </div>
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">
             Owner's service margin dashboard
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
             Margin by work-order type is first because it is the owner’s #1 operating metric.
-            The watch metrics reuse shipped TAT, H4 hold-excluded efficiency, and live service ledger data.
+            Whole-job contribution, completed work orders, actual labor mix and OEM claim payments remain distinct from quote estimates.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -117,10 +120,16 @@ export function ServiceMetricsDashboardPage() {
         <EmptyState />
       ) : data ? (
         <>
-          <MarginHero rows={data.marginByRequestType} topRow={topMarginRow} />
+          <label className="flex items-center gap-3 text-sm">Margin basis
+            <select aria-label="Margin basis" value={basis} onChange={(event) => setBasis(event.target.value as "posted" | "estimate")} className="rounded border border-border bg-background p-2">
+              <option value="posted">Posted job contribution</option><option value="estimate">Latest quote estimate</option>
+            </select>
+          </label>
+          <MarginHero rows={data.marginByRequestType} topRow={topMarginRow} basis={basis} />
           <OwnerPulseBar data={data} />
           <OwnerWatchGrid metrics={data.ownerWatch} />
           <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+            <CycleTimePanel rows={data.jobCycleTimeByType ?? []} wholeJob />
             <CycleTimePanel rows={data.cycleTimeBySegment} />
             <OpenWorkOrdersPanel
               statusRows={data.openWorkOrdersByStatus}
@@ -184,11 +193,11 @@ function EmptyState() {
       </div>
       <h2 className="mt-4 text-lg font-semibold text-foreground">No service metrics yet</h2>
       <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
-        H11 is ready, but this workspace needs service jobs, quote-line margin output, TAT rows, or ledger activity before the dashboard can plot owner metrics.
+        This workspace has no service records for the selected period and basis.
       </p>
       <Link
         to="/service"
-        className="mt-5 inline-flex rounded-full bg-qep-orange px-4 py-2 text-sm font-semibold text-white transition hover:bg-qep-orange/90"
+        className="mt-5 inline-flex rounded-full bg-qep-orange px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-qep-orange/90"
       >
         Open service command center
       </Link>
@@ -199,23 +208,26 @@ function EmptyState() {
 function MarginHero({
   rows,
   topRow,
+  basis,
 }: {
   rows: ServiceMarginByRequestTypeRow[];
   topRow: ServiceMarginByRequestTypeRow | null;
+  basis: "posted" | "estimate";
 }) {
   const maxMargin = Math.max(...rows.map((row) => Math.abs(row.totalMarginAmount)), 1);
+  const hasIncompleteCosts = rows.some((row) => row.costComplete === false);
   const totalMargin = rows.reduce((sum, row) => sum + row.totalMarginAmount, 0);
-  const totalLaborRevenue = rows.reduce((sum, row) => sum + row.totalLaborRevenue, 0);
-  const blendedMarginPct = totalLaborRevenue > 0 ? (totalMargin / totalLaborRevenue) * 100 : null;
+  const totalRevenue = rows.reduce((sum, row) => sum + row.totalRevenue, 0);
+  const blendedMarginPct = !hasIncompleteCosts && totalRevenue > 0 ? (totalMargin / totalRevenue) * 100 : null;
 
   return (
     <Card className="overflow-hidden border-qep-orange/30 bg-gradient-to-br from-qep-orange/10 via-background to-background p-0">
       <div className="grid gap-0 lg:grid-cols-[0.95fr_1.35fr]">
         <div className="border-b border-border/70 p-6 lg:border-b-0 lg:border-r">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-qep-orange">Owner #1</p>
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-qep-orange-accessible">Owner #1</p>
           <h2 className="mt-2 text-2xl font-bold text-foreground">Margin by WO type</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Computed from H1 persisted quote-line margin output on each work order’s latest non-superseded quote.
+            {basis === "posted" ? "Posted labor, parts and other job charges less their recorded costs. Parts revenue still belongs to Parts in the departmental ledger." : "Estimated labor margin on the latest non-superseded quote. These are estimates, not posted results."}
           </p>
 
           <div className="mt-6 rounded-2xl border bg-background/70 p-5">
@@ -226,21 +238,21 @@ function MarginHero({
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
               <MetricMini label="Margin" value={topRow ? formatMoney(topRow.totalMarginAmount) : "—"} />
               <MetricMini label="Margin %" value={topRow ? formatPercent(topRow.marginPct) : "—"} />
-              <MetricMini label="Labor revenue" value={topRow ? formatMoney(topRow.totalLaborRevenue) : "—"} />
-              <MetricMini label="Quotes" value={topRow ? formatCount(topRow.quoteCount) : "—"} />
+              <MetricMini label={basis === "posted" ? "Job revenue" : "Quoted labor"} value={topRow ? formatMoney(topRow.totalRevenue) : "—"} />
+              <MetricMini label={basis === "posted" ? "Invoices" : "Quotes"} value={topRow ? formatCount(topRow.quoteCount) : "—"} />
             </div>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
             <MetricMini label="Blended margin" value={formatPercent(blendedMarginPct)} />
-            <MetricMini label="Total margin" value={formatMoney(totalMargin)} />
+            <MetricMini label="Total margin" value={formatMoney(hasIncompleteCosts ? null : totalMargin)} />
           </div>
         </div>
 
         <div className="p-6">
           {rows.length === 0 ? (
             <p className="rounded-2xl border border-dashed p-6 text-sm text-muted-foreground">
-              No quote-line margin rows are available yet.
+              No records are available for the selected margin basis.
             </p>
           ) : (
             <div className="space-y-4">
@@ -253,7 +265,7 @@ function MarginHero({
                       <div>
                         <p className="font-semibold text-foreground">{formatServiceMetricLabel(row.requestType)}</p>
                         <p className="text-xs text-muted-foreground">
-                          {formatCount(row.jobCount)} jobs · {formatCount(row.marginableLineCount)} margin lines
+                          {formatCount(row.jobCount)} jobs · {row.costComplete === false ? "Cost input required" : `${formatCount(row.marginableLineCount)} costed lines`}
                         </p>
                       </div>
                       <div className="text-right">
@@ -282,15 +294,16 @@ function MarginHero({
 }
 
 function OwnerPulseBar({ data }: { data: ServiceMetricsDashboardData }) {
+  const hasIncompleteCosts = data.marginByRequestType.some((row) => row.costComplete === false);
   const totalMargin = data.marginByRequestType.reduce((sum, row) => sum + row.totalMarginAmount, 0);
-  const totalLaborRevenue = data.marginByRequestType.reduce((sum, row) => sum + row.totalLaborRevenue, 0);
-  const blendedMarginPct = totalLaborRevenue > 0 ? (totalMargin / totalLaborRevenue) * 100 : null;
+  const totalRevenue = data.marginByRequestType.reduce((sum, row) => sum + row.totalRevenue, 0);
+  const blendedMarginPct = !hasIncompleteCosts && totalRevenue > 0 ? (totalMargin / totalRevenue) * 100 : null;
   const floorFlags = data.marginByRequestType.reduce((sum, row) => sum + row.belowFloorLineCount, 0);
   const ownerWatch = data.ownerWatch;
   const cards = [
     {
       label: "Owner margin signal",
-      value: formatMoney(totalMargin),
+      value: formatMoney(hasIncompleteCosts ? null : totalMargin),
       detail: `${formatPercent(blendedMarginPct)} blended margin · ${formatCount(floorFlags)} floor flags`,
       icon: DollarSign,
       tone: floorFlags > 0 ? "amber" : "green",
@@ -312,7 +325,7 @@ function OwnerPulseBar({ data }: { data: ServiceMetricsDashboardData }) {
     {
       label: "Warranty recovery",
       value: formatPercent(ownerWatch?.warrantyRecoveryPct),
-      detail: ownerWatch ? `${formatMoney(ownerWatch.warrantyRevenueCents / 100)} recovered in 30d` : "No warranty recovery metrics available yet",
+      detail: ownerWatch ? `${formatMoney(ownerWatch.warrantyRevenueCents / 100)} paid on filed claims` : "No warranty recovery metrics available yet",
       icon: ShieldCheck,
       tone: ownerWatch ? (ownerWatch.warrantyRecoveryPct != null && ownerWatch.warrantyRecoveryPct < 70 ? "amber" : "green") : "muted",
     },
@@ -366,8 +379,8 @@ function OwnerWatchGrid({ metrics }: { metrics: ServiceOwnerWatchMetrics | null 
   const cards = [
     {
       label: "Cycle time",
-      value: formatHours(metrics?.avgCycleTimeHours),
-      detail: `${formatCount(metrics?.completedTatCount)} completed TAT rows · ${formatPercent(metrics?.tatOnTimePct)} on-time`,
+      value: metrics?.avgCycleTimeHours == null ? "—" : `${(metrics.avgCycleTimeHours / 24).toFixed(1)} days`,
+      detail: `${formatCount(metrics?.completedTatCount)} completed work orders in 30 days`,
       icon: Clock3,
     },
     {
@@ -377,21 +390,21 @@ function OwnerWatchGrid({ metrics }: { metrics: ServiceOwnerWatchMetrics | null 
       icon: RefreshCcw,
     },
     {
-      label: "Technician efficiency",
+      label: "Attendance-based efficiency",
       value: formatPercent(metrics?.avgTechnicianEfficiencyPct),
-      detail: `${formatHours(metrics?.holdHoursExcluded30d)} hold time excluded`,
+      detail: `Attendance source awaiting confirmation. Recorded job efficiency: ${formatPercent(metrics?.recordedJobEfficiencyPct)}; ${formatHours(metrics?.holdHoursExcluded30d)} job hold time excluded.`,
       icon: Gauge,
     },
     {
       label: "Warranty recovery",
       value: formatPercent(metrics?.warrantyRecoveryPct),
-      detail: `${formatMoney(warrantyDollars)} warranty revenue in 30d`,
+      detail: `${formatCount(metrics?.warrantyFiledCount)} filed · ${formatMoney(warrantyDollars)} paid · ${formatMoney((metrics?.warrantyOutstandingCents ?? 0) / 100)} outstanding`,
       icon: ShieldCheck,
     },
     {
       label: "Shop / field mix",
-      value: `${formatCount(metrics?.shopJobs30d)} / ${formatCount(metrics?.fieldJobs30d)}`,
-      detail: `${formatPercent(metrics?.fieldMixPct)} field mix over last 30d`,
+      value: `${formatHours(metrics?.shopHours30d)} / ${formatHours(metrics?.fieldHours30d)}`,
+      detail: `${formatPercent(metrics?.fieldMixPct)} of recorded hours in the field over 30 days`,
       icon: Wrench,
     },
     {
@@ -437,24 +450,24 @@ function OwnerWatchGrid({ metrics }: { metrics: ServiceOwnerWatchMetrics | null 
   );
 }
 
-function CycleTimePanel({ rows }: { rows: ServiceCycleTimeBySegmentRow[] }) {
+function CycleTimePanel({ rows, wholeJob = false }: { rows: ServiceCycleTimeBySegmentRow[]; wholeJob?: boolean }) {
   return (
     <Card className="p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <h2 className="font-semibold text-foreground">Cycle time by TAT segment</h2>
-          <p className="text-xs text-muted-foreground">Reuses existing service_tat_metrics and target_duration_hours.</p>
+          <h2 className="font-semibold text-foreground">{wholeJob ? "Intake to completion by work-order type" : "Stage duration diagnostics"}</h2>
+          <p className="text-xs text-muted-foreground">{wholeJob ? "Days from intake to completion for work orders completed in the last 30 days." : "Stage durations remain separate from whole-job turnaround."}</p>
         </div>
         <TrendingUp className="h-4 w-4 text-qep-orange" aria-hidden />
       </div>
       {rows.length === 0 ? (
-        <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">No TAT rows in the current window.</p>
+        <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">No completed records in the current window.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-xs uppercase tracking-wide text-muted-foreground">
               <tr className="border-b">
-                <th className="py-2 text-left">Segment</th>
+                <th className="py-2 text-left">{wholeJob ? "Work-order type" : "Stage"}</th>
                 <th className="py-2 text-right">Done</th>
                 <th className="py-2 text-right">Open</th>
                 <th className="py-2 text-right">Avg</th>
@@ -468,7 +481,7 @@ function CycleTimePanel({ rows }: { rows: ServiceCycleTimeBySegmentRow[] }) {
                   <td className="py-3 font-medium text-foreground">{formatServiceMetricLabel(row.segmentName)}</td>
                   <td className="py-3 text-right tabular-nums">{formatCount(row.completedSegmentCount)}</td>
                   <td className="py-3 text-right tabular-nums">{formatCount(row.openSegmentCount)}</td>
-                  <td className="py-3 text-right tabular-nums">{formatHours(row.avgActualDurationHours)}</td>
+                  <td className="py-3 text-right tabular-nums">{wholeJob ? (row.avgActualDurationHours == null ? "—" : `${(row.avgActualDurationHours / 24).toFixed(1)} days`) : formatHours(row.avgActualDurationHours)}</td>
                   <td className="py-3 text-right tabular-nums">{formatHours(row.avgTargetDurationHours)}</td>
                   <td className="py-3 text-right tabular-nums">{formatPercent(row.onTimePct)}</td>
                 </tr>

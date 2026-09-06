@@ -1,3 +1,4 @@
+import { GripVertical } from "lucide-react";
 import { memo, type MouseEvent as ReactMouseEvent } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -40,6 +41,7 @@ export const DraggableDealCard = memo(function DraggableDealCard({
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging,
@@ -66,15 +68,19 @@ export const DraggableDealCard = memo(function DraggableDealCard({
     <div
       ref={setNodeRef}
       style={style}
-      {...listeners}
-      {...attributes}
       onClickCapture={handleClickCapture}
       className={cn(
-        "cursor-grab active:cursor-grabbing rounded-lg transition-shadow",
+        "rounded-lg transition-shadow",
         isSelected && "ring-2 ring-qep-orange ring-offset-2 ring-offset-background",
       )}
-      aria-pressed={onSelectToggle ? isSelected : undefined}
     >
+      <div className="flex items-center justify-between gap-2 px-1 pb-1">
+        <button ref={setActivatorNodeRef} type="button" {...attributes} {...listeners}
+          aria-label={`Move ${deal.name}`} className="inline-flex min-h-9 touch-none cursor-grab items-center gap-1 rounded px-2 text-xs text-muted-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary active:cursor-grabbing">
+          <GripVertical className="h-4 w-4" aria-hidden /> Move
+        </button>
+        {onSelectToggle && <button type="button" aria-pressed={isSelected} aria-label={`Select ${deal.name}`} className="min-h-9 rounded px-2 text-xs text-muted-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" onClick={(event) => { event.stopPropagation(); onSelectToggle(deal.id, false); }}>{isSelected ? "Selected" : "Select"}</button>}
+      </div>
       <PipelineDealCard
         deal={deal}
         healthProfile={healthProfile}

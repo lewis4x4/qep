@@ -1,9 +1,13 @@
-import { describe, expect, mock, test } from "bun:test";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
+let currentVoiceUser = "user-1";
+let authListener: ((event: string) => void) | null = null;
+const toastSpy = mock(() => undefined);
+beforeEach(() => { currentVoiceUser = "user-1"; toastSpy.mockClear(); });
 mock.module("@/hooks/use-toast", () => ({
-  useToast: () => ({ toast: mock(() => undefined) }),
+  useToast: () => ({ toast: toastSpy }),
   toast: mock(() => undefined),
 }));
 
@@ -145,8 +149,9 @@ function makeQuery(data: unknown) {
 mock.module("@/lib/supabase", () => ({
   supabase: {
     auth: {
-      getUser: mock(async () => ({ data: { user: { id: "user-1" } } })),
-      getSession: mock(async () => ({ data: { session: { access_token: "token" } } })),
+      getUser: mock(async () => ({ data: { user: { id: currentVoiceUser } } })),
+      getSession: mock(async () => ({ data: { session: { access_token: `token-${currentVoiceUser}`, user: { id: currentVoiceUser } } } })),
+      onAuthStateChange: (callback: (event: string) => void) => { authListener = callback; return { data: { subscription: { unsubscribe: () => { authListener = null; } } } }; },
     },
     from: mock((table: string) => {
       if (table === "voice_captures") return makeQuery(recentCaptures);
@@ -157,7 +162,7 @@ mock.module("@/lib/supabase", () => ({
     }),
     storage: {
       from: mock(() => ({
-        createSignedUrl: mock(async () => ({ data: { signedUrl: "https://example.com/audio.webm" } })),
+        createSignedUrl: mock(async () => ({ data: { signedUrl: "data:audio/webm;base64,YXVkaW8=" } })),
       })),
     },
   },
@@ -170,6 +175,11 @@ mock.module("@/features/qrm/lib/qrm-supabase", () => ({
 }));
 
 mock.module("@/features/sales/lib/offline-store", () => ({
+  getOfflineIdentity: mock(async () => ({ user_id: currentVoiceUser, workspace_id: "default" })),
+  captureOfflineSubmissionContext: mock(async () => Object.freeze({ user_id: currentVoiceUser, workspace_id: "default", accessToken: `token-${currentVoiceUser}` })),
+  assertOfflineIdentity: mock(async (identity: { user_id: string; workspace_id: string }) => {
+    if (identity.user_id !== currentVoiceUser || identity.workspace_id !== "default") throw new Error("Offline identity changed");
+  }),
   getQueuedVoiceNotes: mock(async () => [
     {
       id: "queued-1",
@@ -272,4 +282,36 @@ describe("VoiceCapturePage redesign", () => {
       expect(screen.getByText("Full transcript")).toBeTruthy();
     });
   });
+});
+
+
+test("switching account during queued upload suppresses old note state and toasts", async () => {
+  const { removeQueuedVoiceNotes } = await import("@/features/sales/lib/offline-store");
+  (removeQueuedVoiceNotes as ReturnType<typeof mock>).mockClear();
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => { finish = resolve; });
+  const requests: RequestInit[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
+    requests.push(init!);
+    await pending;
+    return Response.json({ id: "saved-original-capture", client_queue_id: (init?.body as FormData).get("client_queue_id"), capture_saved: true, captured_user_id: "user-1", captured_workspace_id: "default", transcript: "Original private note", extracted_data: {}, hubspot_synced: false });
+  }) as typeof fetch;
+  try {
+    render(<MemoryRouter><VoiceCapturePage userRole="rep" userEmail="a@example.com" /></MemoryRouter>);
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /Retry sync|Sync now/ }).length).toBeGreaterThan(0));
+    fireEvent.click(screen.getAllByRole("button", { name: /Retry sync|Sync now/ })[0]);
+    await waitFor(() => expect(requests.length).toBe(1));
+    expect(new Headers(requests[0].headers).get("Authorization")).toBe("Bearer token-user-1");
+    expect((removeQueuedVoiceNotes as ReturnType<typeof mock>).mock.calls.length).toBe(0);
+    act(() => { currentVoiceUser = "user-2"; authListener?.("SIGNED_IN"); });
+    expect(screen.queryByText("Retry field note")).toBeNull();
+    finish();
+    await waitFor(() => expect((removeQueuedVoiceNotes as ReturnType<typeof mock>).mock.calls.length).toBe(1));
+    const removal = (removeQueuedVoiceNotes as ReturnType<typeof mock>).mock.calls[0];
+    expect(removal[1].user_id).toBe("user-1");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(toastSpy.mock.calls.length).toBe(0);
+    expect(screen.queryByText("Original private note")).toBeNull();
+  } finally { finish(); globalThis.fetch = originalFetch; }
 });

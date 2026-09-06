@@ -1,13 +1,15 @@
+import { rentalAssessmentMissing } from "../../../shared/rental-needs-assessment.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { requireServiceUser } from "../_shared/service-auth.ts";
-import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { optionsResponse, safeJsonError, safeJsonOk,
+} from "../_shared/safe-cors.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { createRentalConversionDeal } from "../_shared/rental-conversion-deal.ts";
 import {
   evaluateRentalRateFloor,
   mintRentalInvoiceNumber,
-  resolveNumberingBranch,
   type RateFloorEvaluation,
+  resolveNumberingBranch,
 } from "../_shared/rental-finance.ts";
 
 type BookingApprovalPayload = {
@@ -43,6 +45,8 @@ type ExtensionDeclinePayload = {
 
 type CounterContractPayload = {
   action: "create_contract";
+  request_id?: string;
+  needs_assessment?: Record<string, unknown>;
   override_overbook?: boolean;
   qrm_company_id?: string;
   qrm_contact_id?: string | null;
@@ -281,7 +285,20 @@ async function recordOverbookOverride(
   });
 }
 
+type SaveInquiryPayload = {
+  action: "save_inquiry";
+  contract_id?: string;
+  needs_assessment?: Record<string, unknown>;
+};
+
 type RentalOpsPayload =
+  | {
+    action: "transport_context" | "link_transport";
+    ticket_id?: string;
+    contract_id?: string;
+  }
+  | { action: "list_inquiries"; search?: string }
+  | SaveInquiryPayload
   | BookingApprovalPayload
   | BookingDeclinePayload
   | ExtensionApprovalPayload
@@ -306,12 +323,36 @@ const RENTAL_CHECKOUT_TEMPLATE = {
   applies_to: "rental_checkout",
   template_name: "Rental check-out condition inspection",
   questions: [
-    { id: "exterior", label: "Exterior condition documented (photos)", type: "boolean" },
-    { id: "tires_tracks", label: "Tires / tracks / undercarriage condition", type: "boolean" },
-    { id: "attachments", label: "Attachments present and secured", type: "boolean" },
-    { id: "fluids", label: "Fluids topped and no visible leaks", type: "boolean" },
-    { id: "safety", label: "Safety equipment (fire ext., beacon, seat belt) present", type: "boolean" },
-    { id: "hour_meter", label: "Hour meter photographed and recorded", type: "boolean" },
+    {
+      id: "exterior",
+      label: "Exterior condition documented (photos)",
+      type: "boolean",
+    },
+    {
+      id: "tires_tracks",
+      label: "Tires / tracks / undercarriage condition",
+      type: "boolean",
+    },
+    {
+      id: "attachments",
+      label: "Attachments present and secured",
+      type: "boolean",
+    },
+    {
+      id: "fluids",
+      label: "Fluids topped and no visible leaks",
+      type: "boolean",
+    },
+    {
+      id: "safety",
+      label: "Safety equipment (fire ext., beacon, seat belt) present",
+      type: "boolean",
+    },
+    {
+      id: "hour_meter",
+      label: "Hour meter photographed and recorded",
+      type: "boolean",
+    },
   ],
 };
 
@@ -322,17 +363,41 @@ const RENTAL_CHECKIN_TEMPLATE = {
   applies_to: "rental_checkin",
   template_name: "Rental check-in condition inspection",
   questions: [
-    { id: "exterior", label: "Exterior condition documented (photos)", type: "boolean" },
-    { id: "tires_tracks", label: "Tires / tracks / undercarriage condition", type: "boolean" },
-    { id: "attachments", label: "Attachments returned and undamaged", type: "boolean" },
-    { id: "fluids", label: "Fluid levels checked and no new leaks", type: "boolean" },
+    {
+      id: "exterior",
+      label: "Exterior condition documented (photos)",
+      type: "boolean",
+    },
+    {
+      id: "tires_tracks",
+      label: "Tires / tracks / undercarriage condition",
+      type: "boolean",
+    },
+    {
+      id: "attachments",
+      label: "Attachments returned and undamaged",
+      type: "boolean",
+    },
+    {
+      id: "fluids",
+      label: "Fluid levels checked and no new leaks",
+      type: "boolean",
+    },
     { id: "fuel", label: "Fuel level recorded", type: "boolean" },
-    { id: "hour_meter", label: "Hour meter photographed and recorded", type: "boolean" },
+    {
+      id: "hour_meter",
+      label: "Hour meter photographed and recorded",
+      type: "boolean",
+    },
   ],
 };
 
 function toMeter(value: number | string | null | undefined): number | null {
-  const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+  const parsed = typeof value === "number"
+    ? value
+    : typeof value === "string" && value.trim()
+    ? Number(value)
+    : NaN;
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
@@ -375,7 +440,11 @@ type PortalCustomerRow = {
 };
 
 function toCurrencyAmount(value: number | string | null | undefined): number {
-  const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : 0;
+  const parsed = typeof value === "number"
+    ? value
+    : typeof value === "string" && value.trim()
+    ? Number(value)
+    : 0;
   if (!Number.isFinite(parsed) || parsed < 0) return 0;
   return Math.round(parsed * 100) / 100;
 }
@@ -384,11 +453,16 @@ function requireServiceRoleEnv(origin: string | null) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceRoleKey) {
-    return { ok: false as const, response: safeJsonError("Server misconfiguration", 500, origin) };
+    return {
+      ok: false as const,
+      response: safeJsonError("Server misconfiguration", 500, origin),
+    };
   }
   return {
     ok: true as const,
-    admin: createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } }),
+    admin: createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false },
+    }),
   };
 }
 
@@ -423,7 +497,9 @@ async function createInvoiceLineItems(
       quantity: 1,
       unit_price: amount,
     }) as { error: { message?: string } | null };
-  if (error) throw new Error(error.message ?? "Failed to create invoice line items.");
+  if (error) {
+    throw new Error(error.message ?? "Failed to create invoice line items.");
+  }
 }
 
 async function createRentalInvoice(
@@ -455,7 +531,9 @@ async function createRentalInvoice(
     }>);
   const { data: invoice, error: invoiceError } = result;
   if (invoiceError || !invoice?.id) {
-    throw new Error(invoiceError?.message ?? "Failed to create rental invoice.");
+    throw new Error(
+      invoiceError?.message ?? "Failed to create rental invoice.",
+    );
   }
   await createInvoiceLineItems(admin, invoice.id, description, amount);
   return { id: invoice.id, status: String(invoice.status ?? "pending") };
@@ -466,9 +544,15 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return optionsResponse(origin);
 
   try {
-    if (req.method !== "POST") return safeJsonError("Method not allowed", 405, origin);
+    if (req.method !== "POST") {
+      return safeJsonError("Method not allowed", 405, origin);
+    }
 
-    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    const auth = await requireServiceUser(
+      req.headers.get("Authorization"),
+      origin,
+      ["rep", "admin", "manager", "owner", "dispatch", "driver"],
+    );
     if (!auth.ok) return auth.response;
 
     const env = requireServiceRoleEnv(origin);
@@ -476,20 +560,66 @@ Deno.serve(async (req) => {
     const admin = env.admin;
 
     const workspaceId = await getOperatorWorkspace(auth.supabase, auth.userId);
-    if (!workspaceId) return safeJsonError("Operator workspace is not configured", 403, origin);
+    if (!workspaceId) {
+      return safeJsonError("Operator workspace is not configured", 403, origin);
+    }
 
     const body = await req.json() as RentalOpsPayload;
+    if (!body || typeof body !== "object" || Array.isArray(body)) return safeJsonError("A rental command object is required", 400, origin);
+    if ((auth.role === "driver" && body.action !== "transport_context") ||
+        (auth.role === "dispatch" && !["transport_context", "link_transport"].includes(body.action))) {
+      return safeJsonError("This role can only access the rental transport handoff", 403, origin);
+    }
+    if (
+      "override_overbook" in body && body.override_overbook === true &&
+      !["admin", "manager", "owner"].includes(auth.role)
+    ) {
+      return safeJsonError(
+        "Overbooking override requires a manager or owner",
+        403,
+        origin,
+      );
+    }
 
     if (body.action === "create_contract") {
+      if (!body.request_id || !/^[0-9a-f-]{36}$/i.test(body.request_id)) {
+        return safeJsonError(
+          "request_id UUID required for resumable creation",
+          400,
+          origin,
+        );
+      }
+      const { data: replay } = await admin.from("rental_contracts").select(
+        "id, contract_number, lifecycle_state, origination_request_payload",
+      )
+        .eq("workspace_id", workspaceId).eq(
+          "origination_request_id",
+          body.request_id,
+        ).maybeSingle();
+      if (replay) {
+        // Database JSON equality validates the exact retry independent of key order.
+        const { data: resumed, error } = await admin.rpc("rental_create_draft_atomic", {
+          p_workspace: workspaceId, p_actor: auth.userId, p_request_id: body.request_id,
+          p_request: body, p_contract: {}, p_line: null,
+        });
+        if (error) return safeJsonError(error.message, 409, origin);
+        return safeJsonOk({ contract: resumed }, origin);
+      }
       // Counter origination (Stream L / L0): a rep opens a draft contract for
       // a QRM company — no portal account involved. The DB trigger assigns the
       // RC-YYYY-NNNNN number; the lifecycle guard governs every later move.
-      if (!body.qrm_company_id) return safeJsonError("qrm_company_id required", 400, origin);
+      if (!body.qrm_company_id) {
+        return safeJsonError("qrm_company_id required", 400, origin);
+      }
       if (!body.start_date || !body.end_date) {
         return safeJsonError("start_date and end_date required", 400, origin);
       }
       if (body.end_date < body.start_date) {
-        return safeJsonError("end_date must not precede start_date", 400, origin);
+        return safeJsonError(
+          "end_date must not precede start_date",
+          400,
+          origin,
+        );
       }
 
       const contractType = typeof body.contract_type === "string" && body.contract_type.trim()
@@ -573,12 +703,20 @@ Deno.serve(async (req) => {
       let dailyRate = toCurrencyAmount(body.daily_rate);
       let weeklyRate = toCurrencyAmount(body.weekly_rate);
       let monthlyRate = toCurrencyAmount(body.monthly_rate);
-      const deliveryMode = body.delivery_mode === "delivery" ? "delivery" : "pickup";
+      const deliveryMode = body.delivery_mode === "delivery"
+        ? "delivery"
+        : "pickup";
 
       let overbookedDetail: unknown = null;
       let rateBookSource: string | null = null;
       if (equipmentId) {
-        const availability = await consultAvailability(admin, workspaceId, equipmentId, body.start_date, body.end_date);
+        const availability = await consultAvailability(
+          admin,
+          workspaceId,
+          equipmentId,
+          body.start_date,
+          body.end_date,
+        );
         if (!availability.available) {
           if (body.override_overbook !== true) {
             return safeJsonError(
@@ -592,7 +730,10 @@ Deno.serve(async (req) => {
 
         // Fill blank counter rates from the governed L1 book so the desk
         // never invents a day-only sticker when a full book exists.
-        if (dailyRate <= 0 || weeklyRate <= 0 || monthlyRate <= 0) {
+        if (
+          rentalAssessmentMissing(body.needs_assessment).length === 0 &&
+          (dailyRate <= 0 || weeklyRate <= 0 || monthlyRate <= 0)
+        ) {
           const { data: book } = await admin.rpc("rental_resolve_rates", {
             p_workspace_id: workspaceId,
             p_equipment_id: equipmentId,
@@ -601,107 +742,149 @@ Deno.serve(async (req) => {
           });
           if (book && typeof book === "object") {
             const b = book as Record<string, unknown>;
-            rateBookSource = typeof b.source === "string" ? b.source : "resolved";
+            rateBookSource = typeof b.source === "string"
+              ? b.source
+              : "resolved";
             if (dailyRate <= 0 && typeof b.day === "number" && b.day > 0) {
               dailyRate = b.day / 100;
             }
             if (weeklyRate <= 0 && typeof b.week === "number" && b.week > 0) {
               weeklyRate = b.week / 100;
             }
-            if (monthlyRate <= 0 && typeof b.month === "number" && b.month > 0) {
+            if (
+              monthlyRate <= 0 && typeof b.month === "number" && b.month > 0
+            ) {
               monthlyRate = b.month / 100;
             }
           }
         }
       }
 
-      const { data: contract, error: insertError } = await admin
-        .from("rental_contracts")
-        .insert({
-          workspace_id: workspaceId,
-          qrm_company_id: company.id,
-          qrm_contact_id: typeof body.qrm_contact_id === "string" && body.qrm_contact_id.trim()
+      const inquiryAnswers =
+        ((body.needs_assessment ?? {}).answers ?? {}) as Record<
+          string,
+          { status?: string; value?: string }
+        >;
+      const contractFields = {
+        workspace_id: workspaceId,
+        needs_assessment: {
+          ...(body.needs_assessment ?? {}),
+          reviewed_by: auth.userId,
+          reviewed_at: new Date().toISOString(),
+        },
+        qrm_company_id: company.id,
+        qrm_contact_id:
+          typeof body.qrm_contact_id === "string" && body.qrm_contact_id.trim()
             ? body.qrm_contact_id.trim()
             : null,
-          origination_channel: (() => {
-            const ch = typeof body.origination_channel === "string"
-              ? body.origination_channel.trim().toLowerCase()
-              : "counter";
-            return ["counter", "voice", "iron"].includes(ch) ? ch : "counter";
-          })(),
-          originated_by: auth.userId,
-          contract_type: contractType,
-          status: "draft",
-          lifecycle_state: "draft",
-          request_type: "booking",
-          delivery_mode: deliveryMode,
-          requested_start_date: body.start_date,
-          requested_end_date: body.end_date,
+        origination_channel: (() => {
+          const ch = typeof body.origination_channel === "string"
+            ? body.origination_channel.trim().toLowerCase()
+            : "counter";
+          return ["counter", "voice", "iron"].includes(ch) ? ch : "counter";
+        })(),
+        originated_by: auth.userId,
+        contract_type: contractType,
+        status: "draft",
+        lifecycle_state: "draft",
+        request_type: "booking",
+        delivery_mode: deliveryMode,
+        requested_start_date: body.start_date,
+        requested_end_date: body.end_date,
+        equipment_id: equipmentId,
+        assignment_status: equipmentId ? "assigned" : "pending_assignment",
+        branch_id: typeof body.branch_id === "string" && body.branch_id.trim()
+          ? body.branch_id.trim()
+          : null,
+        estimate_daily_rate: dailyRate > 0 ? dailyRate : null,
+        estimate_weekly_rate: weeklyRate > 0 ? weeklyRate : null,
+        estimate_monthly_rate: monthlyRate > 0 ? monthlyRate : null,
+        dealer_notes: typeof body.dealer_notes === "string"
+          ? body.dealer_notes
+          : null,
+        // L2 closeout: counter contracts require the check-out condition
+        // inspection by default now that the flow exists (owner pin, mig 773).
+        checkout_inspection_required: true,
+        deposit_required: false,
+        tax_exempt: false,
+        coi_required: inquiryAnswers.insurance?.status === "answered" &&
+          inquiryAnswers.insurance.value === "coi",
+        po_required: false,
+        rpo_eligible: contractType === "rpo",
+        rpo_purchase_price_cents: contractType === "rpo"
+          ? Math.round(rpoPurchaseDollars * 100)
+          : null,
+        rpo_rental_credit_pct: contractType === "rpo" ? rpoCreditPct : null,
+        rpo_exercise_deadline: contractType === "rpo" ? rpoDeadline : null,
+        delivery_required: deliveryMode === "delivery",
+        pickup_required: inquiryAnswers.pickup?.status === "answered" &&
+          inquiryAnswers.pickup.value === "qep_pickup",
+        delivery_address: {
+          address: (body.needs_assessment as {
+            answers?: Record<string, { value?: string }>;
+          })?.answers?.project_location?.value ?? "",
+        },
+        pickup_address: {},
+        tax_sourcing_method: "branch_origin",
+      };
+      const lineFields = (equipmentId || contractType === "rerent")
+        ? {
+          workspace_id: workspaceId,
+          rental_contract_id: null,
+          line_number: 1,
+          quantity: 1,
           equipment_id: equipmentId,
-          assignment_status: equipmentId ? "assigned" : "pending_assignment",
-          branch_id: typeof body.branch_id === "string" && body.branch_id.trim() ? body.branch_id.trim() : null,
-          estimate_daily_rate: dailyRate > 0 ? dailyRate : null,
-          estimate_weekly_rate: weeklyRate > 0 ? weeklyRate : null,
-          estimate_monthly_rate: monthlyRate > 0 ? monthlyRate : null,
-          dealer_notes: typeof body.dealer_notes === "string" ? body.dealer_notes : null,
-          // L2 closeout: counter contracts require the check-out condition
-          // inspection by default now that the flow exists (owner pin, mig 773).
-          checkout_inspection_required: true,
-          deposit_required: false,
-          tax_exempt: false,
-          coi_required: false,
-          po_required: false,
-          rpo_eligible: contractType === "rpo",
+          rental_start_at: body.start_date,
+          rental_end_at: body.end_date,
+          daily_rate_cents: dailyRate > 0 ? Math.round(dailyRate * 100) : null,
+          weekly_rate_cents: weeklyRate > 0
+            ? Math.round(weeklyRate * 100)
+            : null,
+          monthly_rate_cents: monthlyRate > 0
+            ? Math.round(monthlyRate * 100)
+            : null,
+          status: "quoted",
+          damage_waiver_accepted:
+            inquiryAnswers.insurance?.status === "answered" &&
+            inquiryAnswers.insurance.value === "ldw",
+          is_sub_rental: contractType === "rerent",
+          sub_rental_vendor_id: contractType === "rerent" ? subVendorId : null,
+          sub_rental_cost_cents: contractType === "rerent"
+            ? Math.round(subCostDollars * 100)
+            : null,
+          rpo_eligible: contractType === "rpo" ? true : null,
           rpo_purchase_price_cents: contractType === "rpo"
             ? Math.round(rpoPurchaseDollars * 100)
             : null,
           rpo_rental_credit_pct: contractType === "rpo" ? rpoCreditPct : null,
-          rpo_exercise_deadline: contractType === "rpo" ? rpoDeadline : null,
-          delivery_required: deliveryMode === "delivery",
-          pickup_required: false,
-          delivery_address: {},
-          pickup_address: {},
-          tax_sourcing_method: "branch_origin",
-        })
-        .select("id, contract_number, lifecycle_state, contract_type, status")
-        .single();
-      if (insertError || !contract) {
-        return safeJsonError(insertError?.message ?? "Failed to create rental contract", 500, origin);
-      }
-
-      if (overbookedDetail != null) {
-        await recordOverbookOverride(admin, workspaceId, contract.id as string, auth.userId, overbookedDetail);
-      }
-
-      if (equipmentId || contractType === "rerent") {
-        const { error: lineError } = await admin
-          .from("rental_contract_lines")
-          .insert({
-            workspace_id: workspaceId,
-            rental_contract_id: contract.id,
-            line_number: 1,
-            quantity: 1,
-            equipment_id: equipmentId,
-            rental_start_at: body.start_date,
-            rental_end_at: body.end_date,
-            daily_rate_cents: dailyRate > 0 ? Math.round(dailyRate * 100) : null,
-            weekly_rate_cents: weeklyRate > 0 ? Math.round(weeklyRate * 100) : null,
-            monthly_rate_cents: monthlyRate > 0 ? Math.round(monthlyRate * 100) : null,
-            status: "quoted",
-            is_sub_rental: contractType === "rerent",
-            sub_rental_vendor_id: contractType === "rerent" ? subVendorId : null,
-            sub_rental_cost_cents: contractType === "rerent"
-              ? Math.round(subCostDollars * 100)
-              : null,
-            rpo_eligible: contractType === "rpo" ? true : null,
-            rpo_purchase_price_cents: contractType === "rpo"
-              ? Math.round(rpoPurchaseDollars * 100)
-              : null,
-            rpo_rental_credit_pct: contractType === "rpo" ? rpoCreditPct : null,
-          });
-        if (lineError) {
-          return safeJsonError(lineError.message ?? "Contract created but line insert failed", 500, origin);
         }
+        : null;
+      const { data: contract, error: insertError } = await admin.rpc(
+        "rental_create_draft_atomic",
+        {
+          p_workspace: workspaceId,
+          p_actor: auth.userId,
+          p_request_id: body.request_id,
+          p_request: body,
+          p_contract: contractFields,
+          p_line: lineFields,
+        },
+      );
+      if (insertError || !contract) {
+        return safeJsonError(
+          insertError?.message ?? "Rental draft save failed",
+          400,
+          origin,
+        );
+      }
+      if (overbookedDetail != null) {
+        await recordOverbookOverride(
+          admin,
+          workspaceId,
+          contract.id as string,
+          auth.userId,
+          overbookedDetail,
+        );
       }
 
       return safeJsonOk({
@@ -793,45 +976,64 @@ Deno.serve(async (req) => {
       // L2: swap a unit mid-rental. The old line closes with return_code
       // 'exchange'; the new line chains via exchange_parent_line_id and
       // snapshots rate continuity (CHECK-required by migration 772).
-      if (!body.contract_id || !body.line_id) return safeJsonError("contract_id and line_id required", 400, origin);
-      if (!body.new_equipment_id) return safeJsonError("new_equipment_id required", 400, origin);
+      if (!body.contract_id || !body.line_id) {
+        return safeJsonError("contract_id and line_id required", 400, origin);
+      }
+      if (!body.new_equipment_id) {
+        return safeJsonError("new_equipment_id required", 400, origin);
+      }
       if (typeof body.rate_continuous !== "boolean") {
-        return safeJsonError("rate_continuous must be declared (true = same rate class, false = class change)", 400, origin);
+        return safeJsonError(
+          "rate_continuous must be declared (true = same rate class, false = class change)",
+          400,
+          origin,
+        );
       }
 
       const { data: contract, error: contractError } = await admin
         .from("rental_contracts")
-        .select("id, workspace_id, equipment_id, lifecycle_state, qrm_company_id, branch_id, equipment_class, equipment_subclass")
+        .select(
+          "id, workspace_id, equipment_id, lifecycle_state, qrm_company_id, branch_id, equipment_class, equipment_subclass",
+        )
         .eq("id", body.contract_id)
         .eq("workspace_id", workspaceId)
         .maybeSingle();
-      if (contractError || !contract) return safeJsonError("Rental contract not found", 404, origin);
+      if (contractError || !contract) {
+        return safeJsonError("Rental contract not found", 404, origin);
+      }
       if (contract.lifecycle_state !== "on_rent") {
-        return safeJsonError("Only on-rent contracts can exchange units", 400, origin);
+        return safeJsonError(
+          "Only on-rent contracts can exchange units",
+          400,
+          origin,
+        );
       }
 
       const { data: oldLine, error: lineError } = await admin
         .from("rental_contract_lines")
-        .select("id, rental_contract_id, line_number, quantity, equipment_id, status, rental_end_at, daily_rate_cents, weekly_rate_cents, monthly_rate_cents, hourly_rate_cents, included_hours, overage_hourly_rate_cents, rpo_eligible, damage_waiver_accepted, damage_waiver_rate_pct")
+        .select(
+          "id, rental_contract_id, line_number, quantity, equipment_id, status, rental_end_at, daily_rate_cents, weekly_rate_cents, monthly_rate_cents, hourly_rate_cents, included_hours, overage_hourly_rate_cents, rpo_eligible, damage_waiver_accepted, damage_waiver_rate_pct",
+        )
         .eq("id", body.line_id)
         .eq("rental_contract_id", contract.id)
         .eq("workspace_id", workspaceId)
         .maybeSingle();
-      if (lineError || !oldLine) return safeJsonError("Contract line not found", 404, origin);
-      if (!["active", "held"].includes(String(oldLine.status))) {
-        return safeJsonError("Only active or held lines can be exchanged", 400, origin);
+      if (lineError || !oldLine) {
+        return safeJsonError("Contract line not found", 404, origin);
       }
-
-      const { data: newUnit, error: unitError } = await admin
-        .from("crm_equipment")
-        .select("id, availability")
-        .eq("workspace_id", workspaceId)
-        .eq("id", body.new_equipment_id)
-        .eq("ownership", "rental_fleet")
-        .maybeSingle();
-      if (unitError || !newUnit) return safeJsonError("Replacement unit not found in the rental fleet", 404, origin);
-      if (newUnit.availability !== "available") {
-        return safeJsonError("Replacement unit is not available", 400, origin);
+      const { data: priorExchange } = await admin.from("rental_contract_lines")
+        .select("id")
+        .eq("exchange_parent_line_id", oldLine.id).is("deleted_at", null).limit(
+          1,
+        ).maybeSingle();
+      if (
+        !priorExchange && !["active", "held"].includes(String(oldLine.status))
+      ) {
+        return safeJsonError(
+          "Only active or held lines can be exchanged",
+          400,
+          origin,
+        );
       }
 
       // Rates: continuous exchanges carry the old line's book verbatim; class
@@ -864,75 +1066,212 @@ Deno.serve(async (req) => {
 
       const nowIso = new Date().toISOString();
 
-      // Insert the replacement BEFORE closing the old line: the L2 rollup
-      // trigger (mig 773) derives the trunk from line states, and closing a
-      // single-line contract's only active line first would roll it up to
-      // 'returned' mid-exchange.
-      const { data: maxLine } = await admin
-        .from("rental_contract_lines")
-        .select("line_number")
-        .eq("rental_contract_id", contract.id)
-        .order("line_number", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      const { data: newLine, error: newLineError } = await admin
-        .from("rental_contract_lines")
-        .insert({
-          workspace_id: workspaceId,
-          rental_contract_id: contract.id,
-          line_number: (maxLine?.line_number ?? 0) + 1,
-          quantity: oldLine.quantity,
-          equipment_id: body.new_equipment_id,
-          rental_start_at: nowIso,
-          rental_end_at: oldLine.rental_end_at,
-          outbound_meter_hours: toMeter(body.outbound_meter_hours),
-          ...rates,
-          included_hours: oldLine.included_hours,
-          overage_hourly_rate_cents: oldLine.overage_hourly_rate_cents,
-          rpo_eligible: oldLine.rpo_eligible,
-          damage_waiver_accepted: oldLine.damage_waiver_accepted,
-          damage_waiver_rate_pct: oldLine.damage_waiver_rate_pct,
-          exchange_parent_line_id: oldLine.id,
-          exchange_rate_continuous: body.rate_continuous,
-          substitution_reason: typeof body.substitution_reason === "string" ? body.substitution_reason : null,
-          status: "active",
-        })
-        .select("id, line_number, exchange_parent_line_id, exchange_rate_continuous, status")
-        .single();
-      if (newLineError || !newLine) {
-        return safeJsonError(newLineError?.message ?? "Replacement line insert failed; exchange not performed", 500, origin);
-      }
-
-      const { error: closeError } = await admin
-        .from("rental_contract_lines")
-        .update({
-          status: "exchanged",
-          return_code: "exchange",
-          actual_returned_at: nowIso,
-          return_meter_hours: toMeter(body.return_meter_hours),
-        })
-        .eq("id", oldLine.id)
-        .eq("workspace_id", workspaceId);
-      if (closeError) {
-        // Replacement exists but the old line stayed active — surface loudly;
-        // retrying the close (not the whole exchange) is the operator fix.
+      const { data: newLine, error: exchangeError } = await admin.rpc(
+        "rental_exchange_atomic",
+        {
+          p_workspace: workspaceId,
+          p_contract_id: contract.id,
+          p_line_id: oldLine.id,
+          p_return_meter: toMeter(body.return_meter_hours),
+          p_new_line: {
+            workspace_id: workspaceId,
+            rental_contract_id: contract.id,
+            line_number: 1,
+            quantity: oldLine.quantity,
+            equipment_id: body.new_equipment_id,
+            rental_start_at: nowIso,
+            rental_end_at: oldLine.rental_end_at,
+            outbound_meter_hours: toMeter(body.outbound_meter_hours),
+            ...rates,
+            included_hours: oldLine.included_hours,
+            overage_hourly_rate_cents: oldLine.overage_hourly_rate_cents,
+            rpo_eligible: oldLine.rpo_eligible,
+            damage_waiver_accepted: oldLine.damage_waiver_accepted,
+            damage_waiver_rate_pct: oldLine.damage_waiver_rate_pct,
+            exchange_parent_line_id: oldLine.id,
+            exchange_rate_continuous: body.rate_continuous,
+            substitution_reason: typeof body.substitution_reason === "string"
+              ? body.substitution_reason
+              : null,
+            status: "active",
+          },
+        },
+      );
+      if (exchangeError || !newLine) {
         return safeJsonError(
-          `Replacement line ${newLine.line_number} created but closing line ${oldLine.line_number} failed: ${closeError.message ?? "unknown error"}`,
-          500,
+          exchangeError?.message ?? "Exchange was not saved",
+          409,
           origin,
         );
       }
 
-      if (contract.equipment_id === oldLine.equipment_id) {
-        await admin
-          .from("rental_contracts")
-          .update({ equipment_id: body.new_equipment_id })
-          .eq("id", contract.id)
-          .eq("workspace_id", workspaceId);
-      }
+      return safeJsonOk(
+        { exchanged_line_id: oldLine.id, new_line: newLine },
+        origin,
+      );
+    }
 
-      return safeJsonOk({ exchanged_line_id: oldLine.id, new_line: newLine }, origin);
+    if (
+      body.action === "transport_context" || body.action === "link_transport"
+    ) {
+      if (!body.ticket_id) {
+        return safeJsonError("ticket_id required", 400, origin);
+      }
+      const { data: ticket, error: ticketError } = await admin.from(
+        "traffic_tickets",
+      ).select("id, equipment_id, rental_contract_id, ticket_type, rental_needs_assessment_snapshot")
+        .eq("id", body.ticket_id).eq("workspace_id", workspaceId).maybeSingle();
+      if (
+        ticketError || !ticket ||
+        !["rental", "re_rent"].includes(ticket.ticket_type)
+      ) return safeJsonError("Rental traffic ticket not found", 404, origin);
+      if (body.action === "link_transport") {
+        if (!body.contract_id) {
+          return safeJsonError("contract_id required", 400, origin);
+        }
+        const { data: candidate } = await admin.from("rental_contracts").select(
+          "id, equipment_id",
+        )
+          .eq("id", body.contract_id).eq("workspace_id", workspaceId).is(
+            "deleted_at",
+            null,
+          ).maybeSingle();
+        if (!candidate) {
+          return safeJsonError("Rental contract not found", 404, origin);
+        }
+        if (
+          ticket.equipment_id && ticket.equipment_id !== candidate.equipment_id
+        ) {
+          const { data: line } = await admin.from("rental_contract_lines")
+            .select("id").eq("rental_contract_id", candidate.id).eq(
+              "equipment_id",
+              ticket.equipment_id,
+            ).is("deleted_at", null).limit(1).maybeSingle();
+          if (!line) {
+            return safeJsonError(
+              "Transport unit does not belong to this rental contract",
+              422,
+              origin,
+            );
+          }
+        }
+        const { error } = await admin.from("traffic_tickets").update({
+          rental_contract_id: candidate.id,
+        }).eq("id", ticket.id).eq("workspace_id", workspaceId);
+        if (error) return safeJsonError(error.message, 409, origin);
+        return safeJsonOk({ linked: true }, origin);
+      }
+      let candidates = admin.from("rental_contracts").select(
+        "id, contract_number, native_signature_id, requested_start_date, requested_end_date",
+      )
+        .eq("workspace_id", workspaceId).in("lifecycle_state", [
+          "quoted",
+          "reserved",
+          "on_rent",
+          "off_rent",
+          "returned",
+        ]).is("deleted_at", null).order("created_at", { ascending: false })
+        .limit(100);
+      if (ticket.equipment_id) {
+        const { data: lineContracts } = await admin.from(
+          "rental_contract_lines",
+        ).select("rental_contract_id").eq("workspace_id", workspaceId).eq(
+          "equipment_id",
+          ticket.equipment_id,
+        ).is("deleted_at", null).limit(500);
+        const ids = [
+          ...new Set(
+            (lineContracts ?? []).map((row) => row.rental_contract_id),
+          ),
+        ];
+        candidates = ids.length
+          ? candidates.or(
+            `equipment_id.eq.${ticket.equipment_id},id.in.(${ids.join(",")})`,
+          )
+          : candidates.eq("equipment_id", ticket.equipment_id);
+      }
+      const { data, error } = await candidates;
+      if (error) return safeJsonError(error.message, 400, origin);
+      return safeJsonOk({ ticket, contracts: data }, origin);
+    }
+    if (body.action === "list_inquiries") {
+      let query = admin.from("rental_contracts")
+        .select("id, contract_number, lifecycle_state, needs_assessment, qrm_company_id, requested_start_date, requested_end_date")
+        .eq("workspace_id", workspaceId).in("lifecycle_state", ["draft", "quoted"])
+        .is("native_signature_id", null).is("deleted_at", null).order("created_at", { ascending: false }).limit(201);
+      if (body.search?.trim()) query = query.ilike("contract_number", `%${body.search.trim()}%`);
+      const { data, error } = await query;
+      if (error) return safeJsonError(error.message, 400, origin);
+      return safeJsonOk({ inquiries: (data ?? []).slice(0, 200), more: (data ?? []).length > 200 }, origin);
+    }
+    if (body.action === "save_inquiry") {
+      if (
+        !body.contract_id || !body.needs_assessment ||
+        typeof body.needs_assessment !== "object"
+      ) {
+        return safeJsonError(
+          "contract_id and needs_assessment required",
+          400,
+          origin,
+        );
+      }
+      const answers = (body.needs_assessment.answers ?? {}) as Record<
+        string,
+        { status?: string; value?: string }
+      >;
+      const inquiryPatch: Record<string, unknown> = {
+        needs_assessment: {
+          ...body.needs_assessment,
+          reviewed_by: auth.userId,
+          reviewed_at: new Date().toISOString(),
+        },
+      };
+      if (
+        answers.delivery?.status === "answered" &&
+        ["delivery", "self_haul"].includes(answers.delivery.value ?? "")
+      ) {
+        inquiryPatch.delivery_mode = answers.delivery.value === "delivery"
+          ? "delivery"
+          : "pickup";
+        inquiryPatch.delivery_required = answers.delivery.value === "delivery";
+      }
+      if (answers.project_location?.status === "answered") {
+        inquiryPatch.delivery_address = {
+          address: answers.project_location.value,
+        };
+      }
+      if (answers.pickup?.status === "answered") {
+        inquiryPatch.pickup_required = answers.pickup.value === "qep_pickup";
+      }
+      if (answers.insurance?.status === "answered") {
+        inquiryPatch.coi_required = answers.insurance.value === "coi";
+      }
+      for (
+        const [field, answerKey] of [[
+          "requested_start_date",
+          "desired_start_date",
+        ], ["requested_end_date", "desired_return_date"]]
+      ) {
+        if (
+          answers[answerKey]?.status === "answered" &&
+          /^\d{4}-\d{2}-\d{2}$/.test(answers[answerKey]?.value ?? "")
+        ) inquiryPatch[field] = answers[answerKey].value;
+      }
+      const { data, error } = await admin.from("rental_contracts")
+        .update(inquiryPatch)
+        .eq("id", body.contract_id).eq("workspace_id", workspaceId).in(
+          "lifecycle_state",
+          ["draft", "quoted"],
+        ).is("native_signature_id", null)
+        .select("id, needs_assessment").maybeSingle();
+      if (error || !data) {
+        return safeJsonError(
+          error?.message ?? "Only a draft inquiry can be edited",
+          409,
+          origin,
+        );
+      }
+      return safeJsonOk({ contract: data }, origin);
     }
 
     if (body.action === "issue_rental_quote") {
@@ -940,18 +1279,22 @@ Deno.serve(async (req) => {
       // M4.1 rate floor on the estimate rates (quoted rates are governed
       // the same way they are billed), transitions draft → quoted, mints
       // the share token, and (best-effort) emails the link.
-      if (!body.contract_id) return safeJsonError("contract_id required", 400, origin);
+      if (!body.contract_id) {
+        return safeJsonError("contract_id required", 400, origin);
+      }
 
       const { data: contract, error: contractError } = await admin
         .from("rental_contracts")
         .select(
-          "id, contract_number, lifecycle_state, share_token, equipment_id, qrm_company_id, portal_customer_id, branch_id, estimate_daily_rate, estimate_weekly_rate, estimate_monthly_rate",
+          "id, needs_assessment, contract_number, lifecycle_state, share_token, equipment_id, qrm_company_id, portal_customer_id, branch_id, estimate_daily_rate, estimate_weekly_rate, estimate_monthly_rate",
         )
         .eq("id", body.contract_id)
         .eq("workspace_id", workspaceId)
         .is("deleted_at", null)
         .maybeSingle();
-      if (contractError || !contract) return safeJsonError("Rental contract not found", 404, origin);
+      if (contractError || !contract) {
+        return safeJsonError("Rental contract not found", 404, origin);
+      }
       if (!["draft", "quoted"].includes(String(contract.lifecycle_state))) {
         return safeJsonError(
           `Quotes issue from draft/quoted contracts (state: ${contract.lifecycle_state})`,
@@ -960,14 +1303,34 @@ Deno.serve(async (req) => {
         );
       }
       if (!contract.qrm_company_id && !contract.portal_customer_id) {
-        return safeJsonError("Link a customer (company or portal identity) before issuing the quote", 400, origin);
+        return safeJsonError(
+          "Link a customer (company or portal identity) before issuing the quote",
+          400,
+          origin,
+        );
       }
 
+      const missingAssessment = rentalAssessmentMissing(
+        contract.needs_assessment,
+      );
+      if (missingAssessment.length) {
+        return safeJsonError(
+          `Complete the rental inquiry: ${missingAssessment.join(", ")}`,
+          422,
+          origin,
+        );
+      }
       const rateFloor = await evaluateRentalRateFloor(admin, {
         workspaceId,
-        agreedDaily: contract.estimate_daily_rate == null ? null : Number(contract.estimate_daily_rate),
-        agreedWeekly: contract.estimate_weekly_rate == null ? null : Number(contract.estimate_weekly_rate),
-        agreedMonthly: contract.estimate_monthly_rate == null ? null : Number(contract.estimate_monthly_rate),
+        agreedDaily: contract.estimate_daily_rate == null
+          ? null
+          : Number(contract.estimate_daily_rate),
+        agreedWeekly: contract.estimate_weekly_rate == null
+          ? null
+          : Number(contract.estimate_weekly_rate),
+        agreedMonthly: contract.estimate_monthly_rate == null
+          ? null
+          : Number(contract.estimate_monthly_rate),
         equipmentId: (contract.equipment_id as string | null) ?? null,
         companyId: (contract.qrm_company_id as string | null) ?? null,
         branchId: (contract.branch_id as string | null) ?? null,
@@ -992,25 +1355,40 @@ Deno.serve(async (req) => {
         .update({
           lifecycle_state: "quoted",
           share_token: shareToken,
-          ...(contract.share_token ? {} : { share_token_created_at: new Date().toISOString() }),
+          ...(contract.share_token
+            ? {}
+            : { share_token_created_at: new Date().toISOString() }),
         })
         .eq("id", contract.id)
         .eq("workspace_id", workspaceId)
         .select("id, contract_number, lifecycle_state, share_token")
         .single();
       if (issueError || !issued) {
-        return safeJsonError(issueError?.message ?? "Failed to issue the quote", 500, origin);
+        return safeJsonError(
+          issueError?.message ?? "Failed to issue the quote",
+          500,
+          origin,
+        );
       }
 
-      const appBase = Deno.env.get("QEP_APP_BASE_URL") ?? "https://qep.blackrockai.co";
+      const appBase = Deno.env.get("QEP_APP_BASE_URL") ??
+        "https://qep.blackrockai.co";
       const shareUrl = `${appBase}/rq/${issued.share_token}`;
 
       // Best-effort email delivery — zero-blocking.
       let emailStatus = "skipped";
       const resendKey = Deno.env.get("RESEND_API_KEY");
-      let recipient = typeof body.customer_email === "string" && body.customer_email.includes("@")
+      let recipient = typeof body.customer_email === "string" &&
+          body.customer_email.includes("@")
         ? body.customer_email.trim()
         : null;
+      const assessmentEmail = (contract.needs_assessment as {
+        answers?: Record<string, { status?: string; value?: string }>;
+      })?.answers?.email;
+      if (
+        !recipient && assessmentEmail?.status === "answered" &&
+        assessmentEmail.value?.includes("@")
+      ) recipient = assessmentEmail.value.trim();
       if (!recipient && contract.portal_customer_id) {
         const { data: pc } = await admin
           .from("portal_customers")
@@ -1023,12 +1401,18 @@ Deno.serve(async (req) => {
         try {
           const res = await fetch("https://api.resend.com/emails", {
             method: "POST",
-            headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+            headers: {
+              Authorization: `Bearer ${resendKey}`,
+              "Content-Type": "application/json",
+            },
             body: JSON.stringify({
-              from: Deno.env.get("RESEND_FROM") ?? "QEP Rentals <onboarding@resend.dev>",
+              from: Deno.env.get("RESEND_FROM") ??
+                "QEP Rentals <onboarding@resend.dev>",
               to: [recipient],
-              subject: `Your rental quote ${issued.contract_number ?? ""}`.trim(),
-              text: `Your rental quote is ready. Review and sign here: ${shareUrl}`,
+              subject: `Your rental quote ${issued.contract_number ?? ""}`
+                .trim(),
+              text:
+                `Your rental quote is ready. Review and sign here: ${shareUrl}`,
             }),
           });
           emailStatus = res.ok ? "sent" : `failed_${res.status}`;
@@ -1173,22 +1557,46 @@ Deno.serve(async (req) => {
       // assignment, security (deposit/credit/override), COI, signature, and —
       // when required — a completed inspection. This action just assembles the
       // row; the database decides.
-      if (!body.contract_id) return safeJsonError("contract_id required", 400, origin);
+      if (!body.contract_id) {
+        return safeJsonError("contract_id required", 400, origin);
+      }
 
       const { data: contract, error: contractError } = await admin
         .from("rental_contracts")
-        .select("id, lifecycle_state, equipment_id, assignment_status, requested_start_date, approved_start_date, requested_end_date, approved_end_date, estimate_daily_rate, estimate_weekly_rate, estimate_monthly_rate, agreed_daily_rate, agreed_weekly_rate, agreed_monthly_rate, workspace_id, qrm_company_id, portal_customer_id, branch_id")
+        .select(
+          "id, lifecycle_state, equipment_id, assignment_status, requested_start_date, approved_start_date, requested_end_date, approved_end_date, estimate_daily_rate, estimate_weekly_rate, estimate_monthly_rate, agreed_daily_rate, agreed_weekly_rate, agreed_monthly_rate, workspace_id, qrm_company_id, portal_customer_id, branch_id",
+        )
         .eq("id", body.contract_id)
         .eq("workspace_id", workspaceId)
         .maybeSingle();
-      if (contractError || !contract) return safeJsonError("Rental contract not found", 404, origin);
+      if (contractError || !contract) {
+        return safeJsonError("Rental contract not found", 404, origin);
+      }
+      if (contract.lifecycle_state === "on_rent") {
+        const { data: replayed, error } = await admin.rpc(
+          "rental_checkout_atomic",
+          {
+            p_workspace: workspaceId,
+            p_contract_id: contract.id,
+            p_patch: {},
+            p_meter: null,
+          },
+        );
+        if (error) return safeJsonError(error.message, 409, origin);
+        return safeJsonOk({ contract: replayed }, origin);
+      }
       if (contract.lifecycle_state !== "reserved") {
-        return safeJsonError("Only reserved contracts can check out (reserve it first)", 400, origin);
+        return safeJsonError(
+          "Only reserved contracts can check out (reserve it first)",
+          400,
+          origin,
+        );
       }
 
-      const equipmentId = typeof body.equipment_id === "string" && body.equipment_id.trim()
-        ? body.equipment_id.trim()
-        : (contract.equipment_id as string | null);
+      const equipmentId =
+        typeof body.equipment_id === "string" && body.equipment_id.trim()
+          ? body.equipment_id.trim()
+          : (contract.equipment_id as string | null);
       if (equipmentId && equipmentId !== contract.equipment_id) {
         const { data: unit, error: unitError } = await admin
           .from("crm_equipment")
@@ -1197,26 +1605,46 @@ Deno.serve(async (req) => {
           .eq("id", equipmentId)
           .eq("ownership", "rental_fleet")
           .maybeSingle();
-        if (unitError || !unit) return safeJsonError("Rental unit not found in the rental fleet", 404, origin);
-        if (unit.availability !== "available") return safeJsonError("Rental unit is not available", 400, origin);
+        if (unitError || !unit) {
+          return safeJsonError(
+            "Rental unit not found in the rental fleet",
+            404,
+            origin,
+          );
+        }
+        if (unit.availability !== "available") {
+          return safeJsonError("Rental unit is not available", 400, origin);
+        }
       }
 
       // Availability is the deterministic RPC's call, not this action's.
       if (equipmentId) {
         const availability = await consultAvailability(
-          admin, workspaceId, equipmentId,
-          (contract.approved_start_date ?? contract.requested_start_date) as string,
+          admin,
+          workspaceId,
+          equipmentId,
+          (contract.approved_start_date ??
+            contract.requested_start_date) as string,
           (contract.approved_end_date ?? contract.requested_end_date) as string,
         );
         // Conflicts from THIS contract's own converted-or-active hold are
         // expected at check-out; only foreign conflicts block.
-        const foreignConflicts = Array.isArray((availability.detail as Record<string, unknown>)?.conflicts)
-          ? ((availability.detail as Record<string, unknown>).conflicts as Array<Record<string, unknown>>)
-              .filter((conflict) => conflict.contract_id !== contract.id)
+        const foreignConflicts = Array.isArray(
+            (availability.detail as Record<string, unknown>)?.conflicts,
+          )
+          ? ((availability.detail as Record<string, unknown>)
+            .conflicts as Array<Record<string, unknown>>)
+            .filter((conflict) => conflict.contract_id !== contract.id)
           : [];
         if (!availability.available && foreignConflicts.length > 0) {
           if (body.override_overbook === true) {
-            await recordOverbookOverride(admin, workspaceId, contract.id as string, auth.userId, foreignConflicts);
+            await recordOverbookOverride(
+              admin,
+              workspaceId,
+              contract.id as string,
+              auth.userId,
+              foreignConflicts,
+            );
           } else {
             return safeJsonError(
               `Unit is not available for the contract window (${foreignConflicts.length} conflict(s)). A manager may override with override_overbook.`,
@@ -1229,26 +1657,38 @@ Deno.serve(async (req) => {
 
       // M4.1 rate floor: check-out locks in agreed_* (falling back to the
       // estimates), so the book comparison happens here for counter flow.
-      let checkoutCompanyId = (contract.qrm_company_id as string | null) ?? null;
+      let checkoutCompanyId = (contract.qrm_company_id as string | null) ??
+        null;
       if (!checkoutCompanyId && contract.portal_customer_id) {
         const { data: portalCustomer } = await admin
           .from("portal_customers")
           .select("crm_company_id")
           .eq("id", contract.portal_customer_id)
           .maybeSingle();
-        checkoutCompanyId = (portalCustomer?.crm_company_id as string | null) ?? null;
+        checkoutCompanyId = (portalCustomer?.crm_company_id as string | null) ??
+          null;
       }
       const checkoutRateFloor = await evaluateRentalRateFloor(admin, {
         workspaceId,
-        agreedDaily: (contract.agreed_daily_rate ?? contract.estimate_daily_rate) == null
-          ? null
-          : Number(contract.agreed_daily_rate ?? contract.estimate_daily_rate),
-        agreedWeekly: (contract.agreed_weekly_rate ?? contract.estimate_weekly_rate) == null
-          ? null
-          : Number(contract.agreed_weekly_rate ?? contract.estimate_weekly_rate),
-        agreedMonthly: (contract.agreed_monthly_rate ?? contract.estimate_monthly_rate) == null
-          ? null
-          : Number(contract.agreed_monthly_rate ?? contract.estimate_monthly_rate),
+        agreedDaily:
+          (contract.agreed_daily_rate ?? contract.estimate_daily_rate) == null
+            ? null
+            : Number(
+              contract.agreed_daily_rate ?? contract.estimate_daily_rate,
+            ),
+        agreedWeekly:
+          (contract.agreed_weekly_rate ?? contract.estimate_weekly_rate) == null
+            ? null
+            : Number(
+              contract.agreed_weekly_rate ?? contract.estimate_weekly_rate,
+            ),
+        agreedMonthly:
+          (contract.agreed_monthly_rate ?? contract.estimate_monthly_rate) ==
+              null
+            ? null
+            : Number(
+              contract.agreed_monthly_rate ?? contract.estimate_monthly_rate,
+            ),
         equipmentId,
         companyId: checkoutCompanyId,
         branchId: (contract.branch_id as string | null) ?? null,
@@ -1280,51 +1720,75 @@ Deno.serve(async (req) => {
       // as the rental_credit_hold exception (whitelisted m772, first producer).
       const checkoutPatch: Record<string, unknown> = {
         equipment_id: equipmentId,
-        assignment_status: equipmentId ? "assigned" : contract.assignment_status,
-        approved_start_date: contract.approved_start_date ?? contract.requested_start_date,
-        approved_end_date: contract.approved_end_date ?? contract.requested_end_date,
-        agreed_daily_rate: contract.agreed_daily_rate ?? contract.estimate_daily_rate,
-        agreed_weekly_rate: contract.agreed_weekly_rate ?? contract.estimate_weekly_rate,
-        agreed_monthly_rate: contract.agreed_monthly_rate ?? contract.estimate_monthly_rate,
+        assignment_status: equipmentId
+          ? "assigned"
+          : contract.assignment_status,
+        approved_start_date: contract.approved_start_date ??
+          contract.requested_start_date,
+        approved_end_date: contract.approved_end_date ??
+          contract.requested_end_date,
+        agreed_daily_rate: contract.agreed_daily_rate ??
+          contract.estimate_daily_rate,
+        agreed_weekly_rate: contract.agreed_weekly_rate ??
+          contract.estimate_weekly_rate,
+        agreed_monthly_rate: contract.agreed_monthly_rate ??
+          contract.estimate_monthly_rate,
         lifecycle_state: "on_rent",
       };
       if (body.override_credit_hold === true) {
         if (!["admin", "manager", "owner"].includes(auth.role)) {
-          return safeJsonError("Checkout security override requires a manager or owner", 403, origin);
+          return safeJsonError(
+            "Checkout security override requires a manager or owner",
+            403,
+            origin,
+          );
         }
         checkoutPatch.checkout_security_override_by = auth.userId;
         checkoutPatch.checkout_security_override_at = new Date().toISOString();
         checkoutPatch.checkout_security_override_reason =
-          (typeof body.override_credit_hold_reason === "string" && body.override_credit_hold_reason.trim())
+          (typeof body.override_credit_hold_reason === "string" &&
+              body.override_credit_hold_reason.trim())
             ? body.override_credit_hold_reason.trim().slice(0, 500)
             : "Credit hold overridden at checkout";
         await admin.rpc("enqueue_exception", {
           p_source: "rental_credit_hold",
-          p_title: "Rental checkout security override recorded over credit hold",
+          p_title:
+            "Rental checkout security override recorded over credit hold",
           p_severity: "warn",
-          p_detail: `Contract ${contract.id}: checkout security override by ${auth.userId}.`,
-          p_payload: { contract_id: contract.id, actor_id: auth.userId, company_id: checkoutCompanyId },
+          p_detail:
+            `Contract ${contract.id}: checkout security override by ${auth.userId}.`,
+          p_payload: {
+            contract_id: contract.id,
+            actor_id: auth.userId,
+            company_id: checkoutCompanyId,
+          },
           p_entity_table: "rental_contracts",
           p_entity_id: contract.id,
         });
       }
 
-      const { data: updated, error: updateError } = await admin
-        .from("rental_contracts")
-        .update(checkoutPatch)
-        .eq("id", contract.id)
-        .eq("workspace_id", workspaceId)
-        .select("id, contract_number, lifecycle_state, on_rent_at, equipment_id")
-        .single();
+      const { data: updated, error: updateError } = await admin.rpc(
+        "rental_checkout_atomic",
+        {
+          p_workspace: workspaceId,
+          p_contract_id: contract.id,
+          p_patch: checkoutPatch,
+          p_meter: inspection?.machine_hours ?? null,
+        },
+      );
       if (updateError || !updated) {
-        const message = updateError?.message ?? "Check-out was refused by the lifecycle guard";
+        const message = updateError?.message ??
+          "Check-out was refused by the lifecycle guard";
         if (message.includes("credit-held")) {
           await admin.rpc("enqueue_exception", {
             p_source: "rental_credit_hold",
             p_title: "Rental checkout blocked by credit hold",
             p_severity: "warn",
             p_detail: `Contract ${contract.id}: ${message}`,
-            p_payload: { contract_id: contract.id, company_id: checkoutCompanyId },
+            p_payload: {
+              contract_id: contract.id,
+              company_id: checkoutCompanyId,
+            },
             p_entity_table: "rental_contracts",
             p_entity_id: contract.id,
           });
@@ -1335,36 +1799,6 @@ Deno.serve(async (req) => {
           );
         }
         return safeJsonError(message, 400, origin);
-      }
-
-      // Activate lines (or create line 1 for a single-unit counter contract).
-      const { data: existingLines } = await admin
-        .from("rental_contract_lines")
-        .select("id, status")
-        .eq("rental_contract_id", contract.id)
-        .is("deleted_at", null);
-      if ((existingLines ?? []).length === 0 && updated.equipment_id) {
-        await admin.from("rental_contract_lines").insert({
-          workspace_id: workspaceId,
-          rental_contract_id: contract.id,
-          line_number: 1,
-          quantity: 1,
-          equipment_id: updated.equipment_id,
-          rental_start_at: new Date().toISOString(),
-          rental_end_at: contract.approved_end_date ?? contract.requested_end_date,
-          outbound_meter_hours: inspection?.machine_hours ?? null,
-          status: "active",
-        });
-      } else {
-        for (const line of existingLines ?? []) {
-          if (["quoted", "reserved"].includes(String(line.status))) {
-            await admin
-              .from("rental_contract_lines")
-              .update({ status: "active", outbound_meter_hours: inspection?.machine_hours ?? null })
-              .eq("id", line.id)
-              .eq("workspace_id", workspaceId);
-          }
-        }
       }
 
       return safeJsonOk({ contract: updated }, origin);
@@ -1722,12 +2156,13 @@ Deno.serve(async (req) => {
 
       const { data: contract, error: contractError } = await admin
         .from("rental_contracts")
-        .select("id, workspace_id, portal_customer_id, equipment_id, branch_id, requested_start_date, requested_end_date, estimate_daily_rate, estimate_weekly_rate, estimate_monthly_rate, deposit_required, deposit_amount, deposit_invoice_id, status, assignment_status, dealer_response")
+        .select("id, workspace_id, portal_customer_id, equipment_id, branch_id, requested_start_date, requested_end_date, estimate_daily_rate, estimate_weekly_rate, estimate_monthly_rate, native_signature_id, deposit_required, deposit_amount, deposit_invoice_id, status, assignment_status, dealer_response")
         .eq("id", body.contract_id)
         .eq("workspace_id", workspaceId)
         .maybeSingle();
       if (contractError || !contract) return safeJsonError("Rental contract not found", 404, origin);
 
+      if (contract.native_signature_id) return safeJsonError("This agreement is signed. Use a documented extension or exchange; approval cannot change signed terms.", 409, origin);
       const currentContract = contract as RentalContractRow;
       if (!["submitted", "reviewing", "quoted", "approved", "awaiting_payment"].includes(currentContract.status)) {
         return safeJsonError("This rental contract can no longer be approved from the queue", 400, origin);
@@ -1775,7 +2210,7 @@ Deno.serve(async (req) => {
       if (rateFloorBlock) return rateFloorBlock;
 
       let depositInvoiceId: string | null = null;
-      let status = "active";
+      let status = "approved";
       let depositStatus: string | null = "not_required";
 
       if (depositAmount > 0) {
