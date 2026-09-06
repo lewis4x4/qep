@@ -2,8 +2,8 @@ import { spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { hasScratchPostgres } from "../testing/scratch-postgres.ts";
 if (!hasScratchPostgres) throw new Error("Remediation database gates require local PostgreSQL test binaries (QEP_POSTGRES_BIN).");
-const sql = readdirSync("supabase/migrations").filter((f) => /^84[0-6]_.*\.behavior\.test\.ts$|^839_.*\.behavior\.test\.ts$/.test(f)).sort().map((f) => `supabase/migrations/${f}`);
-if (sql.length !== 8) throw new Error("Expected all eight remediation database behavior suites.");
+const sql = readdirSync("supabase/migrations").filter((f) => /^84[0-7]_.*\.behavior\.test\.ts$|^839_.*\.behavior\.test\.ts$/.test(f)).sort().map((f) => `supabase/migrations/${f}`);
+if (sql.length !== 9) throw new Error("Expected all nine remediation database behavior suites.");
 const env = { ...process.env, LC_ALL: "C", LANG: "C", QEP_SKIP_LOCAL_ENV: "1" };
 let failed = false;
 for (const file of sql) {
